@@ -1,0 +1,4 @@
+# Fully resolved runtime + test environment.
+-r requirements-lock.txt
+
+# Tests block HTTP clients and do not require Ollama.

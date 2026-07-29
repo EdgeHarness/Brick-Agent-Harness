@@ -16,6 +16,7 @@ agents/*/memory/
 # Benchmark run outputs (generated artifacts)
 results/
 results_smoke/
+results-dev*/
 agents/*/workspace/
 agents/*/logs/
 *.log
@@ -39,9 +40,12 @@ models/
 checkpoints/
 *.gguf
 *.safetensors
+*.onnx
+*.bin
 *.ckpt
 *.pt
 *.pth
+wandb/
 
 # --- Python ---
 __pycache__/

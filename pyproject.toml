@@ -1,0 +1,25 @@
+[project]
+name = "brick-agent-harness"
+version = "0.2.0"
+description = "Experimental harness and evaluation scaffold for reliable, auditable tool-using business agents"
+requires-python = ">=3.9,<3.14"
+dependencies = [
+    "requests==2.32.3",
+    "openpyxl==3.1.5",
+    "python-pptx==1.0.2",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest==8.3.5",
+]
+
+[tool.pytest.ini_options]
+minversion = "8.3"
+addopts = "-ra --strict-config --strict-markers"
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "characterization: locks current behavior, including behavior documented as defective",
+    "office: creates and reopens real PPTX or XLSX files locally",
+]
