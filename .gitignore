@@ -1,0 +1,87 @@
+# --- Project-specific ---
+# Internal design doc — not for the repo
+LocalAgentArchitecture.md
+
+# Local agent/editor configuration and private working material
+.claude/
+private/
+*.private.md
+.env
+.env.*
+!.env.example
+
+# Runtime memory can contain user or organization information
+agents/*/memory/
+
+# Benchmark run outputs (generated artifacts)
+results/
+results_smoke/
+agents/*/workspace/
+agents/*/logs/
+*.log
+
+# Generated office files
+*.pptx
+*.xlsx
+*.docx
+*.ics
+
+# Unreviewed generated training corpora are not publication artifacts. Publish
+# only after provenance, licensing, privacy, and leakage review.
+finetune/data/*.jsonl
+training_scripts/data/*.jsonl
+
+# Downloaded bases, training outputs, adapters, and checkpoints
+training_scripts/assets/
+training_scripts/out/
+finetune/out/
+models/
+checkpoints/
+*.gguf
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
