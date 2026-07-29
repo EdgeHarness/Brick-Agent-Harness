@@ -1,20 +1,20 @@
-"""Train a tool-calling LoRA adapter for Llama 3.2 1B — portable, single-GPU.
+"""Experimental single-GPU LoRA trainer for a Llama 3.2 1B derivative.
 
-Send this whole folder to a computing center. It reads a chat-format JSONL
-(each row {"messages":[...]} with the assistant turn = the correct tool call),
-fine-tunes a LoRA on the base model with ASSISTANT-ONLY loss, and writes the
-adapter (adapter_model.safetensors + adapter_config.json). With --to-gguf it
-also emits a GGUF adapter ready for llama-server's /lora-adapters.
+It reads chat-format JSONL, applies assistant-turn masking, and writes PEFT
+adapter artifacts. With --to-gguf it attempts conversion through the bundled
+llama.cpp script; successful conversion alone does not establish serving
+compatibility or task quality.
 
-Deliberately framework-light: transformers + peft only (no trl), so it survives
-version drift on an unknown cluster. Assistant-token masking is done by hand.
+The path depends on compatible Python, PyTorch, Transformers, PEFT, tokenizer,
+GPU/driver, and model versions. Assistant-token masking is implemented here
+and should be validated against the selected tokenizer.
 
 Run (inside the container or a GPU env):
     python train_lora.py --data data/toolcall.jsonl --output out/toolcall-lora
 
-Key knobs (all have sane defaults; override via flags or env):
+Key knobs (defaults are experimental; review and override as needed):
     --base   HF model id or local path      (default: prefetched ./assets/base_model,
-             else the ungated unsloth/Llama-3.2-1B-Instruct — no HF token needed)
+             else unsloth/Llama-3.2-1B-Instruct; current access terms apply)
     --rank --alpha --dropout --lr --epochs --batch --grad-accum --max-len
     --load-4bit   QLoRA (needs bitsandbytes) for small GPUs
     --to-gguf     also convert to GGUF via $LLAMACPP_DIR/convert_lora_to_gguf.py
@@ -31,16 +31,15 @@ from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from transformers import (AutoModelForCausalLM, AutoTokenizer, Trainer,
                           TrainingArguments)
 
-# Anchor every default path to this script's folder, so the package runs from
-# any working directory with no editing.
+# Anchor default paths to this script's folder; environment and compatibility
+# setup may still be required.
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOCAL_BASE = os.path.join(HERE, "assets", "base_model")
 LOCAL_LLAMACPP = os.path.join(HERE, "assets", "llama.cpp")
 
 
 def default_base():
-    """Prefer the prefetched local model (offline-ready); else the ungated hub
-    mirror — never a gated repo, so no HF token is ever required."""
+    """Prefer a prefetched local model, otherwise use the configured hub ID."""
     if os.path.isfile(os.path.join(LOCAL_BASE, "config.json")):
         return LOCAL_BASE
     return os.environ.get("BASE_MODEL", "unsloth/Llama-3.2-1B-Instruct")
@@ -130,8 +129,8 @@ def to_gguf(adapter_dir, base, outfile):
 
 def main():
     a = parse_args()
-    # If we're using the prefetched local model, forbid network so an offline
-    # compute node never stalls trying to reach Hugging Face.
+    # If a local snapshot is selected, ask supported libraries not to contact
+    # Hugging Face. This does not certify the wider environment as offline.
     if os.path.isdir(a.base) and os.path.isfile(os.path.join(a.base, "config.json")):
         os.environ.setdefault("HF_HUB_OFFLINE", "1")
         os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")

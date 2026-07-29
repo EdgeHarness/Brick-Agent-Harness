@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Run on any machine with Docker + an NVIDIA GPU (nvidia-container-toolkit).
-# Builds a self-contained image (model baked in, no token) and produces
-# ./out/toolcall-lora/ with the adapter and a GGUF. No editing.
+# Experimental Docker wrapper. Requires Docker, compatible NVIDIA
+# container/GPU tooling, network access during build, and adequate storage.
+# It attempts to write adapter/conversion artifacts under ./out.
 set -euo pipefail
 cd "$(dirname "$0")"
 

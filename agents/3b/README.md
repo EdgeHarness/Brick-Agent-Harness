@@ -7,7 +7,8 @@ Ollama. It is an intended comparison point, not a measured recommendation.
 {
   "name": "Agent 3B",
   "model": "llama3.2:3b",
-  "num_ctx": 8192
+  "num_ctx": 8192,
+  "domain": "office_demo"
 }
 ```
 
@@ -29,24 +30,28 @@ cd agents\3b
 .\run.ps1 "List my simulated Wednesday meetings"
 ```
 
-`run.ps1` hardcodes the original lab Python path. Direct invocation requires
-Python, `requests`, `python-pptx`, and `openpyxl`; no root runtime dependency
-manifest or lock file currently exists. Ollama must be running locally and the
-configured tag must be installed.
+`run_agent.py` is a thin shim over the shared runner. `run.ps1` hardcodes the
+original lab Python path. Direct invocation uses the root package manifest and
+pinned requirements; the transitive lock has no hashes and installation may
+need network/cache access. Ollama must be running locally and the configured
+tag must be installed.
 
 ## Scope and safety
 
-Default email, calendar, messaging, and reminders are simulated local records,
+Default `office_demo@0.1.0` email, calendar, messaging, and reminders are simulated local records,
 not integrations. PowerPoint and Excel creation produces real files only under
 this agent's `workspace/files/`.
 
-`--root` exposes experimental file writes, moves, and deletion through an
+`--domain` can select another installed pack; `counter_demo@0.1.0` is only a
+structural fixture. `--root` exposes experimental file writes, moves, and deletion through an
 in-process path check, not an OS sandbox. Symlinks/junctions can defeat the
 boundary. `--shell` is unrestricted PowerShell, and `--yolo` removes
 confirmations. Use only disposable data. See [`../README.md`](../README.md).
 
 The LLM verifier is fail-open and cannot certify correctness. Logs omit original
 planner/verifier output and can retain sensitive task and file text.
+
+Runtime memory is local and ignored by Git; no memory file is shipped.
 
 `--small` changes the model used for planning and verification; it does not make
 those calls correct. `--deep` is currently unreachable, and adapter fields are

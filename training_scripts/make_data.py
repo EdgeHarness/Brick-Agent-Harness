@@ -1,16 +1,15 @@
-"""Self-contained training-data generator for the tool-calling LoRA.
+"""Experimental synthetic-data generator for the tool-calling LoRA.
 
 Unlike the project's finetune/gen_toolcall_data.py (which imports the live
-harness), this script depends on NOTHING outside this folder — it reads the
-frozen serving prompt from system_prompt.txt and emits chat-format JSONL where
-the assistant turn is the correct tool call. So the training package can
-regenerate its own data on any machine.
+harness), this script reads the frozen serving prompt from system_prompt.txt
+and emits chat-format JSONL from hand-written templates. Running it requires a
+compatible Python environment. Its generated labels, provenance, leakage risk,
+coverage, and fitness for training have not been independently validated.
 
     python make_data.py --n 1200 --out data/toolcall.jsonl
 
-The frozen system_prompt.txt is the context the adapter trains against; it must
-match what you serve. If you change the harness's tools or prompt, re-snapshot
-it (see README) and regenerate.
+The frozen system_prompt.txt is intended to match serving context. Verify that
+parity and review the generated records before using them for training.
 """
 import argparse
 import datetime

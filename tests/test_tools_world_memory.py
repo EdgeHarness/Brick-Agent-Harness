@@ -2,31 +2,35 @@ import json
 
 import pytest
 
+from domains.office_demo.world import CALENDAR, EMAILS, World
 from harness.memory import MemoryStore
-from harness.tools import execute, validate_call
-from harness.world import CALENDAR, EMAILS, World
+from harness.domain import load_domain
 
 
 def test_validate_call_checks_names_and_keys():
-    assert validate_call("missing_tool", {}) == [
+    registry = load_domain("office_demo").registry
+    assert registry.validate("missing_tool", {}) == [
         "unknown tool 'missing_tool'; valid tools: "
         "list_emails, read_email, send_email, list_events, add_event, "
         "send_message, set_reminder, create_presentation, "
         "create_spreadsheet, read_spreadsheet, think, save_memory, "
         "recall_memories, done"
     ]
-    assert validate_call("send_message", {"to": "Sam"}) == [
+    assert registry.validate("send_message", {"to": "Sam"}) == [
         "missing required parameter 'text' (string, the message)"
     ]
-    assert validate_call(
+    assert registry.validate(
         "send_message", {"to": "Sam", "text": "Hi", "channel": "sms"}
     ) == ["unknown parameter 'channel' (valid: to, text)"]
 
 
 @pytest.mark.characterization
 def test_validate_call_does_not_enforce_documented_types():
-    assert validate_call("send_message", {"to": 7, "text": ["not", "a", "string"]}) == []
-    assert validate_call(
+    registry = load_domain("office_demo").registry
+    assert registry.validate(
+        "send_message", {"to": 7, "text": ["not", "a", "string"]}
+    ) == []
+    assert registry.validate(
         "add_event",
         {
             "title": ["not", "a", "string"],
@@ -37,27 +41,28 @@ def test_validate_call_does_not_enforce_documented_types():
     ) == []
 
 
-def test_execute_records_success_and_model_facing_errors(world_and_memory):
-    world, memory = world_and_memory
+def test_execute_records_success_and_model_facing_errors(attempt_factory):
+    attempt = attempt_factory()
+    registry = attempt.tools
 
-    ok, result = execute(
-        "send_message", {"to": "Sam", "text": "Hello"}, world, memory
+    ok, result = registry.execute(
+        "send_message", {"to": "Sam", "text": "Hello"}, attempt
     )
     assert ok is True
     assert json.loads(result) == {"to": "Sam", "text": "Hello"}
-    assert world.actions[-1]["tool"] == "send_message"
-    assert world.actions[-1]["ok"] is True
+    assert attempt.actions[-1]["tool"] == "send_message"
+    assert attempt.actions[-1]["ok"] is True
 
-    ok, result = execute("send_message", {}, world, memory)
+    ok, result = registry.execute("send_message", {}, attempt)
     assert ok is False
     assert result == "ERROR: missing required parameter 'to'"
-    assert world.actions[-1]["ok"] is False
+    assert attempt.actions[-1]["ok"] is False
 
-    before = len(world.actions)
-    ok, result = execute("not_a_tool", {}, world, memory)
+    before = len(attempt.actions)
+    ok, result = registry.execute("not_a_tool", {}, attempt)
     assert ok is False
     assert result.startswith("ERROR: unknown tool 'not_a_tool'.")
-    assert len(world.actions) == before
+    assert len(attempt.actions) == before
 
 
 def test_world_starts_from_fixed_fixtures_and_persists_a_snapshot(tmp_path):

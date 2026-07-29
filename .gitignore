@@ -19,6 +19,7 @@ results_smoke/
 results-dev*/
 agents/*/workspace/
 agents/*/logs/
+agents/*/runtime/
 *.log
 
 # Generated office files

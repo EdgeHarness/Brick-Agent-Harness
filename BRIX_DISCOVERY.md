@@ -13,7 +13,8 @@ success threshold.
 
 ## Reported opportunity areas
 
-Stakeholders identified the following candidate areas:
+The source note presents these six as the clearest candidate priorities, in no
+validated order:
 
 - email and task organization;
 - lead and member follow-up;
@@ -21,18 +22,23 @@ Stakeholders identified the following candidate areas:
 - conference-room scheduling, confirmations, arrival instructions, and reminders;
 - maintenance and facilities issue tracking;
 - search over approved internal policies and operational information;
+
+It also identifies these adjacent opportunities:
+
 - common-member-question support;
 - invoice-status and payment-follow-up tracking without storing payment-card data;
 - preparation of member communications.
 
-The stated preference is to begin with one or two functions that work reliably and to
-preserve the privacy of member and business information. Those preferences do not
-choose the first workflow. Selection requires the P0/S11 discovery and data-governance
-evidence defined in [`PROJECT_SETUP.md`](PROJECT_SETUP.md).
+The source expresses a preference to start with one or two reliable functions,
+keep sensitive business/member information internal, and avoid unnecessary
+external services. That is stakeholder input, not evidence that the current
+repository is offline, secure, or approved to receive Brix data. It also does
+not select a first workflow. Selection requires the P0 discovery and
+data-governance evidence in [`PROJECT_SETUP.md`](PROJECT_SETUP.md).
 
 ## Required discovery outputs
 
-For every candidate workflow, document:
+For every candidate workflow, document and have Brix validate:
 
 - trigger, actors, inputs, outputs, and authoritative system;
 - normal path, exceptions, approvals, reversibility, and failure consequences;
@@ -44,3 +50,7 @@ For every candidate workflow, document:
 
 Until that work is approved, all implementation and evaluation examples must use
 synthetic or separately approved redacted data.
+
+The current `office_demo` tasks are research fixtures. Similar words such as
+“email,” “onboarding,” or “calendar” do not make them Brix requirements,
+workflow replicas, baselines, or acceptance tests.

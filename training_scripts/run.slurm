@@ -1,11 +1,11 @@
 #!/bin/bash
-# Slurm submission for a GPU computing center (Slurm + Apptainer/Singularity).
-# The container is fully self-contained — model, data, and tooling are baked in —
-# so the compute node needs NO internet and NO Hugging Face token.
+# Experimental Slurm submission for a compatible GPU center with
+# Apptainer/Singularity. A prebuilt image contains the current model snapshot,
+# synthetic data, and tooling, but site policy and runtime compatibility still
+# need verification.
 # Submit with:  sbatch run.slurm
 #
-# One-time, on a login node (which has internet), build the .sif — no Docker
-# needed, straight from the definition file:
+# On a build node with network access, build the .sif from the definition:
 #     apptainer build toolcall-lora.sif apptainer.def
 #   (older Singularity:  singularity build toolcall-lora.sif apptainer.def)
 #
@@ -26,8 +26,8 @@ SIF=${SIF:-toolcall-lora.sif}
 OUTDIR=${OUTDIR:-$PWD/out}
 mkdir -p "$OUTDIR"
 
-# --nv exposes the GPU; bind the writable output dir so the adapter lands on the
-# shared filesystem. Everything else is inside the image — no network used.
+# --nv requests GPU exposure; bind the writable output directory so attempted
+# training artifacts land on the shared filesystem.
 "$RUNNER" exec --nv \
   --bind "$OUTDIR:/workspace/out" \
   "$SIF" \

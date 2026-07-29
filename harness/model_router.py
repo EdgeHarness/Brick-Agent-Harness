@@ -1,42 +1,53 @@
-"""Tiered, RAM-aware model router with a LoRA-adapter seam.
+"""Tiered model router with per-role sampling and keep-alive hints.
 
 Two ideas from the architecture doc, adapted to a Codex-style open agent loop:
 
 1. Multi-model routing. The agent's model calls carry a `role` (driver /
    router / verifier / deep). Each role maps to a tier: a model tag, sampling
-   settings, an optional keep-alive, and an optional LoRA adapter.
+   settings, an optional keep-alive hint, and optional adapter metadata.
 
-2. RAM optimisation ("one model active at once"). The DEFAULT lineup points
-   every interactive role at ONE base tag, so exactly one model is resident.
-   The heavy `deep` role is marked on_demand with keep_alive="0": Ollama loads
-   it only for that call and evicts it immediately, so it never co-resides for
-   longer than a single request. Nothing but the one base stays in RAM between
-   calls.
+2. Model reuse hints. The default lineup points interactive roles at one base
+   tag and gives the optional `deep` role keep_alive="0". These values are sent
+   to Ollama, but this process does not observe or guarantee actual residency,
+   eviction timing, or peak memory use.
 
-LoRA-adapter seam. Each role may name an `adapter`. The default backend here is
-Ollama, whose HTTP API cannot hot-swap a LoRA per request, so it treats the
-adapter as documentation and specialises the base by prompt+sampling instead.
-A llama-server backend (llama-server.exe ships with Ollama) CAN toggle a LoRA
-per call via its /lora-adapters endpoint at ~0 RAM cost — that backend is the
-place a real adapter plugs in. See adapters_note() for the honest status.
+Each role may name an `adapter`, but the current backend records that field as
+metadata only: it neither loads nor evaluates adapters. See adapters_note().
 
 Drop-in for harness.llm.LLM: exposes .chat(messages, force_json=, num_predict=,
 role=), plus .calls / .output_tokens / .prompt_tokens / .wall, so run_harness
 accepts either object unchanged.
 """
+import copy
+from collections.abc import Mapping
 import json
 import os
 import time
+from types import MappingProxyType
 
 from .llm import LLM
 
 
-def default_roles(base="llama3.1:8b", small=None, deep="qwen2.5:14b"):
-    """The RAM-optimal default: driver/router/verifier all share one resident
-    base; deep is load-on-demand and evicted after use.
+def _freeze(value):
+    if isinstance(value, Mapping):
+        return MappingProxyType(
+            {key: _freeze(item) for key, item in value.items()}
+        )
+    if isinstance(value, list):
+        return tuple(_freeze(item) for item in value)
+    if isinstance(value, set):
+        return frozenset(_freeze(item) for item in value)
+    if isinstance(value, tuple):
+        return tuple(_freeze(item) for item in value)
+    return copy.deepcopy(value)
 
-    Pass small=<tag> to give routing/verify a cheaper model — faster per call,
-    but then TWO models are resident. Leave small=None to stay single-resident.
+
+def default_roles(base="llama3.1:8b", small=None, deep="qwen2.5:14b"):
+    """Reuse one base tag for interactive roles and hint that deep is ephemeral.
+
+    Passing ``small`` selects another tag for routing and verification. Actual
+    speed, residency, eviction, and memory use are backend/runtime properties
+    and are not inferred here.
     """
     light = small or base
     return {
@@ -49,11 +60,50 @@ def default_roles(base="llama3.1:8b", small=None, deep="qwen2.5:14b"):
 
 
 class ModelRouter:
-    def __init__(self, roles=None, num_ctx=8192, log_path=None, default_role="driver"):
-        self.roles = roles or default_roles()
+    def __init__(self, roles=None, num_ctx=8192, log_path=None,
+                 default_role="driver", stream_hook=None):
+        if stream_hook is not None and not callable(stream_hook):
+            raise TypeError("stream_hook must be callable or None")
+        role_source = default_roles() if roles is None else roles
+        if not isinstance(role_source, Mapping) or not role_source:
+            raise ValueError("roles must be a nonempty mapping")
+        frozen_roles = {}
+        for role, spec in role_source.items():
+            if not isinstance(role, str) or not role:
+                raise ValueError("role names must be nonempty strings")
+            if not isinstance(spec, Mapping):
+                raise TypeError(f"role {role!r} must map to a dictionary")
+            if not isinstance(spec.get("model"), str) or not spec["model"]:
+                raise ValueError(f"role {role!r} requires a model")
+            for key in ("temperature",):
+                if key in spec and (
+                    isinstance(spec[key], bool)
+                    or not isinstance(spec[key], (int, float))
+                ):
+                    raise TypeError(
+                        f"role {role!r} {key} must be numeric"
+                    )
+            if "num_predict" in spec and (
+                type(spec["num_predict"]) is not int
+                or spec["num_predict"] < 1
+            ):
+                raise ValueError(
+                    f"role {role!r} num_predict must be a positive integer"
+                )
+            if "on_demand" in spec and type(spec["on_demand"]) is not bool:
+                raise TypeError(
+                    f"role {role!r} on_demand must be bool"
+                )
+            frozen_roles[role] = _freeze(spec)
+        if default_role not in frozen_roles:
+            raise ValueError(
+                f"default role {default_role!r} is not configured"
+            )
+        self.roles = MappingProxyType(frozen_roles)
         self.num_ctx = num_ctx
         self.default_role = default_role
         self.log_path = log_path
+        self.stream_hook = stream_hook
         self.call_log = []          # one record per model call
         self._clients = {}          # (model, keep_alive) -> LLM, reused
         self.reset_usage()
@@ -65,21 +115,27 @@ class ModelRouter:
         self.output_tokens = 0
         self.wall = 0.0
 
-    def _client(self, spec):
-        key = (spec["model"], spec.get("keep_alive", "30m"))
+    def _client(self, role, spec):
+        # Cache by role. Two roles may use one tag but intentionally request
+        # different temperatures or future behavior-affecting client options.
+        key = role
         if key not in self._clients:
             self._clients[key] = LLM(spec["model"], num_ctx=self.num_ctx,
                                      temperature=spec.get("temperature", 0.0),
-                                     keep_alive=spec.get("keep_alive", "30m"))
+                                     keep_alive=spec.get("keep_alive", "30m"),
+                                     stream_hook=self.stream_hook)
         return self._clients[key]
 
-    def resident_models(self):
-        """Tags that stay in RAM between calls (everything not on_demand)."""
+    def retained_model_hints(self):
+        """Tags configured without ``on_demand``; not a residency measurement."""
         return sorted({s["model"] for s in self.roles.values() if not s.get("on_demand")})
 
     def chat(self, messages, force_json=False, num_predict=None, role=None):
-        spec = self.roles.get(role) or self.roles[self.default_role]
-        llm = self._client(spec)
+        if role is not None and role not in self.roles:
+            raise ValueError(f"unknown model role {role!r}")
+        resolved_role = role or self.default_role
+        spec = self.roles[resolved_role]
+        llm = self._client(resolved_role, spec)
         np = num_predict if num_predict is not None else spec.get("num_predict", 700)
 
         before_out, before_prompt = llm.output_tokens, llm.prompt_tokens
@@ -120,7 +176,8 @@ class ModelRouter:
 
 
 def adapters_note():
-    """Honest one-liner about the LoRA seam, for the runner banner."""
-    return ("LoRA adapters: seam present (per-role 'adapter' field). Default Ollama "
-            "backend cannot hot-swap them, so roles specialise by prompt for now; a "
-            "llama-server backend + trained GGUF adapters is the path to real swapping.")
+    """State exactly what the current adapter field does."""
+    return (
+        "LoRA adapters: per-role 'adapter' is metadata only; "
+        "this backend neither loads nor evaluates adapters."
+    )

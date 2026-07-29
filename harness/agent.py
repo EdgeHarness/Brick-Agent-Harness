@@ -10,8 +10,8 @@ harness - the scaffolding under test:
           4. deterministic call repair (rename near-miss params, drop unknowns,
              lift top-level args) before rejecting anything
           5. schema validation with corrective, example-bearing feedback
-          6. date/time argument normalization ("2pm" -> "14:00", "tomorrow" ->
-             resolved against the simulated clock)
+          6. domain-supplied argument normalization (the office demo resolves
+             date/time expressions against its configured clock)
           7. a tool-grounded plan step (JSON list of tool names, not free prose)
           8. loop-breaking: repeated identical calls are not re-executed; the
              duplicated exchanges are removed from context (they act as
@@ -19,19 +19,13 @@ harness - the scaffolding under test:
           9. a verifier pass before accepting done()
          10. auto-injection of relevant long-term memories
 
-Both loops stop after MAX_CALLS total LLM invocations, so the harness pays
+Both loops stop after the configured total LLM invocations, so the harness pays
 for its plan/verify/repair calls out of the same budget.
 """
-import datetime
+import copy
 import difflib
 import json
 import re
-
-from .tools import TOOLS, execute, tool_docs, validate_call
-from .world import SIM_TODAY, SIM_TODAY_HUMAN
-
-MAX_CALLS = 14
-OBS_LIMIT = 2000  # observation truncation, same in both conditions
 
 # Abstract on purpose: concrete example content in an instruction becomes an
 # attractor that 1B models copy verbatim. Real examples live per-tool in docs.
@@ -85,82 +79,11 @@ def parse_lenient(text):
     return None, "unbalanced braces in response"
 
 
-# ---------------------------------------------------- date/time normalizing ----
-
-_WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-_MONTHS = {m: i + 1 for i, m in enumerate(
-    ["january", "february", "march", "april", "may", "june", "july",
-     "august", "september", "october", "november", "december"])}
-
-
-def normalize_date(value, today=None):
-    # bound at call time, not import time, so a runner can point the harness at
-    # the real clock by setting agent.SIM_TODAY (the benchmark leaves it alone)
-    today = today or SIM_TODAY
-    if not isinstance(value, str):
-        return value
-    s = value.strip().lower()
-    if re.match(r"^\d{4}-\d{2}-\d{2}$", s):
-        return s
-    if s == "today":
-        return today.isoformat()
-    if s == "tomorrow":
-        return (today + datetime.timedelta(days=1)).isoformat()
-    m = re.match(r"^(?:next\s+)?([a-z]+day)$", s)
-    if m and m.group(1) in _WEEKDAYS:
-        delta = (_WEEKDAYS.index(m.group(1)) - today.weekday()) % 7 or 7
-        return (today + datetime.timedelta(days=delta)).isoformat()
-    m = re.match(r"^([a-z]+)\.?\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s*(\d{4}))?$", s)
-    if m:
-        for name, num in _MONTHS.items():
-            if name.startswith(m.group(1)):
-                year = int(m.group(3)) if m.group(3) else today.year
-                return f"{year:04d}-{num:02d}-{int(m.group(2)):02d}"
-    m = re.match(r"^(\d{1,2})/(\d{1,2})(?:/(\d{2,4}))?$", s)
-    if m:
-        year = int(m.group(3)) if m.group(3) else today.year
-        if year < 100:
-            year += 2000
-        return f"{year:04d}-{int(m.group(1)):02d}-{int(m.group(2)):02d}"
-    return value
-
-
-def normalize_time(value):
-    if not isinstance(value, str):
-        return value
-    s = value.strip().lower().replace(".", "")
-    m = re.match(r"^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$", s)
-    if not m:
-        return value
-    h = int(m.group(1))
-    mins = m.group(2) or "00"
-    ap = m.group(3)
-    if ap == "pm" and h != 12:
-        h += 12
-    if ap == "am" and h == 12:
-        h = 0
-    if h > 23 or int(mins) > 59:
-        return value
-    return f"{h:02d}:{mins}"
-
-
-def normalize_args(name, args):
-    if not isinstance(args, dict):
-        return args
-    out = dict(args)
-    for key in out:
-        if key == "date":
-            out[key] = normalize_date(out[key])
-        elif key in ("start_time", "end_time", "time"):
-            out[key] = normalize_time(out[key])
-    return out
-
-
-def repair_args(name, args):
+def repair_args(name, args, registry):
     """Deterministic near-miss repair: rename close-match parameter names to
     the missing required ones, then drop unknown parameters. Returns
     (fixed_args, [notes])."""
-    spec = TOOLS.get(name)
+    spec = registry.get(name)
     if not spec or not isinstance(args, dict):
         return args, []
     valid = spec["params"]
@@ -184,53 +107,93 @@ def repair_args(name, args):
 
 # ------------------------------------------------------------- transcripts ----
 
-# Optional observation hook (the web UI sets it): called as hook(kind, content)
-# for every transcript note, so a watcher sees each step as it happens. None
-# everywhere else, including the benchmark, so the loops are unaffected.
-EVENT_HOOK = None
-
-
 class Episode:
-    def __init__(self):
+    def __init__(self, note_hook=None):
         self.transcript = []   # readable log of everything
         self.parse_failures = 0
         self.invalid_calls = 0
         self.tool_errors = 0
         self.done_summary = None
         self.finished = False
+        self._note_hook = note_hook
 
     def note(self, kind, content):
         self.transcript.append({"kind": kind, "content": content})
-        if EVENT_HOOK:
-            EVENT_HOOK(kind, content)
+        if self._note_hook:
+            try:
+                self._note_hook(kind, copy.deepcopy(content))
+            except Exception:
+                # Observers are best-effort and must not abort an attempt.
+                pass
 
 
-def _obs(text):
+def _obs(text, limit=2000):
     text = str(text)
-    return text if len(text) <= OBS_LIMIT else text[:OBS_LIMIT] + " ...[truncated]"
+    return text if len(text) <= limit else text[:limit] + " ...[truncated]"
+
+
+class _AttemptLLM:
+    """Attempt-local call meter around an LLM or ModelRouter.
+
+    This isolates only call budgeting when a delegate is reused. Delegate
+    counters, caches, logs, and stream hooks are not concurrency-safe;
+    first-party callers use one delegate per active attempt.
+    """
+
+    def __init__(self, delegate, max_calls):
+        self.delegate = delegate
+        self.max_calls = max_calls
+        self.calls = 0
+
+    def chat(self, *args, **kwargs):
+        if self.calls >= self.max_calls:
+            raise RuntimeError("attempt LLM-call budget exhausted")
+        result = self.delegate.chat(*args, **kwargs)
+        self.calls += 1
+        return result
 
 
 # ------------------------------------------------------------------- RAW ----
 
-RAW_SYSTEM = """You are an assistant that completes office tasks using tools. \
-Today is {today}.
+RAW_SYSTEM = """{role} Today is {today}.
 
 Available tools:
-{docs}
+{docs}{extra_rules}
 
 Respond with a single JSON object of the form {{"tool": "<tool name>", "args": {{...}}}}. \
 Call the done tool when the task is finished."""
 
 
-def run_raw(llm, world, mem, task_text):
-    ep = Episode()
-    system = RAW_SYSTEM.format(today=SIM_TODAY_HUMAN, docs=tool_docs(with_examples=False))
+def build_raw_system(
+    registry, today_human, prompt_profile, extra_rules=""
+):
+    return RAW_SYSTEM.format(
+        role=prompt_profile.raw_role,
+        today=today_human,
+        docs=registry.docs(with_examples=False),
+        extra_rules=extra_rules,
+    )
+
+
+def run_raw(llm, task_text, attempt):
+    ep = Episode(attempt.hooks.on_note)
+    config = attempt.config
+    llm = _AttemptLLM(llm, config.max_calls)
+    profile = attempt.resolved_prompt_profile
+    system = build_raw_system(
+        attempt.tools,
+        config.today_human,
+        profile,
+        extra_rules=(
+            attempt.resolved_prompt_rules + config.prompt_rules
+        ),
+    )
     messages = [{"role": "system", "content": system},
                 {"role": "user", "content": task_text}]
     ep.note("system", system)
     ep.note("task", task_text)
 
-    while llm.calls < MAX_CALLS:
+    while llm.calls < config.max_calls:
         reply = llm.chat(messages, force_json=False)
         messages.append({"role": "assistant", "content": reply})
         ep.note("model", reply)
@@ -248,20 +211,20 @@ def run_raw(llm, world, mem, task_text):
             ep.finished = True
             ep.note("done", ep.done_summary)
             break
-        ok, obs = execute(name, args, world, mem)
+        ok, obs = attempt.tools.execute(name, args, attempt)
         if not ok:
             ep.tool_errors += 1
-        obs = _obs(obs)
+        obs = _obs(obs, config.observation_limit)
         messages.append({"role": "user", "content": f"OBSERVATION: {obs}"})
         ep.note("observation", obs)
-    world.snapshot()
+    attempt.snapshot()
     return ep
 
 
 # --------------------------------------------------------------- HARNESS ----
 
-HARNESS_SYSTEM = """You are a careful office assistant agent. Today is {today}.
-You interact with the world ONLY by calling tools, one call per reply.
+HARNESS_SYSTEM = """{role} Today is {today}.
+{scope}
 
 RESPONSE FORMAT - every reply must be exactly one JSON object:
 {shape}
@@ -269,28 +232,20 @@ RESPONSE FORMAT - every reply must be exactly one JSON object:
 Rules:
 - ONE tool call per reply. No text outside the JSON object.
 - Only do what the task requires - nothing extra.
-- Look before you act: read the relevant emails or calendar before writing anything that depends on them.
-- Dates must be YYYY-MM-DD. Times must be 24-hour HH:MM.
+- Look before you act: {look_before_act}
+{format_rule}
 - If a tool returns an ERROR, fix the arguments and try again.
 - When every part of the task is complete, call done with a short summary.
 
 TOOLS:
 {docs}{memory_block}{extra_rules}"""
 
-# Appended to the harness system prompt. Empty for the benchmark, so the graded
-# prompt stays byte-identical to earlier runs; the on-device agents set it.
-EXTRA_RULES = ""
-
-# Extra world-changing tool names, for the loop-breaking check. Empty for the
-# benchmark; the on-device agents add the real-filesystem writers.
-EXTRA_WRITE_TOOLS = set()
-
 PLAN_PROMPT = ('Which tools will you need to call to complete this task, in order? '
                'Reply with one JSON object: {"steps": [{"tool": "<tool_name>", "what": "<5 words>"}, ...]}. '
                'Most tasks need only 1-4 calls. Do not include tools the task does not need.')
 
 
-def plan_step(llm, messages, ep):
+def plan_step(llm, messages, ep, registry):
     """Ask for a tool-grounded plan; return it as short text (or ''). Invalid
     tool names are dropped - free prose never enters the context."""
     reply = llm.chat(messages, force_json=True, num_predict=250, role="router")
@@ -298,7 +253,7 @@ def plan_step(llm, messages, ep):
     steps = []
     if isinstance(obj, dict) and isinstance(obj.get("steps"), list):
         for s in obj["steps"][:6]:
-            if isinstance(s, dict) and s.get("tool") in TOOLS:
+            if isinstance(s, dict) and s.get("tool") in registry:
                 what = str(s.get("what", ""))[:60]
                 steps.append(f"{len(steps) + 1}. {s['tool']} - {what}")
     plan = "\n".join(steps)
@@ -306,23 +261,50 @@ def plan_step(llm, messages, ep):
     return plan
 
 
-def run_harness(llm, world, mem, task_text):
-    ep = Episode()
-    memories = mem.search(task_text, k=3)  # inject only matches, never a recency fallback
+def build_harness_system(
+    registry,
+    today_human,
+    prompt_profile,
+    memory_block="",
+    extra_rules="",
+):
+    return HARNESS_SYSTEM.format(
+        role=prompt_profile.harness_role,
+        today=today_human,
+        scope=prompt_profile.scope,
+        look_before_act=prompt_profile.look_before_act,
+        format_rule=prompt_profile.format_rule,
+        shape=SHAPE,
+        docs=registry.docs(with_examples=True),
+        memory_block=memory_block,
+        extra_rules=extra_rules,
+    )
+
+
+def run_harness(llm, task_text, attempt):
+    ep = Episode(attempt.hooks.on_note)
+    config = attempt.config
+    llm = _AttemptLLM(llm, config.max_calls)
+    memories = attempt.memory.search(
+        task_text, k=3
+    )  # inject only matches, never a recency fallback
     memory_block = ""
     if memories:
         memory_block = ("\n\nTHINGS YOU HAVE LEARNED PREVIOUSLY (apply them when relevant):\n"
                         + "\n".join(f"- {f}" for f in memories))
-    system = HARNESS_SYSTEM.format(today=SIM_TODAY_HUMAN, shape=SHAPE,
-                                   docs=tool_docs(with_examples=True),
-                                   memory_block=memory_block,
-                                   extra_rules=EXTRA_RULES)
+    system = build_harness_system(
+        attempt.tools,
+        config.today_human,
+        attempt.resolved_prompt_profile,
+        memory_block=memory_block,
+        extra_rules=attempt.resolved_prompt_rules + config.prompt_rules,
+    )
     messages = [{"role": "system", "content": system},
                 {"role": "user", "content": f"TASK: {task_text}\n\n{PLAN_PROMPT}"}]
     ep.note("system", system)
     ep.note("task", task_text)
 
-    plan = plan_step(llm, messages, ep)
+    plan = plan_step(llm, messages, ep, attempt.tools)
     messages.pop()  # the plan request leaves the context; the plan re-enters as user guidance
     act = f"TASK: {task_text}\n\n"
     if plan:
@@ -334,9 +316,6 @@ def run_harness(llm, world, mem, task_text):
     seen_calls = {}      # signature -> world_version at last execution
     world_version = 0    # bumped on successful writes; repeated reads are only
                          # suppressed while the world is unchanged
-    write_tools = {"send_email", "add_event", "send_message", "set_reminder",
-                   "create_presentation", "create_spreadsheet", "save_memory"}
-    write_tools |= EXTRA_WRITE_TOOLS  # empty for the benchmark; fs_tools adds its own
     last_reply = None
     think_streak = 0
 
@@ -352,7 +331,7 @@ def run_harness(llm, world, mem, task_text):
         ep.note("feedback", fb)
         last_reply = reply
 
-    while llm.calls < MAX_CALLS:
+    while llm.calls < config.max_calls:
         reply = llm.chat(messages, force_json=True, role="driver")
         messages.append({"role": "assistant", "content": reply})
         ep.note("model", reply)
@@ -368,9 +347,12 @@ def run_harness(llm, world, mem, task_text):
             args = {k: v for k, v in obj.items() if k not in ("tool", "name", "thought", "args")}
 
         if name == "done":
-            if verify_rounds < 2 and llm.calls < MAX_CALLS:
+            if (
+                verify_rounds < config.verifier_rounds
+                and llm.calls < config.max_calls
+            ):
                 verify_rounds += 1
-                verdict = _verify(llm, world, task_text)
+                verdict = _verify(llm, task_text, attempt)
                 ep.note("verify", json.dumps(verdict, ensure_ascii=False))
                 if not verdict.get("complete", True):
                     give_feedback("VERIFIER: the task is NOT finished yet. Missing: "
@@ -382,29 +364,40 @@ def run_harness(llm, world, mem, task_text):
             ep.note("done", ep.done_summary)
             break
 
-        args, fixes = repair_args(name, args)
+        args, fixes = repair_args(name, args, attempt.tools)
         if fixes:
             ep.note("repair", "; ".join(fixes))
-        args = normalize_args(name, args)
+        args = attempt.domain.normalize_args(name, args, config.today)
 
-        problems = validate_call(name, args)
+        problems = attempt.tools.validate(name, args)
         if problems:
             ep.invalid_calls += 1
             hint = ""
-            if name in TOOLS:
-                hint = " Correct shape: " + json.dumps(TOOLS[name]["example"], ensure_ascii=False)
+            if name in attempt.tools:
+                hint = " Correct shape: " + json.dumps(
+                    attempt.tools[name]["example"], ensure_ascii=False
+                )
             else:
-                close = difflib.get_close_matches(name, TOOLS.keys(), n=1)
+                close = difflib.get_close_matches(
+                    name, attempt.tools.keys(), n=1
+                )
                 if close:
                     hint = (f" Did you mean '{close[0]}'? Correct shape: "
-                            + json.dumps(TOOLS[close[0]]["example"], ensure_ascii=False))
+                            + json.dumps(
+                                attempt.tools[close[0]]["example"],
+                                ensure_ascii=False,
+                            ))
             give_feedback("INVALID CALL: " + "; ".join(problems) + "." + hint
                           + " Reply with one corrected JSON object.", reply)
             continue
         last_reply = reply
 
         sig = json.dumps({"t": name, "a": args}, sort_keys=True, default=str)
-        if name != "think" and seen_calls.get(sig) == world_version:
+        if (
+            name != "think"
+            and attempt.tools.suppresses_identical_repeats(name)
+            and seen_calls.get(sig) == world_version
+        ):
             # Identical call, unchanged world: do not re-execute. If it is a
             # verbatim repeat of the previous exchange, delete the older copy
             # (repetition in context is an attractor for small models).
@@ -419,23 +412,23 @@ def run_harness(llm, world, mem, task_text):
             continue
         think_streak = think_streak + 1 if name == "think" else 0
 
-        ok, obs = execute(name, args, world, mem)
-        if ok and name in write_tools:
+        ok, obs = attempt.tools.execute(name, args, attempt)
+        if ok and attempt.policy.is_mutating(name):
             world_version += 1
         seen_calls[sig] = world_version
         if not ok:
             ep.tool_errors += 1
-        obs = _obs(obs)
+        obs = _obs(obs, config.observation_limit)
         if think_streak >= 2:
             obs += " NOTE: stop thinking and take a concrete action now."
         messages.append({"role": "user", "content": f"OBSERVATION: {obs}"})
         ep.note("observation", obs)
-    world.snapshot()
+    attempt.snapshot()
     return ep
 
 
-def _verify(llm, world, task_text):
-    acts = [a for a in world.actions if a["tool"] != "think"]
+def _verify(llm, task_text, attempt):
+    acts = [a for a in attempt.actions if a["tool"] != "think"]
     lines = []
     for a in acts:
         status = "ok" if a["ok"] else "FAILED"
@@ -445,7 +438,7 @@ def _verify(llm, world, task_text):
               + "\n\nCheck the task requirements one by one against the actions. "
                 'Respond with one JSON object: {"complete": true or false, "missing": "<what has not been done>"}')
     msgs = [{"role": "system", "content": "You are a strict task-completion verifier. Today is "
-             + SIM_TODAY_HUMAN + "."},
+             + attempt.config.today_human + "."},
             {"role": "user", "content": prompt}]
     try:
         reply = llm.chat(msgs, force_json=True, num_predict=200, role="verifier")
@@ -455,3 +448,10 @@ def _verify(llm, world, task_text):
     except Exception:
         pass
     return {"complete": True, "missing": ""}
+
+
+def run(llm, task_text, attempt):
+    """Execute the condition resolved on one explicit AttemptContext."""
+    if attempt.config.condition == "harness":
+        return run_harness(llm, task_text, attempt)
+    return run_raw(llm, task_text, attempt)

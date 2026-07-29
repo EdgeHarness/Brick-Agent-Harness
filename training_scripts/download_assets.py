@@ -1,13 +1,12 @@
-"""Prefetch everything training needs, so a clean/offline machine trains with
-no manual downloads and NO Hugging Face token.
+"""Experimental prefetch helper for the current training path.
 
 Downloads into ./assets (idempotent — skips whatever is already there):
-    assets/base_model/   ungated Llama-3.2-1B-Instruct weights (HF snapshot)
+    assets/base_model/   configured Hugging Face model snapshot
     assets/llama.cpp/    llama.cpp, for GGUF adapter conversion
 
-Run this once where there is internet (a laptop, or an HPC *login* node). After
-it finishes, train_lora.py reads these local paths and needs no network at all —
-which is exactly what an offline GPU compute node requires.
+Run where network access is allowed. A completed download may support later
+network-isolated training, but this helper does not verify integrity, licensing,
+runtime compatibility, or whether other dependencies attempt network access.
 
     python download_assets.py
 """
@@ -18,8 +17,9 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(HERE, "assets")
 
-# Ungated mirror — same weights as meta-llama/Llama-3.2-1B-Instruct (which is
-# what Ollama's llama3.2:1b serves), but downloadable with no license/token.
+# Default snapshot identifier. Availability, authentication, licensing, and
+# equivalence to other distributions are external facts this script does not
+# establish.
 BASE_ID = os.environ.get("BASE_MODEL_ID", "unsloth/Llama-3.2-1B-Instruct")
 LLAMACPP_REPO = os.environ.get("LLAMACPP_REPO", "https://github.com/ggml-org/llama.cpp")
 
@@ -30,7 +30,7 @@ def fetch_model():
         print(f"[model] already present -> {dst}")
         return dst
     from huggingface_hub import snapshot_download
-    print(f"[model] downloading {BASE_ID} (no token needed) -> {dst}")
+    print(f"[model] downloading {BASE_ID} -> {dst}")
     snapshot_download(
         repo_id=BASE_ID, local_dir=dst,
         # weights + tokenizer + configs only; skip anything huge/irrelevant
@@ -67,5 +67,7 @@ if __name__ == "__main__":
     m = fetch_model()
     lc = fetch_llamacpp()
     install_gguf_py(lc)
-    print(f"\nassets ready:\n  base_model: {m}\n  llama.cpp : {lc}\n"
-          f"training can now run fully offline.")
+    print(
+        f"\nassets downloaded:\n  base_model: {m}\n  llama.cpp : {lc}\n"
+        "verify licensing, integrity, and compatibility before training."
+    )

@@ -6,24 +6,26 @@ import requests
 
 OLLAMA_URL = "http://127.0.0.1:11434"
 
-# Optional observation hook for live watchers (the web UI sets it):
+# Optional per-client observation hook for live watchers:
 #   ("start", {"model", "role"})                     before the request goes out
 #   ("token", {"text"})                              per streamed chunk
 #   ("end",   {"model", "role", "output_tokens", "ms"})
-# While a hook is installed the reply is streamed so a watcher can see it being
-# written; the payload is otherwise identical, so sampling is unchanged. None by
-# default, so the benchmark keeps making one non-streamed request per call.
-STREAM_HOOK = None
+# While a hook is installed the reply is streamed so a watcher can see it
+# being written.  Keeping it on the LLM instance prevents concurrent attempts
+# in the same process from intercepting one another's output.
 
 
 class LLM:
     def __init__(self, model, num_ctx=8192, temperature=0.0, timeout=900,
-                 keep_alive="30m"):
+                 keep_alive="30m", stream_hook=None):
+        if stream_hook is not None and not callable(stream_hook):
+            raise TypeError("stream_hook must be callable or None")
         self.model = model
         self.num_ctx = num_ctx
         self.temperature = temperature
         self.timeout = timeout
         self.keep_alive = keep_alive  # "0" evicts the model right after the call
+        self.stream_hook = stream_hook
         self.reset_usage()
 
     def reset_usage(self):
@@ -37,7 +39,7 @@ class LLM:
         # role is accepted so a plain LLM is drop-in interchangeable with the
         # tiered ModelRouter (which selects a model from it); here it only
         # labels the stream events.
-        hook = STREAM_HOOK
+        hook = self.stream_hook
         payload = {
             "model": self.model,
             "messages": messages,

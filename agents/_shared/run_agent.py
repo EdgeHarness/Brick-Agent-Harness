@@ -1,116 +1,114 @@
-"""Self-contained ON-DEVICE agent for this folder's model.
-
-Everything runs locally: inference via the local Ollama server on
-127.0.0.1:11434 (weights in C:\\Users\\Lab User\\SAIL\\ollama), files and
-memory stay in this folder. Nothing is sent to any cloud service.
-
-Usage:
-    run.ps1 "Summarize my Wednesday meetings and message Jordan"
-    run.ps1            <- interactive prompt
-
-Real-computer mode (off by default) gives the agent the same kind of access
-Claude Code / Codex have - read, write, move, delete and search real files,
-optionally run shell commands - scoped to one folder:
-
-    run.ps1 --root C:\\Users\\Lab User\\Desktop\\sandbox "Tidy up these notes"
-    run.ps1 --root . --shell "What changed in this project today?"
-
-Without --root the agent only sees the simulated office world, as before.
-
-Flags:
-    --root PATH     working root; every path the agent touches must be inside it
-    --shell         also allow run_command (PowerShell), still confirmed
-    --yolo          skip confirmation prompts for overwrite/delete/move/shell
-    --max-calls N   LLM call budget (default 14 simulated, 40 with --root)
-
-State persists between runs:
-    workspace/state.json   inbox, calendar, sent mail, messages, reminders
-    workspace/files/       real .pptx / .xlsx the agent creates
-    memory/memory.jsonl    long-term memory (learning)
-"""
+"""Shared on-device runner used by every configured agent folder."""
 import datetime
 import json
 import os
+from pathlib import Path
 import sys
+
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROJECT = os.path.dirname(os.path.dirname(HERE))
-sys.path.insert(0, PROJECT)
+if PROJECT not in sys.path:
+    sys.path.insert(0, PROJECT)
 
-from harness import agent as agent_mod  # noqa: E402
-from harness import fs_tools  # noqa: E402
 from harness.agent import run_harness  # noqa: E402
+from harness.builtin_tools import BUILTIN_EFFECTS, builtin_specs  # noqa: E402
+from harness.domain import GENERIC_PROMPT_PROFILE, load_domain  # noqa: E402
+from harness.fs_tools import build_overlay  # noqa: E402
 from harness.llm import LLM, OLLAMA_URL  # noqa: E402
 from harness.memory import MemoryStore  # noqa: E402
-from harness.model_router import ModelRouter, adapters_note, default_roles  # noqa: E402
-from harness.world import World  # noqa: E402
-
-REAL_RULES = """
-
-You also have tools that act on the REAL computer, inside the working root
-{root}. Paths are relative to that root.
-- Look before you write: call list_dir or read_file first, so you change the
-  file that actually exists instead of one you assumed.
-- Never delete or overwrite anything the task did not ask you to change.
-- The user is asked to confirm deletes, overwrites and shell commands. If one
-  is declined, do not retry it - choose another approach."""
+from harness.model_router import (  # noqa: E402
+    ModelRouter,
+    adapters_note,
+    default_roles,
+)
+from harness.runtime import (  # noqa: E402
+    ActionPolicy,
+    AttemptContext,
+    RunConfig,
+)
+from harness.storage import agent_runtime_paths  # noqa: E402
+from harness.tools import ToolRegistry  # noqa: E402
 
 
 def parse_flags(argv):
-    opts = {"root": None, "shell": False, "yolo": False, "max_calls": None,
-            "tiers": False, "small": None, "deep": None, "office": False}
+    options = {
+        "root": None,
+        "shell": False,
+        "yolo": False,
+        "max_calls": None,
+        "tiers": False,
+        "small": None,
+        "deep": None,
+        "domain_name": None,
+        "include_domain": False,
+    }
     rest = []
-    i = 0
-    while i < len(argv):
-        a = argv[i]
-        if a == "--root" and i + 1 < len(argv):
-            opts["root"] = argv[i + 1]
-            i += 2
-        elif a == "--shell":
-            opts["shell"] = True
-            i += 1
-        elif a == "--yolo":
-            opts["yolo"] = True
-            i += 1
-        elif a == "--max-calls" and i + 1 < len(argv):
-            opts["max_calls"] = int(argv[i + 1])
-            i += 2
-        elif a == "--tiers":
-            opts["tiers"] = True
-            i += 1
-        elif a == "--small" and i + 1 < len(argv):
-            opts["small"] = argv[i + 1]
-            opts["tiers"] = True
-            i += 2
-        elif a == "--deep" and i + 1 < len(argv):
-            opts["deep"] = argv[i + 1]
-            opts["tiers"] = True
-            i += 2
-        elif a == "--with-office":
-            opts["office"] = True
-            i += 1
+    index = 0
+    while index < len(argv):
+        arg = argv[index]
+        if arg == "--root" and index + 1 < len(argv):
+            options["root"] = argv[index + 1]
+            index += 2
+        elif arg == "--shell":
+            options["shell"] = True
+            index += 1
+        elif arg == "--yolo":
+            options["yolo"] = True
+            index += 1
+        elif arg == "--max-calls" and index + 1 < len(argv):
+            options["max_calls"] = int(argv[index + 1])
+            index += 2
+        elif arg == "--tiers":
+            options["tiers"] = True
+            index += 1
+        elif arg == "--small" and index + 1 < len(argv):
+            options["small"] = argv[index + 1]
+            options["tiers"] = True
+            index += 2
+        elif arg == "--deep" and index + 1 < len(argv):
+            options["deep"] = argv[index + 1]
+            options["tiers"] = True
+            index += 2
+        elif arg == "--domain" and index + 1 < len(argv):
+            options["domain_name"] = argv[index + 1]
+            index += 2
+        elif arg in ("--with-domain", "--with-office"):
+            options["include_domain"] = True
+            index += 1
         else:
-            rest.append(a)
-            i += 1
-    return opts, " ".join(rest).strip()
+            rest.append(arg)
+            index += 1
+    return options, " ".join(rest).strip()
 
 
-def build_llm(cfg, opts):
-    """A plain single-model LLM by default; a tiered ModelRouter when --tiers
-    (or a config 'router' block) is set. The router's default lineup keeps ONE
-    model resident (driver/router/verifier share the base); a heavier 'deep'
-    tier is load-on-demand and evicted after use."""
-    use_router = opts["tiers"] or bool(cfg.get("router"))
+def build_llm(config, options, log_dir, stream_hook=None):
+    """Construct one LLM/router for this active attempt."""
+    use_router = options["tiers"] or bool(config.get("router"))
     if not use_router:
-        return LLM(cfg["model"], num_ctx=cfg.get("num_ctx", 8192)), None
-    rcfg = cfg.get("router", {})
-    roles = rcfg.get("roles") or default_roles(
-        base=rcfg.get("base", cfg["model"]),
-        small=opts["small"] or rcfg.get("small"),
-        deep=opts["deep"] or rcfg.get("deep", "qwen2.5:14b"))
-    log_path = os.path.join(HERE, "logs", "model_calls.jsonl")
+        return (
+            LLM(
+                config["model"],
+                num_ctx=config.get("num_ctx", 8192),
+                stream_hook=stream_hook,
+            ),
+            None,
+        )
+    router_config = config.get("router", {})
+    roles = router_config.get("roles") or default_roles(
+        base=router_config.get("base", config["model"]),
+        small=options["small"] or router_config.get("small"),
+        deep=options["deep"]
+        or router_config.get("deep", "qwen2.5:14b"),
+    )
+    log_path = os.path.join(log_dir, "model_calls.jsonl")
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    router = ModelRouter(roles=roles, num_ctx=cfg.get("num_ctx", 8192), log_path=log_path)
+    router = ModelRouter(
+        roles=roles,
+        num_ctx=config.get("num_ctx", 8192),
+        log_path=log_path,
+        stream_hook=stream_hook,
+    )
     return router, router
 
 
@@ -122,78 +120,199 @@ def confirm(action, detail):
         return False
 
 
-def main():
-    with open(os.path.join(HERE, "config.json"), encoding="utf-8-sig") as f:
-        cfg = json.load(f)
-    assert "127.0.0.1" in OLLAMA_URL or "localhost" in OLLAMA_URL, "refusing non-local endpoint"
+def _surface(domain, root, include_domain, allow_shell, confirmer):
+    if not root:
+        return (
+            domain.registry,
+            domain.default_policy,
+            domain.prompt_profile,
+            domain.prompt_rules,
+            None,
+        )
+    overlay = build_overlay(
+        root,
+        allow_shell=allow_shell,
+        confirmer=confirmer,
+    )
+    if include_domain:
+        base_registry = domain.registry
+        base_policy = domain.default_policy
+        profile = domain.prompt_profile
+        prompt_rules = domain.prompt_rules
+    else:
+        base_registry = ToolRegistry(builtin_specs())
+        base_policy = ActionPolicy(BUILTIN_EFFECTS)
+        profile = GENERIC_PROMPT_PROFILE
+        prompt_rules = ""
+    surface = overlay.compose(
+        base_registry, base_policy, prompt_rules=prompt_rules
+    )
+    return (
+        surface.registry,
+        surface.policy,
+        profile,
+        surface.prompt_rules,
+        overlay.root,
+    )
 
-    opts, task = parse_flags(sys.argv[1:])
-    root = opts["root"] or cfg.get("root")
+
+def main(agent_dir=None, argv=None):
+    if agent_dir is None:
+        raise ValueError("agent_dir is required; invoke an agents/<size> shim")
+    agent_dir = os.path.abspath(agent_dir)
+    with open(
+        os.path.join(agent_dir, "config.json"), encoding="utf-8-sig"
+    ) as handle:
+        config_data = json.load(handle)
+    assert (
+        "127.0.0.1" in OLLAMA_URL or "localhost" in OLLAMA_URL
+    ), "refusing non-local endpoint"
+
+    options, task = parse_flags(
+        list(sys.argv[1:] if argv is None else argv)
+    )
+    root_option = options["root"] or config_data.get("root")
     if not task:
         task = input("Task for the agent: ").strip()
     if not task:
         print("No task given.")
         return
 
-    if root:
-        root = fs_tools.enable(root,
-                               allow_shell=opts["shell"] or bool(cfg.get("allow_shell")),
-                               confirm=None if opts["yolo"] else confirm)
-        if not opts["office"]:
-            fs_tools.restrict_to_files()  # a real-folder agent shouldn't fiddle with a fake inbox
-        agent_mod.EXTRA_RULES = REAL_RULES.format(root=root)
-        agent_mod.EXTRA_WRITE_TOOLS = fs_tools.WRITE_TOOLS
-        # a real-file agent should reason about the real date, not the fixed
-        # benchmark clock
-        today = datetime.date.today()
-        agent_mod.SIM_TODAY = today
-        agent_mod.SIM_TODAY_HUMAN = today.strftime("%A, %B %d, %Y")
-    agent_mod.MAX_CALLS = opts["max_calls"] or cfg.get("max_calls") or (40 if root else 14)
+    domain = load_domain(
+        options["domain_name"]
+        or config_data.get("domain")
+        or "office_demo"
+    )
+    paths = agent_runtime_paths(agent_dir, domain)
+    allow_shell = options["shell"] or bool(config_data.get("allow_shell"))
+    tools, policy, profile, prompt_rules, root = _surface(
+        domain,
+        root_option,
+        options["include_domain"],
+        allow_shell,
+        None if options["yolo"] else confirm,
+    )
+    today = datetime.date.today() if root else domain.default_today
+    max_calls = options["max_calls"]
+    if max_calls is None:
+        max_calls = config_data.get("max_calls")
+    if max_calls is None:
+        max_calls = 40 if root else 14
+    run_config = RunConfig(
+        condition="harness",
+        max_calls=max_calls,
+        today=today,
+    )
 
-    world = World(os.path.join(HERE, "workspace"), persistent=True)
-    mem = MemoryStore(os.path.join(HERE, "memory", "memory.jsonl"))
-    llm, router = build_llm(cfg, opts)
+    workdir = paths.workspace
+    world = domain.make_world(workdir, persistent=True)
+    memory = MemoryStore(
+        str(paths.memory)
+    )
+    attempt = AttemptContext(
+        attempt_id=f"{domain.name}:{Path(agent_dir).name}",
+        config=run_config,
+        domain=domain,
+        tools=tools,
+        policy=policy,
+        world=world,
+        memory=memory,
+        workdir=workdir,
+        artifact_dir=paths.artifacts,
+        prompt_profile=profile,
+        prompt_rules=prompt_rules,
+    )
+    llm, router = build_llm(
+        config_data, options, str(paths.logs)
+    )
 
-    print(f"[{cfg['name']}] fully on-device via {OLLAMA_URL}")
+    print(
+        f"[{config_data['name']}] configured for local Ollama endpoint "
+        f"{OLLAMA_URL}"
+    )
+    print(f"  domain: {domain.name}@{domain.version}")
     if router:
-        print(f"  model tiers: " + ", ".join(f"{r}={s['model']}" for r, s in router.roles.items()))
-        print(f"  resident at once: {', '.join(router.resident_models())}  (others load on demand, evict after)")
+        print(
+            "  model tiers: "
+            + ", ".join(
+                f"{role}={spec['model']}"
+                for role, spec in router.roles.items()
+            )
+        )
+        print(
+            "  configured for reuse: "
+            + ", ".join(router.retained_model_hints())
+            + "  (keep-alive hints; actual residency is backend-managed)"
+        )
         print(f"  {adapters_note()}")
     else:
-        print(f"  model: {cfg['model']}")
+        print(f"  model: {config_data['model']}")
     if root:
-        mode = "read/write" + (" + shell" if opts["shell"] or cfg.get("allow_shell") else "")
-        toolset = "files + office world" if opts["office"] else "files only (office tools dropped)"
-        print(f"  real files: {mode} inside {root}"
-              + ("   [--yolo: confirmations off]" if opts["yolo"] else ""))
+        mode = "read/write" + (" + shell" if allow_shell else "")
+        toolset = (
+            f"files + {domain.name}"
+            if options["include_domain"]
+            else "files only (domain tools dropped)"
+        )
+        print(
+            f"  real files: {mode}; lexical root {root}"
+            + (
+                "   [--yolo: confirmations off]"
+                if options["yolo"]
+                else ""
+            )
+        )
         print(f"  toolset: {toolset}")
-    print(f"  budget: {agent_mod.MAX_CALLS} LLM calls")
-    ep = run_harness(llm, world, mem, task)
+    print(f"  budget: {run_config.max_calls} LLM calls")
+    episode = run_harness(llm, task, attempt)
 
     print("\n--- run finished ---")
-    print(f"finished cleanly: {ep.finished}   llm calls: {llm.calls}   "
-          f"tokens out: {llm.output_tokens}   wall: {llm.wall:.0f}s")
+    print(
+        f"finished cleanly: {episode.finished}   llm calls: {llm.calls}   "
+        f"tokens out: {llm.output_tokens}   wall: {llm.wall:.0f}s"
+    )
     if router:
-        for role, u in router.usage_by_role().items():
-            print(f"  tier {role:<8} {u['model']:<16} {u['calls']:>2} calls  "
-                  f"{u['output_tokens']:>5} out-tok  {u['ms'] / 1000:>5.1f}s")
-    if ep.done_summary:
-        print(f"agent summary: {ep.done_summary}")
-    acts = [a for a in world.actions if a["tool"] != "think"]
-    if acts:
+        for role, usage in router.usage_by_role().items():
+            print(
+                f"  tier {role:<8} {usage['model']:<16} "
+                f"{usage['calls']:>2} calls  "
+                f"{usage['output_tokens']:>5} out-tok  "
+                f"{usage['ms'] / 1000:>5.1f}s"
+            )
+    if episode.done_summary:
+        print(f"agent summary: {episode.done_summary}")
+    actions = [
+        action for action in attempt.actions if action["tool"] != "think"
+    ]
+    if actions:
         print("actions taken:")
-        for a in acts:
-            print(f"  - {a['tool']}({json.dumps(a['args'], ensure_ascii=False, default=str)[:120]})"
-                  f" -> {'ok' if a['ok'] else 'ERROR'}")
-    print(f"files: {world.files_dir}")
-    log_dir = os.path.join(HERE, "logs")
+        for action in actions:
+            print(
+                f"  - {action['tool']}("
+                f"{json.dumps(action['args'], ensure_ascii=False, default=str)[:120]})"
+                f" -> {'ok' if action['ok'] else 'ERROR'}"
+            )
+    print(f"files: {attempt.artifact_dir}")
+    log_dir = str(paths.logs)
     os.makedirs(log_dir, exist_ok=True)
-    n = len(os.listdir(log_dir)) + 1
-    log_path = os.path.join(log_dir, f"run_{n:03d}.json")
-    with open(log_path, "w", encoding="utf-8") as f:
-        json.dump({"task": task, "root": root, "transcript": ep.transcript,
-                   "finished": ep.finished, "summary": ep.done_summary}, f,
-                  indent=1, ensure_ascii=False)
+    log_path = os.path.join(
+        log_dir, f"run_{len(os.listdir(log_dir)) + 1:03d}.json"
+    )
+    with open(log_path, "w", encoding="utf-8") as handle:
+        json.dump(
+            {
+                "task": task,
+                "root": root,
+                "domain": domain.name,
+                "domain_version": domain.version,
+                "transcript": episode.transcript,
+                "finished": episode.finished,
+                "summary": episode.done_summary,
+            },
+            handle,
+            indent=1,
+            ensure_ascii=False,
+        )
     print(f"transcript: {log_path}")
 
 

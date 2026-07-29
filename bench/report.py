@@ -1,13 +1,9 @@
-"""Aggregate results.json into per-model / per-capability / per-condition
-summaries. Prints a markdown summary and writes summary.json for the HTML
-report.
-
-Usage: python -m bench.report [--outdir results]
-"""
+"""Report benchmark results without pooling domains or domain versions."""
 import argparse
+from collections import defaultdict
 import json
 import os
-from collections import defaultdict
+
 
 CAP_LABELS = {
     "powerpoint": "PowerPoint",
@@ -22,101 +18,275 @@ CAP_LABELS = {
 }
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--outdir", default="results")
-    args = ap.parse_args()
-    with open(os.path.join(args.outdir, "results.json"), encoding="utf-8") as f:
-        results = json.load(f)
+def _dataset_key(record):
+    return (
+        record.get("domain", "office_demo"),
+        record.get("domain_version", "unversioned"),
+    )
 
+
+def validate_results(results):
+    seen = set()
+    for index, record in enumerate(results):
+        identity = (
+            record.get("domain", "office_demo"),
+            record.get("domain_version", "unversioned"),
+            record.get("model"),
+            record.get("condition"),
+            record.get("task"),
+        )
+        if identity in seen:
+            raise ValueError(
+                f"duplicate benchmark identity at row {index}: {identity!r}"
+            )
+        seen.add(identity)
+
+
+def _pair_status(model, results):
+    by_condition = {"raw": {}, "harness": {}}
+    for record in results:
+        if (
+            record["model"] == model
+            and record["condition"] in by_condition
+        ):
+            by_condition[record["condition"]][record["task"]] = record
+    raw = by_condition["raw"]
+    harness = by_condition["harness"]
+    if not raw or not harness or set(raw) != set(harness):
+        return False, "unpaired task sets"
+    for task in raw:
+        left, right = raw[task], harness[task]
+        if (
+            "max_calls" not in left
+            or "max_calls" not in right
+            or "tools" not in left
+            or "tools" not in right
+            or left["max_calls"] != right["max_calls"]
+            or left["tools"] != right["tools"]
+        ):
+            return False, "incompatible surfaces"
+    return True, ""
+
+
+def summarize_dataset(domain, version, results):
     models = []
-    for r in results:
-        if r["model"] not in models:
-            models.append(r["model"])
+    capabilities = []
+    for record in results:
+        if record["model"] not in models:
+            models.append(record["model"])
+        for capability in record.get("caps", []):
+            if capability not in capabilities:
+                capabilities.append(capability)
 
-    # ---- overall table ----
-    overall = defaultdict(lambda: {"score": 0.0, "n": 0, "perfect": 0,
-                                   "parse_failures": 0, "invalid_calls": 0,
-                                   "tool_errors": 0, "calls": 0, "wall": 0.0,
-                                   "out_tokens": 0})
+    overall = defaultdict(
+        lambda: {
+            "score": 0.0,
+            "n": 0,
+            "perfect": 0,
+            "parse_failures": 0,
+            "invalid_calls": 0,
+            "tool_errors": 0,
+            "calls": 0,
+            "wall": 0.0,
+            "out_tokens": 0,
+        }
+    )
     per_task = defaultdict(dict)
-    per_cap = defaultdict(lambda: {"score": 0.0, "n": 0})
+    per_capability = defaultdict(lambda: {"score": 0.0, "n": 0})
 
-    for r in results:
-        key = (r["model"], r["condition"])
-        o = overall[key]
-        o["score"] += r["score"]
-        o["n"] += 1
-        o["perfect"] += 1 if r["score"] >= 0.999 else 0
-        o["parse_failures"] += r["parse_failures"]
-        o["invalid_calls"] += r.get("invalid_calls", 0)
-        o["tool_errors"] += r["tool_errors"]
-        o["calls"] += r["llm_calls"]
-        o["wall"] += r["wall_seconds"]
-        o["out_tokens"] += r.get("output_tokens", 0)
-        per_task[r["task"]][key] = r["score"]
-        for cap in r["caps"]:
-            c = per_cap[(cap, r["model"], r["condition"])]
-            c["score"] += r["score"]
-            c["n"] += 1
+    for record in results:
+        key = (record["model"], record["condition"])
+        aggregate = overall[key]
+        aggregate["score"] += record["score"]
+        aggregate["n"] += 1
+        aggregate["perfect"] += record["score"] >= 0.999
+        aggregate["parse_failures"] += record["parse_failures"]
+        aggregate["invalid_calls"] += record.get("invalid_calls", 0)
+        aggregate["tool_errors"] += record["tool_errors"]
+        aggregate["calls"] += record["llm_calls"]
+        aggregate["wall"] += record["wall_seconds"]
+        aggregate["out_tokens"] += record.get("output_tokens", 0)
+        per_task[record["task"]][key] = record["score"]
+        for capability in record.get("caps", []):
+            item = per_capability[
+                (capability, record["model"], record["condition"])
+            ]
+            item["score"] += record["score"]
+            item["n"] += 1
 
-    lines = ["## Overall (mean task score / tasks fully passed)", "",
-             "| model | raw | harness | delta |", "|---|---|---|---|"]
-    summary = {"models": models, "overall": {}, "capabilities": {}, "tasks": {}}
-    for m in models:
+    lines = [
+        f"# Domain dataset: `{domain}@{version}`",
+        "",
+        "Scores below are comparable only within this domain/version.",
+        "",
+        "## Overall (mean task score / tasks fully passed)",
+        "",
+        "| model | raw | harness | delta |",
+        "|---|---|---|---|",
+    ]
+    summary = {
+        "domain": domain,
+        "domain_version": version,
+        "models": models,
+        "overall": {},
+        "capabilities": {},
+        "tasks": {},
+    }
+    for model in models:
         row = {}
-        for cond in ("raw", "harness"):
-            o = overall.get((m, cond))
-            row[cond] = {"mean": o["score"] / o["n"] if o and o["n"] else None,
-                         "perfect": o["perfect"] if o else 0, "n": o["n"] if o else 0,
-                         "parse_failures": o["parse_failures"] if o else 0,
-                         "invalid_calls": o["invalid_calls"] if o else 0,
-                         "tool_errors": o["tool_errors"] if o else 0,
-                         "calls": o["calls"] if o else 0,
-                         "wall": round(o["wall"], 1) if o else 0,
-                         "out_tokens": o["out_tokens"] if o else 0}
-        summary["overall"][m] = row
-        raw_m, har_m = row["raw"]["mean"], row["harness"]["mean"]
-        if raw_m is not None and har_m is not None:
-            lines.append(f"| {m} | {raw_m:.2f} ({row['raw']['perfect']}/{row['raw']['n']}) "
-                         f"| {har_m:.2f} ({row['harness']['perfect']}/{row['harness']['n']}) "
-                         f"| {har_m - raw_m:+.2f} |")
+        for condition in ("raw", "harness"):
+            aggregate = overall.get((model, condition))
+            row[condition] = {
+                "mean": (
+                    aggregate["score"] / aggregate["n"]
+                    if aggregate and aggregate["n"]
+                    else None
+                ),
+                "perfect": aggregate["perfect"] if aggregate else 0,
+                "n": aggregate["n"] if aggregate else 0,
+                "parse_failures": (
+                    aggregate["parse_failures"] if aggregate else 0
+                ),
+                "invalid_calls": (
+                    aggregate["invalid_calls"] if aggregate else 0
+                ),
+                "tool_errors": (
+                    aggregate["tool_errors"] if aggregate else 0
+                ),
+                "calls": aggregate["calls"] if aggregate else 0,
+                "wall": round(aggregate["wall"], 1) if aggregate else 0,
+                "out_tokens": (
+                    aggregate["out_tokens"] if aggregate else 0
+                ),
+            }
+        summary["overall"][model] = row
+        raw_mean = row["raw"]["mean"]
+        harness_mean = row["harness"]["mean"]
+        paired, pair_note = _pair_status(model, results)
+        raw_cell = (
+            f"{raw_mean:.2f} "
+            f"({row['raw']['perfect']}/{row['raw']['n']})"
+            if raw_mean is not None
+            else "-"
+        )
+        harness_cell = (
+            f"{harness_mean:.2f} "
+            f"({row['harness']['perfect']}/{row['harness']['n']})"
+            if harness_mean is not None
+            else "-"
+        )
+        delta_cell = (
+            f"{harness_mean - raw_mean:+.2f}"
+            if paired
+            else f"- ({pair_note})"
+        )
+        row["comparison"] = {
+            "paired": paired,
+            "reason": pair_note or None,
+            "delta": (
+                harness_mean - raw_mean if paired else None
+            ),
+        }
+        lines.append(
+            f"| {model} | {raw_cell} | {harness_cell} | "
+            f"{delta_cell} |"
+        )
 
-    lines += ["", "## By capability (mean score)", "",
-              "| capability | " + " | ".join(f"{m} raw | {m} harness" for m in models) + " |",
-              "|" + "---|" * (1 + 2 * len(models))]
-    for cap, label in CAP_LABELS.items():
-        cells = [label]
-        capd = {}
-        for m in models:
-            for cond in ("raw", "harness"):
-                c = per_cap.get((cap, m, cond))
-                val = c["score"] / c["n"] if c and c["n"] else None
-                cells.append(f"{val:.2f}" if val is not None else "-")
-                capd[f"{m}|{cond}"] = val
-        summary["capabilities"][cap] = capd
+    lines += [
+        "",
+        "## By capability (mean score)",
+        "",
+        "| capability | "
+        + " | ".join(
+            f"{model} raw | {model} harness" for model in models
+        )
+        + " |",
+        "|" + "---|" * (1 + 2 * len(models)),
+    ]
+    for capability in capabilities:
+        cells = [CAP_LABELS.get(capability, capability)]
+        capability_data = {}
+        for model in models:
+            for condition in ("raw", "harness"):
+                item = per_capability.get(
+                    (capability, model, condition)
+                )
+                value = (
+                    item["score"] / item["n"]
+                    if item and item["n"]
+                    else None
+                )
+                cells.append(f"{value:.2f}" if value is not None else "-")
+                capability_data[f"{model}|{condition}"] = value
+        summary["capabilities"][capability] = capability_data
         lines.append("| " + " | ".join(cells) + " |")
 
-    lines += ["", "## By task", "",
-              "| task | " + " | ".join(f"{m} raw | {m} harness" for m in models) + " |",
-              "|" + "---|" * (1 + 2 * len(models))]
+    lines += [
+        "",
+        "## By task",
+        "",
+        "| task | "
+        + " | ".join(
+            f"{model} raw | {model} harness" for model in models
+        )
+        + " |",
+        "|" + "---|" * (1 + 2 * len(models)),
+    ]
     for task, scores in per_task.items():
         cells = [task]
-        taskd = {}
-        for m in models:
-            for cond in ("raw", "harness"):
-                v = scores.get((m, cond))
-                cells.append(f"{v:.2f}" if v is not None else "-")
-                taskd[f"{m}|{cond}"] = v
-        summary["tasks"][task] = taskd
+        task_data = {}
+        for model in models:
+            for condition in ("raw", "harness"):
+                value = scores.get((model, condition))
+                cells.append(
+                    f"{value:.2f}" if value is not None else "-"
+                )
+                task_data[f"{model}|{condition}"] = value
+        summary["tasks"][task] = task_data
         lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines), summary
 
-    md = "\n".join(lines)
-    print(md)
-    with open(os.path.join(args.outdir, "summary.json"), "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=1)
-    with open(os.path.join(args.outdir, "SUMMARY.md"), "w", encoding="utf-8") as f:
-        f.write(md + "\n")
+
+def build_report(results):
+    validate_results(results)
+    grouped = defaultdict(list)
+    for record in results:
+        grouped[_dataset_key(record)].append(record)
+
+    markdown_sections = []
+    datasets = {}
+    for (domain, version), records in grouped.items():
+        markdown, summary = summarize_dataset(
+            domain, version, records
+        )
+        markdown_sections.append(markdown)
+        datasets[f"{domain}@{version}"] = summary
+    return "\n\n---\n\n".join(markdown_sections), {"datasets": datasets}
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--outdir", default="results")
+    args = parser.parse_args(argv)
+    with open(
+        os.path.join(args.outdir, "results.json"), encoding="utf-8"
+    ) as handle:
+        results = json.load(handle)
+
+    markdown, summary = build_report(results)
+    print(markdown)
+    with open(
+        os.path.join(args.outdir, "summary.json"),
+        "w",
+        encoding="utf-8",
+    ) as handle:
+        json.dump(summary, handle, indent=1)
+    with open(
+        os.path.join(args.outdir, "SUMMARY.md"),
+        "w",
+        encoding="utf-8",
+    ) as handle:
+        handle.write(markdown + "\n")
 
 
 if __name__ == "__main__":

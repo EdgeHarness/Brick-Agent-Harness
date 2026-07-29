@@ -140,11 +140,11 @@ button, input, textarea { font-family: inherit; color: inherit; }
 .opt.inline { display: flex; align-items: center; justify-content: space-between; }
 .opt.inline span { margin: 0; }
 .opt.inline input { width: 74px; }
-.opts input[type=text], .opts input[type=number] {
+.opts input[type=text], .opts input[type=number], .opts select {
   width: 100%; background: var(--bg); border: 1px solid var(--line);
   border-radius: 8px; padding: 7px 9px; font-size: 11.5px;
 }
-.opts input:focus { outline: none; border-color: var(--accent); }
+.opts input:focus, .opts select:focus { outline: none; border-color: var(--accent); }
 .opt-note { font-size: 10.5px; line-height: 1.5; color: var(--ink-faint); margin: 7px 0 4px; }
 .check { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--ink-dim); margin-top: 7px; }
 .check input { accent-color: var(--accent); }

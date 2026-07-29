@@ -60,9 +60,38 @@ S11 may be scheduled after S0 whenever authorized Brix stakeholders are availabl
 does not block S1–S10. Calendar-level parallelism does not permit two packages to make
 overlapping repository changes in the same implementation session.
 
-The currently authorized implementation scope is **S0 through S3**. S4 and later
-packages remain out of scope until S0–S3 are completed, reviewed, and explicitly
-continued.
+### Gate coverage of the package table
+
+Each R1 subsection maps to a package: R1.1 to S1, R1.2 to S4, R1.3 and R1.4 to S5, and
+R1.5 to S2 and S3. R1.6 had no row because it governs the opt-in on-device filesystem and
+shell tools rather than the benchmark instrument. Leaving it unscheduled would have let an
+R1 acceptance review pass with that subsection unbuilt, so it is scheduled explicitly as a
+sibling of S5 under the same gate; the two may run in either order.
+
+| Package | Canonical gate | Depends on | Bounded deliverable | Exit evidence |
+|---|---|---|---|---|
+| S5F | R1 | S2 | Real-path containment, rejection of symlink/junction and time-of-check/time-of-use escapes, refusal of filesystem and repository roots, deny-by-default destructive confirmation, bounded file/process limits, and verified process-tree termination | Every escape, broad-root, and destructive-default case fails closed on supported platforms, and each removed protection breaks a targeted test |
+
+S5F must also replace the write deny-list in `harness/fs_tools.py`, which is hard-coded to
+one Windows installation and therefore protects neither this repository's own code nor its
+results directory in any other checkout.
+
+### Package status
+
+`Implemented` means the bounded deliverable exists in the repository and its offline
+checks pass. It is not gate acceptance: G0 and R1 remain partial and unpassed, so no
+result produced by this instrument is retained evidence.
+
+| Package | Status | Evidence |
+|---|---|---|
+| S0 | Implemented | `pyproject.toml`, `requirements*.txt`, `.github/workflows/ci.yml` on Python 3.9–3.13, an autouse network guard, and a tracked-artifact scan (`tests/test_offline_foundation.py`) |
+| S1 | Implemented | Scripted-model characterization of parsing, normalization, tools, world, memory, loop boundaries, and every current grader, with known defects locked rather than silently fixed |
+| S2 | Implemented | `RunConfig`, `RunHooks`, `ActionPolicy`, `AttemptContext`, `ToolRegistry`; no supported runtime path reads a mutable module-level registry, clock, hook, budget, or policy |
+| S3 | Implemented | `domains/office_demo` and `domains/counter_demo` run through one core; office system prompts are byte-identical to the pre-extraction baseline; only the two named deprecation shims import a domain from `harness/` |
+| S4–S18, S5F | Not started | — |
+
+The currently authorized implementation scope is **S0 through S3**. S4, S5F, and later
+packages remain out of scope until S0–S3 are reviewed and continuation is explicit.
 
 ## 3. Workstreams and dependencies
 
@@ -632,14 +661,28 @@ The research scaffold and private Brix configuration/data remain separate artifa
 
 ## Immediate next work
 
+S0–S3 are implemented. The dependency/CI baseline, offline characterization suite,
+explicit runtime contracts, and two-domain extraction exist and are covered by the
+offline suite. G0 and R1 are nonetheless still open, because the remaining G0 items
+(machine-readable version manifest, capability defaults, launcher labeling review) and
+the remaining R1 subsections were never in the S0–S3 scope.
+
 The following work is unblocked:
 
-1. Complete G0 repository hygiene and dependency/CI setup without touching private data.
-2. Implement R1 offline characterization tests and grader golden cases.
-3. Design R1 explicit configuration and attempt-isolation changes.
-4. Prepare the P0 workflow/value-risk worksheet; contact or schedule Brix only
+1. Finish the outstanding G0 items: a machine-readable version manifest covering harness,
+   tasks, graders, domain pack, analysis, dependencies, model digest, runtime, and commit;
+   and a review that every real filesystem, shell, and external-message capability is
+   disabled by default.
+2. Implement S4 attempt identity, state/artifact/memory isolation, transactional result
+   commit, safe resume, and separated failure statuses.
+3. Implement S5 strict graders with golden positive, minimally wrong, extra-action,
+   stale-artifact, missing-artifact, and corrupt-artifact fixtures, plus the tested
+   multi-letter spreadsheet column conversion.
+4. Implement S5F filesystem and process safety, replacing the installation-specific
+   write deny-list.
+5. Prepare the P0 workflow/value-risk worksheet; contact or schedule Brix only
    after the project owner authorizes that external coordination.
-5. Draft the data-governance questionnaire without requesting or ingesting records.
+6. Draft the data-governance questionnaire without requesting or ingesting records.
 
 The following work is blocked:
 

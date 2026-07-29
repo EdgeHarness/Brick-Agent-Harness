@@ -33,7 +33,7 @@ def test_pep621_metadata_matches_the_locked_direct_dependencies():
     ]
     test_dependencies = ["pytest==8.3.5"]
     assert project["name"] == "brick-agent-harness"
-    assert project["version"] == "0.2.0"
+    assert project["version"] == "0.3.0"
     assert project["requires-python"] == ">=3.9,<3.14"
     assert project["dependencies"] == runtime_dependencies
     assert project["optional-dependencies"]["test"] == test_dependencies

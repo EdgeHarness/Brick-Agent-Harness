@@ -1,405 +1,319 @@
 # Architecture and current limitations
 
-This document describes the code that exists in this repository. It deliberately
-separates implemented behavior from proposed work.
+This document describes the implemented code and its current boundaries. It
+does not treat a planned control, a passing unit test, or a version label as
+evidence that the research instrument or product is valid.
 
 ## Status
 
-Brick is currently:
+Brick currently provides:
 
-- a synthetic office-state simulator;
-- two experimental agent loops over a shared Python tool registry;
-- a small, hand-authored benchmark with programmatic graders;
-- a local demonstration UI;
-- experimental LoRA data-generation and training scripts.
+- explicit per-attempt runtime objects and an immutable public tool-registry
+  interface;
+- `office_demo@0.1.0`, a synthetic office pack with 12 hand-authored tasks;
+- `counter_demo@0.1.0`, a one-task structural portability fixture;
+- raw and scaffolded loops over attempt-selected domain tools;
+- domain-aware CLI, benchmark, report and Agent Lab surfaces; and
+- experimental LoRA generators and training scripts, but no shipped corpus,
+  adapter or model.
 
-Brick is **not** currently:
+Brick is not a production assistant, a secure filesystem/shell sandbox, a
+transactional room-booking service, an access-controlled retrieval system, or
+a validated statistical instrument. It has no Brix provider integrations. No
+benchmark results are committed. `counter_demo` shows that a second pack can
+traverse supported surfaces; it is not performance or generalization evidence.
 
-- a production office assistant;
-- connected to Brix email, calendars, messaging, rooms, documents or billing;
-- a secure filesystem or shell sandbox;
-- a transactional room-booking service;
-- an access-controlled document-retrieval system;
-- supported by committed benchmark results or a validated statistical study.
-
-The simulator can create genuine `.pptx` and `.xlsx` files. Its inbox,
-calendar, sent mail, messages and reminders are Python data structures saved to
-JSON; they do not communicate with real services.
-
-The research proposition that orchestration may improve small-model tool use is
-a **hypothesis**, not a result. No benchmark results are committed.
+Office email, calendar, chat and reminder actions modify local simulated state.
+Office document tools create genuine `.pptx` and `.xlsx` files in the attempt
+workspace.
 
 ## Repository map
 
 ```text
 harness/
-  llm.py              Ollama chat client and usage counters
-  model_router.py     optional role-to-model routing; adapter fields are metadata
-  world.py            synthetic inbox/calendar/message/reminder state
-  office.py           local PPTX/XLSX creation and reading
-  memory.py           append-only JSONL memory and keyword-overlap retrieval
-  tools.py            the default 14-tool process-global registry
-  fs_tools.py         optional real-filesystem and PowerShell tools
-  agent.py            raw and harness agent loops
+  runtime.py          RunConfig, RunHooks, ActionPolicy and AttemptContext
+  domain.py           DomainPack/TaskSpec/PromptProfile contracts and loader
+  storage.py          legacy and namespaced runtime-path selection
+  builtin_tools.py    think/done tools shared by domain packs
+  tools.py            ToolRegistry validation, execution and descriptions
+  fs_tools.py         composable filesystem/PowerShell overlay
+  llm.py              per-instance Ollama client, counters and stream hook
+  model_router.py     optional role routing; adapters remain metadata
+  agent.py            raw and harness loops
+
+domains/
+  office_demo/        legacy office world, tools, prompt, tasks and graders
+  counter_demo/       namespaced structural portability fixture
 
 bench/
-  tasks.py            12 fixed synthetic tasks and their graders
-  grade.py            Office-file and state inspection helpers
-  run_bench.py        model × condition × task runner
-  report.py           descriptive aggregation
+  run_bench.py        domain × model × condition × task runner
+  report.py           domain/version-aware descriptive aggregation
+  tasks.py|grade.py   office_demo compatibility re-exports
 
 agents/
-  _shared/            shared runner source
-  1b|3b|8b|14b|32b/  duplicated runners plus model configuration and state dirs
+  _shared/            one shared runner used by every per-size shim
+  1b|3b|8b|14b|32b/   model configuration and compatibility launchers
 
-webui/
-  server.py           loopback HTTP/SSE server and subprocess controller
-  runner.py           event-emitting harness runner
-  static/             index.html, style.css and app.js
-
-finetune/             generator tied to the live harness
-training_scripts/     separate training package and frozen prompt/data copy
+webui/                loopback HTTP/SSE development console
+finetune/             live-harness data generator
+training_scripts/     separate training package; local JSONL is ignored
+tests/                offline characterization and architecture tests
 ```
 
-`webui/static/app.js` exists in the current tree. Older notes claiming it is
-missing, or claiming the dashboard is untracked, are obsolete.
+`harness.world` and `harness.office` are compatibility re-exports for
+`office_demo`; they are not independent implementations.
 
-## Execution surfaces
+## Execution surfaces and storage
 
-| Surface | Entry point | State | Important boundary |
-|---|---|---|---|
-| Benchmark | `python -m bench.run_bench` | new in-memory `World` per task; reused artifact directory and shared memory per model/condition | experimental; attempts are not isolated and no real services are called |
-| Per-model CLI | `agents/<size>/run.ps1` or `run_agent.py` | persistent synthetic state and memory | optional filesystem/shell mode is unsafe for valuable data |
-| Agent Lab | `python -m webui.server` or launcher | same per-agent state through a child process | local demo; no authentication or browser-origin protection |
-| Training | `training_scripts/run.sh` and related scripts | local/HPC files | may download models or source unless assets are staged |
+| Surface | Entry point | State and boundary |
+|---|---|---|
+| Benchmark | `python -m bench.run_bench` | New domain world per task, but reused task paths and shared memory per model/condition; exploratory only |
+| Per-model CLI | `agents/<size>/run_agent.py` or `run.ps1` | Persistent domain state; optional filesystem/shell overlay is unsafe for valuable data |
+| Agent Lab | `python -m webui.server` | One child run over selected domain state; unauthenticated loopback demo |
+| Training | scripts under `training_scripts/` | Local/HPC artifacts; may use the network unless assets are staged |
 
-Only the benchmark invokes `run_raw()`. The agent CLI and Agent Lab invoke
-`run_harness()`.
+Only the benchmark exposes both `raw` and `harness`; CLI and Agent Lab run the
+harness condition.
+
+The office CLI preserves the historic `workspace/`, `memory/` and `logs/`
+layout for prompt and path compatibility. Other packs use
+`runtime/<domain>/<version>/{workspace,memory,logs}`. Namespacing prevents
+ordinary cross-domain path collisions; it does not make writes atomic,
+transactional or concurrency-safe. Log numbers are still allocated by counting
+existing files and can collide.
+
+## Runtime and domain contracts
+
+Each loop receives an `AttemptContext` containing an attempt ID, `RunConfig`,
+`DomainPack`, `ToolRegistry`, `ActionPolicy`, world, memory, workspace/artifact
+paths, prompt data and hooks.
+
+`RunConfig` accepts exactly `raw` or `harness` and validates the successful-call
+ceiling, simulation date, observation limit, verifier rounds and prompt rules.
+The call ceiling is measured relative to the LLM counter at attempt start.
+
+`RunHooks` has best-effort note and tool callbacks. LLM streaming is configured
+on the `LLM` or `ModelRouter` instance. Hook exceptions are swallowed so a
+display failure does not stop an attempt; a hook is therefore not an
+audit-completeness guarantee.
+
+`ActionPolicy` classifies tools as `read`, `state_write`, `external_write` or
+`shell`, with an optional confirmation callback. A missing callback preserves
+permissive compatibility behavior. The policy is not identity, authorization,
+an OS sandbox, rollback, or a security boundary.
+
+`ToolRegistry` deep-freezes stored public specifications and returns defensive
+copies from public accessors. It checks tool names and required/unknown argument
+keys. It does not generally enforce advertised value types, nested structure or
+domain semantics.
+
+`DomainPack` binds a SemVer-formatted name/version, registry, policy, prompt
+profile, rules, lifecycle/normalization/state callbacks, tasks, presets and a
+runtime layout. Construction checks callback signatures, reserved
+`think`/`done` contracts, task/tool references, unique IDs/presets and the
+generic state envelope. Packs load by importing `domains.<name>.PACK`. That is
+a trusted Python convention, not isolated plugin discovery, code signing or
+provenance. The version is a label, not a code/data digest.
+
+The office pack uses a domain-owned `PromptProfile` to preserve legacy prompt
+wording and fixed-date behavior. `counter_demo` uses the generic profile and
+namespaced layout.
 
 ## Ollama client and routing
 
-`harness.llm.LLM` calls Ollama's `/api/chat` endpoint. The runner asserts that
-the configured endpoint contains `127.0.0.1` or `localhost`. Requests use
-temperature `0.0`, seed `42`, a configurable context size and a call-specific
-output-token limit.
+`harness.llm.LLM` calls Ollama `/api/chat`; launch surfaces restrict the
+configured endpoint to `localhost` or `127.0.0.1`. Temperature `0.0`, seed `42`
+and a configured context improve repeatability but cannot guarantee identical
+output across model digests, quantizations, Ollama versions, hardware or
+drivers.
 
-Those settings improve repeatability but do **not** prove bit-for-bit
-reproducibility across Ollama versions, model digests, quantizations, hardware,
-drivers or execution modes. Model tags and runtime provenance are not currently
-recorded by the benchmark.
+The client records call count, prompt/output tokens and model-reported duration.
+Equal successful-call ceilings do not equalize tokens, FLOPs, latency, energy
+or work: harness adds planning and verification and uses different prompts and
+output limits.
 
-The client records call count, prompt tokens, output tokens and model-reported
-duration. The loop stops at a common 14-call ceiling in benchmark mode.
-Equalizing call count does not equalize tokens, FLOPs, latency or energy:
-the harness adds planning and verification calls, uses different output limits,
-and supplies a longer prompt.
+`ModelRouter` maps fixed roles to configured tags. The `deep` role is declared
+but no current agent path calls it. Adapter values are telemetry only and are
+not applied by the Ollama backend.
 
-`ModelRouter` can dispatch the `driver`, `router` and `verifier` roles to
-configured models. A `deep` role is configured by default but no current agent
-path calls it. The optional adapter value is logged only; it is not applied by
-the Ollama client.
+## Domain behavior
 
-## Synthetic world
+The office world starts with ten emails and seven events and uses Monday
+2026-07-20 in benchmark mode. `send_email`, `add_event`, `send_message` and
+`set_reminder` append to local state. There are no external sends or provider
+calls.
 
-`World` starts with ten fixed emails and seven fixed calendar events. The
-benchmark uses a fixed date, Monday 2026-07-20. Each ordinary benchmark task
-constructs a new in-memory world. Agent folders use `persistent=True`, which
-loads and rewrites `workspace/state.json`.
+`add_event` checks only basic date/time shape and lexical start/end ordering. It
+does not enforce room inventory, conflicts, capacity, hours, recurrence,
+cancellation, provider synchronization, idempotency or concurrent booking.
+Impossible-looking values can pass some paths. This must not be described as a
+Brix room-booking engine.
 
-The following are simulations:
+Office file creation uses `python-pptx` and `openpyxl`. Model filenames are
+reduced to a basename and normalized to the expected extension. There is no
+rollback, antivirus scanning, ownership model or concurrent-writer
+coordination.
 
-- `send_email` appends to `sent_emails`;
-- `add_event` appends to `events`;
-- `send_message` appends to `messages`;
-- `set_reminder` appends to `reminders`.
-
-`add_event` verifies only date/time syntax and that the end string sorts after
-the start string. It does not implement room resources, conflict rejection,
-capacity, opening hours, recurrence, cancellation, provider synchronization,
-idempotency or concurrent booking. It must not be represented as a Brix room
-booking engine.
-
-Date and time checking is weaker than its descriptions imply. The current
-regular expressions accept syntactically shaped but impossible values such as
-`2026-99-99` and `99:99`. Normalization rejects some impossible time inputs,
-but direct raw calls reach the world validator.
-
-Snapshots are ordinary JSON rewrites without locking or atomic replacement.
-Two writers to the same persistent agent folder are not supported.
-
-## Office files
-
-`harness.office` uses `python-pptx` and `openpyxl` to create genuine Office
-files inside `World.files_dir`. Model-provided filenames are reduced to their
-basename and given the expected extension, which prevents a filename from
-escaping that directory through ordinary path components.
-
-This is real local file output, but it is not a document-management system.
-There is no transactional rollback, antivirus scanning, file ownership model or
-concurrent writer coordination.
-
-## Tool registry and validation
-
-`harness.tools.TOOLS` is a process-global dictionary. The default registry has
-14 tools covering synthetic email/calendar/comms, Office files, memory,
-`think`, and `done`.
-
-`validate_call()` is a **shape check**, not complete schema validation. It
-checks:
-
-- whether the tool name exists;
-- whether required keys are present and non-empty;
-- whether unknown keys are present.
-
-It does not generally enforce the advertised Python/JSON type, nested
-structure, email format, date validity, time range or other business
-constraints. Executors and `World` add a small amount of validation, but there
-is no single typed contract.
-
-`execute()` converts tool exceptions into observations so an episode can
-continue. This prevents a tool failure from crashing the loop, but it also means
-tool implementation defects can be recorded as ordinary model-facing errors.
+`counter_demo` exposes read/increment behavior, built-ins and one task. Its
+purpose is to catch office-specific assumptions in wiring, path layout, report
+grouping and state presentation. Its simplicity makes it unsuitable as
+external validation.
 
 ## Agent loops
 
-### Raw condition
+`run_raw()` gives the selected tool descriptions without examples, requests one
+JSON object, parses strict JSON after optional fence removal, executes the call,
+returns its observation and accepts `done` or the ceiling. It is a minimal
+lower-bound baseline, not a representative native function-calling baseline.
 
-`run_raw()`:
+`run_harness()` bundles:
 
-1. provides tool descriptions without examples;
-2. asks for one JSON object;
-3. uses strict JSON parsing after optional code-fence stripping;
-4. executes the requested tool;
-5. returns the observation to the model;
-6. accepts `done` or stops when the call ceiling is reached.
-
-This is a deliberately minimal prompt-only JSON baseline. It is **not** a
-representative native function-calling baseline and should not be described as
-the best ordinary way to wire a model to tools.
-
-### Harness condition
-
-`run_harness()` adds:
-
-- one example in each tool description;
-- Ollama JSON-constrained output;
-- lenient extraction and trailing-comma removal;
-- fuzzy parameter repair and top-level argument lifting;
-- pre-execution shape feedback;
-- date/time normalization;
+- examples and JSON-constrained output;
+- lenient extraction, trailing-comma repair and fuzzy argument repair;
+- shape feedback and domain-owned normalization;
 - a planning call;
 - duplicate-call suppression and context pruning;
-- up to two verifier rounds;
-- keyword-matched memory injection.
+- up to two verifier rounds; and
+- keyword-overlap memory injection.
 
-These are bundled in one treatment. The current benchmark cannot attribute a
-score change to any individual mechanism without preregistered ablation
-conditions.
+Because these mechanisms are bundled, an aggregate delta cannot identify which
+mechanism caused it.
 
-### Parser limitation
+The lenient parser counts braces without tracking JSON string state. Fuzzy
+repair can rename an unknown field to a semantically unrelated required field
+and then discard other unknown fields. Both behaviors are unsafe around
+mutations without stronger validation or approval.
 
-`parse_lenient()` counts `{` and `}` characters without tracking JSON string
-state. A brace inside a quoted value can end extraction at the wrong point.
-Leniency is useful error recovery, but it is not a standards-compliant streaming
-JSON extractor.
+The planner restricts tool names, but model-authored plan text returns to the
+prompt. The verifier sees a truncated action summary, not complete
+observations, authoritative state or file contents. It fails open on exceptions
+or malformed verdicts, allows only limited retries, and can miss the last
+boundary call. It is advisory, not completion, authorization or safety proof.
 
-### Repair limitation
-
-`repair_args()` uses fuzzy string matching with a low cutoff to rename unknown
-keys to missing required keys, then silently drops remaining unknown keys. This
-can convert an uncertain write request into a valid but semantically wrong one.
-For example, a poorly named field can be reassigned to an unrelated required
-field. Fuzzy repair is therefore unsafe for mutation tools unless the result is
-validated or explicitly approved.
-
-### Plan limitation
-
-The planner accepts only registered tool names, but its model-authored `what`
-text is included in the next prompt. The plan is therefore tool-constrained, not
-free of model-generated prose.
-
-### Verifier limitation
-
-The verifier receives the requested task and a summary of tool names,
-arguments, success flags, and truncated details. It does not inspect returned
-observations, Office file contents, authoritative state or unintended side
-effects.
-
-It also fails open: an exception or malformed verdict becomes
-`complete = true`; only two incomplete verdicts can delay completion; and a
-`done` call at the final call boundary can be accepted without a verifier call.
-The verifier is advisory and must not be treated as an authorization or safety
-gate.
-
-### Transcript limitation
-
-`Episode.transcript` records system text, task, model replies, feedback,
-observations and selected notes. Tool action logs store tool names, arguments,
-success flags and truncated results. Planner/verifier raw replies are not
-retained as separate complete model-call records by the basic episode
-transcript. “Full transcript” should therefore mean the episode notes that are
-available, not a complete forensic inference trace.
+Episode and action logs omit some original planner/verifier material and
+truncate details. They are useful diagnostics, not complete forensic model
+transcripts.
 
 ## Memory and data trust
 
-`MemoryStore` is append-only JSONL. Retrieval tokenizes the query and stored
-facts, removes stopwords and ranks by token-set intersection.
+`MemoryStore` is append-only JSONL with keyword-overlap retrieval. Model-authored
+facts can re-enter prompts without approval, source, subject/tenant identity,
+trust label, expiration, version, deduplication or injection filtering. A
+malformed row can stop loading. Runtime memory is ignored by source control and
+no agent memory file is shipped, but local files can still contain private or
+poisoned text. Memory is not an authoritative knowledge base.
 
-Memory facts are written by the model and injected into the next system prompt
-without:
+## Optional filesystem and shell overlay
 
-- user approval;
-- source or timestamp metadata;
-- tenant/subject identity;
-- trust labels;
-- expiration or document version;
-- deduplication;
-- prompt-injection filtering;
-- malformed-row recovery.
+`build_overlay()` creates a registry/policy/rule bundle and composes it
+atomically with built-ins or, under `--with-domain` (legacy alias
+`--with-office`), the selected pack. `--root` alone does not retain domain
+tools.
 
-This is an experimental learning mechanism, not an authoritative knowledge
-base. Runtime memory can contain private or poisoned content and should be
-excluded from source control. A malformed JSONL line can also prevent the store
-from loading.
+Containment converts paths with `abspath` and checks them lexically. It does not
+resolve symlinks or junctions. Further hazards include:
 
-## Optional real-filesystem and shell tools
+- `/` or another overly broad root is accepted;
+- the selected root can itself be targeted, including for deletion;
+- the deny-list is hard-coded for one Windows installation;
+- a missing confirmer approves for compatibility;
+- `--yolo` removes confirmation;
+- append does not confirm before changing an existing file;
+- checks and writes have filesystem races; and
+- `run_command` invokes unrestricted, Windows-specific `powershell.exe`; its
+  working directory is not a sandbox.
 
-`fs_tools.enable()` mutates the global tool registry for the current process.
-Path strings are converted with `abspath` and checked with string-prefix
-containment. This does **not** resolve symlinks or junctions, so an in-root link
-may expose a path outside the intended root. Additional hazards include:
-
-- a filesystem root such as `/` is accepted;
-- the configured root itself can be resolved as `.`, including for deletion;
-- the deny-list is hard-coded for one Windows installation and is ineffective
-  on other platforms or relocated checkouts;
-- missing confirmation callbacks approve actions by default;
-- `--yolo` removes confirmations, including for shell commands;
-- append operations do not ask before modifying an existing file;
-- checks and later writes are vulnerable to filesystem races.
-
-`run_command` launches arbitrary `powershell.exe` with its current directory set
-to the configured root. A working directory is not a sandbox: the command may
-access other paths, processes, credentials and the network. The command is also
-Windows-specific.
-
-Real-file mode must be treated as unsafe. It needs an OS-level sandbox or,
-preferably for the Brix product, removal in favor of narrow allowlisted service
-adapters and explicit approval for each external mutation.
-
-`--with-office` does not redirect generated PPTX/XLSX files into the selected
-real root; those tools still use the agent's synthetic workspace.
+Use only disposable roots. Product integrations need narrow service adapters,
+deterministic business invariants and explicit approval for external mutations.
 
 ## Agent Lab
 
-Agent Lab serves static HTML/CSS/JavaScript, launches one
-`python -m webui.runner` child at a time, streams JSONL events over SSE, renders
-workspace state, previews generated Office files and relays confirmations over
-the child's standard input.
+Agent Lab serves static assets, starts one `webui.runner` child, streams JSONL
+events over SSE, renders the selected domain's generic state sections, previews
+Office files and relays confirmations over stdin. The subprocess supplies
+lifecycle and crash/stop containment, not a security sandbox.
 
-The child-process boundary reduces collisions among process-global registry and
-hook settings. It does not create a security boundary.
+The server has no authentication, session-bound capability, CSRF defense or
+Origin/Host allowlist. State-changing endpoints do not consistently enforce
+request origin/content type; model pulling is a state-changing GET; reset is not
+coordinated with an active child. Direct `..` traversal in `/api/reveal` is
+rejected, but lexical containment and symlink-following paths remain unsafe.
+Stopping the wrapper does not guarantee descendant processes or in-flight model
+work stopped.
 
-The server binds locally, but it has no authentication, session-bound
-capability token, CSRF defense, or Origin/Host allowlist. State-changing
-endpoints accept JSON without enforcing `Content-Type`; model pulling is a
-state-changing GET; confirmations are associated only with the current run; and
-reset is not coordinated with an active child. A malicious web page or another
-local process may be able to drive the server.
+Model cards contain neutral tier descriptions and advise measuring on the
+actual hardware. They are not speed, reliability, memory-fit or quality
+measurements.
 
-Additional current weaknesses include unchecked traversal in `/api/reveal`,
-lexical path checks in static/workspace paths, symlink-following previews, and
-stop behavior that terminates the wrapper but does not guarantee all descendants
-or model work have stopped. Agent Lab is a local development console, not a
-multi-user or production UI.
+## Benchmark and report
 
-## Benchmark architecture
+The runner validates domain, conditions, duplicate model labels and task IDs.
+Artifact paths and records include domain/version:
+`<outdir>/<domain>/<version>/<model>/<condition>/<task>`. All records still
+share one non-atomic `results.json` ledger.
 
-The benchmark currently defines 12 fixed tasks. It creates one task directory
-per `(model, condition, task)`, runs an agent, invokes that task's grader,
-appends a record to `results.json`, and later calculates descriptive means.
+Records include domain/version, requested model tag, condition, task,
+capabilities, selected tools, score/checks, finish status, successful LLM calls,
+parser/invalid/tool errors, token counts, wall time, exception text and call
+ceiling. This is partial metadata, not immutable provenance: model digest,
+quantization, runtime/code/dependency hashes, prompts/registries, hardware and
+OS remain unstamped.
 
-The current measuring instrument has known validity defects:
+The reporter rejects duplicate identities, renders single-condition summaries
+and suppresses deltas when task sets are unpaired or recorded call-budget/tool
+surfaces differ. Those guardrails do not cure:
 
-- task directories and generated files are reused without cleanup;
-- memory is deleted before resume checks;
-- graders can match values that are present but incorrectly associated;
-- some checks are conditional, changing denominators;
-- most graders do not penalize extra actions;
-- grader failures are collapsed into model scores of zero;
-- results are rewritten non-atomically;
-- no benchmark/grader/code/model/hardware provenance is stamped;
-- one memory file is shared across all tasks in a condition;
-- task order is fixed;
-- arbitrary condition names silently use the raw runner;
-- no task variants, held-out templates or independent repetitions exist.
+- reused task directories and stale generated files;
+- memory deletion before resume checks and shared condition memory;
+- loose/conditional graders and limited unintended-action penalties;
+- grader exceptions collapsed into zero scores;
+- non-atomic result rewrites;
+- fixed order, one fixed instance per task and no independent repetitions; or
+- cross-run contamination and incomplete provenance.
 
-See [`bench/README.md`](bench/README.md) for the exact interpretation and
-[`FIXES.md`](FIXES.md) for the remediation gates. Current results, if generated,
-are exploratory and should not be published as evidence for the research
-hypothesis.
+Generated results are exploratory and must not be published as evidence.
 
 ## Training track
 
-Two 1,200-row JSONL datasets and two generators are present. They are not
-identical, contain substantial duplicate rows, and cover only five of the
-fourteen default tools. There is no validation/test split or dataset card.
+Two generators can create 1,200-row JSONL files locally. Those files are
+ignored and are not shipped. Generated examples contain substantial duplicates,
+cover only five office tools and have no validation/test split or dataset card.
+Repair conversations include a bad call followed by a correction while the
+trainer places loss on every assistant turn, so it trains the error too.
 
-Repair conversations include an intentionally bad assistant call followed by a
-correction. The current trainer places loss on every assistant turn, so it
-trains both the error and the repair rather than solely teaching recovery.
+External revisions are not fully pinned, scripts may download models and
+llama.cpp, GGUF conversion is best effort, and Ollama does not apply the
+resulting adapter. This is not a reproducible end-to-end training result.
 
-The training workflow does not pin every external source revision. It can
-download models and llama.cpp, and GGUF conversion failures are caught without
-failing the overall script. Adapter serving is not integrated with the Ollama
-agent path. This is an exploratory package, not a reproducible end-to-end
-training result.
+## Explicit state is not isolation
 
-## Process-global configuration
+Supported execution configuration, registry, hooks, budget and simulation clock
+are explicit objects passed through the call graph. That removes the former
+supported process-global mutation design. It does not establish thread safety,
+transaction isolation, concurrent filesystem safety, unique log allocation,
+rollback or complete provenance.
 
-The following are mutable globals:
+## Locality, privacy and release boundary
 
-| Global | Module | Typical mutator |
-|---|---|---|
-| `TOOLS` | `tools.py` | `fs_tools.enable()` / `restrict_to_files()` |
-| `MAX_CALLS` | `agent.py` | CLI and web runner |
-| `EXTRA_RULES`, `EXTRA_WRITE_TOOLS` | `agent.py` | real-file mode |
-| `SIM_TODAY`, `SIM_TODAY_HUMAN` | `agent.py` | real-file mode |
-| `_ROOT`, `_ALLOW_SHELL`, `_CONFIRM` | `fs_tools.py` | `enable()` |
-| event/tool/stream hooks | `agent.py`, `tools.py`, `llm.py` | web runner |
+Loopback inference can be local, but installation, model/source downloads,
+Agent Lab pulls and arbitrary shell commands can use the network. The repository
+has no production identity, authorization, encryption, retention/deletion,
+tenant isolation, audit policy, backup or incident-response layer. Do not load
+real Brix data.
 
-This prevents safely running differently configured agents concurrently in one
-process. The intended replacement is explicit immutable `RunConfig`,
-`ToolRegistry` and domain policy objects passed through the call graph.
-
-## Locality, privacy and production boundaries
-
-Loopback Ollama inference is local. That does not imply that the entire
-repository is offline or that data cannot leave the machine:
-
-- model/source download scripts use the network;
-- Agent Lab can request an Ollama model pull;
-- arbitrary shell commands can use the network;
-- a future integration would send data to its configured provider.
-
-The repository has no identity, authorization, encryption, retention, deletion,
-tenant isolation, audit-log policy, backup or incident-response layer. Do not
-load real Brix member, payment, email or document data until those controls and
-narrow provider scopes are implemented and reviewed.
+S0–S3 implementation is present and covered by the offline suite, but review
+and acceptance evidence remain open. Package status is not gate status: G0 and
+R1 are partial and unpassed. S4 is the next authorized package in the canonical
+segmented plan, [`PROJECT_SETUP.md`](PROJECT_SETUP.md).
 
 ## Safe extension principles
 
-The following are target principles, not current guarantees:
-
-1. Keep business invariants in deterministic services, not prompts or
-   model-based verification.
+1. Keep business invariants in deterministic services, not prompts or model
+   verification.
 2. Default to read-only scopes; approve every external mutation during pilots.
 3. Give each run isolated state and immutable provenance.
-4. Treat model output, retrieved documents and model-authored memory as
-   untrusted input.
-5. Measure strict workflow completion and harmful side effects alongside
-   partial diagnostic scores.
-6. Compare accuracy and safety against token, latency, compute and human-review
-   cost.
-7. Add new research conditions explicitly; never mix results from different
-   task, grader or harness versions.
+4. Treat model output, retrieved documents and memory as untrusted input.
+5. Score complete outcomes and harmful side effects, not only partial matches.
+6. Compare accuracy and safety against tokens, latency, compute and review cost.
+7. Freeze task, grader, prompt, registry and runtime versions before retained
+   comparisons.

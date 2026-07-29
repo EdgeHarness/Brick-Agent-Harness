@@ -43,11 +43,11 @@ def call(tool, **args):
     return json.dumps({"tool": tool, "args": args})
 
 
-def test_raw_loop_accepts_done_without_external_inference(world_and_memory):
-    world, memory = world_and_memory
+def test_raw_loop_accepts_done_without_external_inference(attempt_factory):
+    attempt = attempt_factory(condition="raw")
     llm = ScriptedLLM([call("done", summary="finished")])
 
-    episode = agent.run_raw(llm, world, memory, "Do nothing")
+    episode = agent.run_raw(llm, "Do nothing", attempt)
 
     assert episode.finished is True
     assert episode.done_summary == "finished"
@@ -55,12 +55,11 @@ def test_raw_loop_accepts_done_without_external_inference(world_and_memory):
     assert llm.requests[0]["force_json"] is False
 
 
-def test_raw_loop_stops_at_the_call_budget(monkeypatch, world_and_memory):
-    world, memory = world_and_memory
-    monkeypatch.setattr(agent, "MAX_CALLS", 2)
+def test_raw_loop_stops_at_the_call_budget(attempt_factory):
+    attempt = attempt_factory(condition="raw", max_calls=2)
     llm = ScriptedLLM(["not json", "still not json"])
 
-    episode = agent.run_raw(llm, world, memory, "Do something")
+    episode = agent.run_raw(llm, "Do something", attempt)
 
     assert episode.finished is False
     assert episode.parse_failures == 2
@@ -69,10 +68,9 @@ def test_raw_loop_stops_at_the_call_budget(monkeypatch, world_and_memory):
 
 @pytest.mark.characterization
 def test_done_at_budget_boundary_bypasses_harness_verifier(
-    monkeypatch, world_and_memory
+    attempt_factory,
 ):
-    world, memory = world_and_memory
-    monkeypatch.setattr(agent, "MAX_CALLS", 2)
+    attempt = attempt_factory(max_calls=2)
     llm = ScriptedLLM(
         [
             '{"steps": []}',
@@ -80,7 +78,7 @@ def test_done_at_budget_boundary_bypasses_harness_verifier(
         ]
     )
 
-    episode = agent.run_harness(llm, world, memory, "Do something")
+    episode = agent.run_harness(llm, "Do something", attempt)
 
     assert episode.finished is True
     assert llm.calls == 2
@@ -88,8 +86,8 @@ def test_done_at_budget_boundary_bypasses_harness_verifier(
 
 
 @pytest.mark.characterization
-def test_malformed_verifier_reply_fails_open(world_and_memory):
-    world, memory = world_and_memory
+def test_malformed_verifier_reply_fails_open(attempt_factory):
+    attempt = attempt_factory()
     llm = ScriptedLLM(
         [
             '{"steps": []}',
@@ -98,7 +96,7 @@ def test_malformed_verifier_reply_fails_open(world_and_memory):
         ]
     )
 
-    episode = agent.run_harness(llm, world, memory, "Do something")
+    episode = agent.run_harness(llm, "Do something", attempt)
 
     assert episode.finished is True
     assert llm.calls == 3
@@ -109,8 +107,10 @@ def test_malformed_verifier_reply_fails_open(world_and_memory):
 
 
 @pytest.mark.characterization
-def test_third_done_is_accepted_after_two_incomplete_verdicts(world_and_memory):
-    world, memory = world_and_memory
+def test_third_done_is_accepted_after_two_incomplete_verdicts(
+    attempt_factory,
+):
+    attempt = attempt_factory()
     llm = ScriptedLLM(
         [
             '{"steps": []}',
@@ -122,7 +122,7 @@ def test_third_done_is_accepted_after_two_incomplete_verdicts(world_and_memory):
         ]
     )
 
-    episode = agent.run_harness(llm, world, memory, "Do something")
+    episode = agent.run_harness(llm, "Do something", attempt)
 
     assert episode.finished is True
     assert episode.done_summary == "third"
@@ -132,8 +132,10 @@ def test_third_done_is_accepted_after_two_incomplete_verdicts(world_and_memory):
     ) == 2
 
 
-def test_duplicate_read_is_suppressed_while_world_is_unchanged(world_and_memory):
-    world, memory = world_and_memory
+def test_duplicate_read_is_suppressed_while_world_is_unchanged(
+    attempt_factory,
+):
+    attempt = attempt_factory()
     repeated = call("list_events", date="2026-07-22")
     llm = ScriptedLLM(
         [
@@ -145,11 +147,11 @@ def test_duplicate_read_is_suppressed_while_world_is_unchanged(world_and_memory)
         ]
     )
 
-    episode = agent.run_harness(llm, world, memory, "List Wednesday")
+    episode = agent.run_harness(llm, "List Wednesday", attempt)
 
     assert episode.finished is True
     assert llm.calls == 5
-    assert [action["tool"] for action in world.actions] == ["list_events"]
+    assert [action["tool"] for action in attempt.actions] == ["list_events"]
     feedback = [
         entry["content"]
         for entry in episode.transcript

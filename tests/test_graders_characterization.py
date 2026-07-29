@@ -2,11 +2,11 @@ import inspect
 
 import pytest
 
-from bench import grade as g
-from bench import tasks
-from harness import office
+from domains.office_demo import grade as g
+from domains.office_demo import office_files as office
+from domains.office_demo import tasks
+from domains.office_demo.world import World
 from harness.memory import MemoryStore
-from harness.world import World
 
 
 @pytest.mark.parametrize("task", tasks.TASKS, ids=lambda task: task["id"])

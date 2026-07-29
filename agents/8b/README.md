@@ -8,7 +8,8 @@ validated unattended assistant.
 {
   "name": "Agent 8B",
   "model": "llama3.1:8b",
-  "num_ctx": 8192
+  "num_ctx": 8192,
+  "domain": "office_demo"
 }
 ```
 
@@ -30,19 +31,21 @@ cd agents\8b
 .\run.ps1 "List my simulated Wednesday meetings"
 ```
 
-`run.ps1` hardcodes the original lab Python path. Direct invocation requires
-Python, `requests`, `python-pptx`, and `openpyxl`; no root runtime dependency
-manifest or lock file currently exists. Ollama must be running locally and the
-configured tag must be installed.
+`run_agent.py` is a thin shim over the shared runner. `run.ps1` hardcodes the
+original lab Python path. Direct invocation uses the root package manifest and
+pinned requirements; the transitive lock has no hashes and installation may
+need network/cache access. Ollama must be running locally and the configured
+tag must be installed.
 
 ## Scope and safety
 
-Default office actions operate on fixture state. They do not send real email,
+Default `office_demo@0.1.0` actions operate on fixture state. They do not send real email,
 deliver reminders, message members, or reserve an external calendar. Generated
 PowerPoint and Excel files are real and are written under
 `workspace/files/`.
 
-`--root` exposes experimental destructive file tools through a lexical path
+`--domain` can select another installed pack; `counter_demo@0.1.0` is only a
+structural fixture. `--root` exposes experimental destructive file tools through a lexical path
 check that is not an OS sandbox. `--shell` can act outside the root, and
 `--yolo` removes confirmations. Use only disposable data and read the shared
 [`../README.md`](../README.md) before enabling either option.
@@ -50,9 +53,10 @@ check that is not an OS sandbox. `--shell` can act outside the root, and
 The LLM verifier is fail-open and does not inspect generated artifacts. Run logs
 omit original planner/verifier replies and can retain file or task contents.
 
-This folder ships with a tracked `memory/memory.jsonl` containing one demo fact.
-That fact may be injected into matching tasks. Remove or isolate it before a
-clean experiment, and do not store real private facts in tracked memory.
+Runtime memory is local and ignored by Git; this folder ships no
+`memory/memory.jsonl`. Local model-authored facts can still be re-injected into
+later prompts, so isolate or clear them before an experiment and never store
+private facts there.
 
 The router's `deep` role is never invoked. Adapter configuration is telemetry
 only with the Ollama backend.

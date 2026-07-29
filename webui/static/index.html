@@ -14,7 +14,7 @@
     <span class="logo">◆</span>
     <div>
       <h1>Agent Lab</h1>
-      <p>on-device agents · one model at a time · nothing leaves this machine</p>
+      <p>local Ollama endpoint · one model at a time · domain-selectable</p>
     </div>
   </div>
   <div class="meters" id="meters">
@@ -38,14 +38,18 @@
     <details class="opts" id="opts">
       <summary>Options</summary>
       <label class="opt">
+        <span>Domain</span>
+        <select id="opt-domain"></select>
+      </label>
+      <label class="opt">
         <span>Real folder <em>optional</em></span>
-        <input type="text" id="opt-root" placeholder="leave empty for the simulated office">
+        <input type="text" id="opt-root" placeholder="leave empty for the selected domain">
       </label>
       <p class="opt-note">With a folder set, the agent gets real read/write file
         tools scoped to it — and asks you before anything destructive.</p>
       <label class="check"><input type="checkbox" id="opt-shell"> allow shell commands</label>
       <label class="check"><input type="checkbox" id="opt-yolo"> skip confirmations</label>
-      <label class="check"><input type="checkbox" id="opt-office"> keep office tools too</label>
+      <label class="check"><input type="checkbox" id="opt-office"> keep selected domain tools too</label>
       <label class="check"><input type="checkbox" id="opt-tiers"> tiered model router</label>
       <label class="opt inline">
         <span>Call budget</span>

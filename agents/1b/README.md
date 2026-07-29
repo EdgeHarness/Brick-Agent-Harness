@@ -8,7 +8,8 @@ Ollama. It is one condition in a proposed size comparison, not evidence that a
 {
   "name": "Agent 1B",
   "model": "llama3.2:1b",
-  "num_ctx": 8192
+  "num_ctx": 8192,
+  "domain": "office_demo"
 }
 ```
 
@@ -30,19 +31,21 @@ cd agents\1b
 .\run.ps1 "List my simulated Wednesday meetings"
 ```
 
-`run.ps1` hardcodes the original lab Python path. Direct invocation requires
-Python, `requests`, `python-pptx`, and `openpyxl`; no root runtime dependency
-manifest or lock file currently exists. Ollama must be running locally and the
-configured tag must be installed.
+`run_agent.py` is a thin shim over the shared runner. `run.ps1` hardcodes the
+original lab Python path. Direct invocation uses the root package manifest and
+pinned requirements; the transitive lock has no hashes and installation may
+need network/cache access. Ollama must be running locally and the configured
+tag must be installed.
 
 ## Scope and safety
 
-Default mode uses fixture email/calendar data. Email, chat, calendar, and
+Default `office_demo@0.1.0` mode uses fixture email/calendar data. Email, chat, calendar, and
 reminder actions only update local simulated state; they do not contact real
 services or people. PowerPoint and Excel creation writes real files inside this
 agent's `workspace/files/`.
 
-`--root` enables experimental real-file tools, including deletion. Its path
+`--domain` can select another installed pack; `counter_demo@0.1.0` is only a
+structural fixture. `--root` enables experimental real-file tools, including deletion. Its path
 check is not an OS sandbox and is vulnerable to symlink/junction escapes.
 `--shell` runs unrestricted PowerShell, and `--yolo` removes confirmations.
 Use only a disposable directory and never real Brix or member data. See
@@ -51,6 +54,8 @@ Use only a disposable directory and never real Brix or member data. See
 The LLM verifier is fail-open and does not prove task completion. Logs omit the
 original planner and verifier replies, and may store sensitive prompts, tool
 arguments, and observations.
+
+Runtime memory is local and ignored by Git; no memory file is shipped.
 
 `--deep` configures a role that is never invoked. Adapter fields are logged but
 not applied by the Ollama backend.

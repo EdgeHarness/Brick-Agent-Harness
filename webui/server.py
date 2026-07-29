@@ -2,13 +2,13 @@
 
 Pick a model, type a task, press Run, and watch the loop work: the plan, each
 model call streaming token by token, every tool call with the arguments the
-harness actually sent, and the agent's folder (inbox, calendar, files, memory)
-updating as it changes.
+harness actually sent, and the selected domain's state/files/memory updating
+as it changes.
 
     python -m webui.server            then open http://127.0.0.1:8765
 
 Binds loopback only. One run at a time, in a subprocess (webui/runner.py), so
-Stop always works and the process-global harness switches can't collide.
+Stop can terminate that isolated active run.
 """
 import http.server
 import json
@@ -28,30 +28,40 @@ import requests
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROJECT = os.path.dirname(HERE)
+if PROJECT not in sys.path:
+    sys.path.insert(0, PROJECT)
 STATIC = os.path.join(HERE, "static")
 AGENTS_DIR = os.path.join(PROJECT, "agents")
 OLLAMA_URL = "http://127.0.0.1:11434"
 DEFAULT_PORT = 8765
 
+from harness.domain import load_domain  # noqa: E402
+from harness.storage import agent_runtime_paths  # noqa: E402
+
 # Rough per-size guidance for the picker; the machine, not the harness, decides.
 SPEED_HINT = {
-    "1b": ("instant", "Fast enough to feel live. Makes the most mistakes — the best "
-                      "place to watch the harness repair a call."),
-    "3b": ("quick", "A few seconds per step. The sweet spot for demos."),
-    "8b": ("steady", "Tens of seconds per step. Noticeably more reliable."),
-    "14b": ("slow", "Heavy on CPU-only machines. Strong tool discipline."),
-    "32b": ("very slow", "Minutes per step. Fits in 32 GB RAM, tests your patience."),
+    "1b": (
+        "1B tier",
+        "Smallest configured parameter tier; measure quality and latency "
+        "on the target hardware.",
+    ),
+    "3b": (
+        "3B tier",
+        "Configured 3B parameter tier; performance is hardware-dependent.",
+    ),
+    "8b": (
+        "8B tier",
+        "Configured 8B parameter tier; performance is hardware-dependent.",
+    ),
+    "14b": (
+        "14B tier",
+        "Configured 14B parameter tier; verify memory and latency locally.",
+    ),
+    "32b": (
+        "32B tier",
+        "Largest configured parameter tier; verify fit and latency locally.",
+    ),
 }
-
-PRESET_TASKS = [
-    "Summarize my Wednesday meetings and message Jordan with the list",
-    "Find a free hour on Thursday and book it as Deep work",
-    "Turn Dana's Q3 sales numbers into a PowerPoint deck",
-    "Build a spreadsheet of my July receipts with a total",
-    "Reply to Mia about the Northwind kickoff and add it to my calendar",
-    "Remember that I prefer meetings after 14:00 and never on Fridays",
-]
-
 
 # ----------------------------------------------------------------- agents ----
 
@@ -80,6 +90,26 @@ def agent_dir(agent):
     return os.path.join(AGENTS_DIR, agent)
 
 
+def available_domains():
+    root = os.path.join(PROJECT, "domains")
+    found = []
+    if not os.path.isdir(root):
+        return found
+    for name in sorted(os.listdir(root)):
+        if name.startswith("_") or not os.path.isdir(os.path.join(root, name)):
+            continue
+        try:
+            domain = load_domain(name)
+        except (ImportError, TypeError, ValueError):
+            continue
+        found.append({
+            "name": domain.name,
+            "version": domain.version,
+            "presets": list(domain.presets),
+        })
+    return found
+
+
 def installed_tags():
     try:
         r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=3)
@@ -104,15 +134,20 @@ def agent_list():
     for name in agent_folders():
         cfg = read_config(name)
         folder = os.path.join(AGENTS_DIR, name)
-        files_dir = os.path.join(folder, "workspace", "files")
-        logs_dir = os.path.join(folder, "logs")
-        mem_path = os.path.join(folder, "memory", "memory.jsonl")
+        domain = load_domain(cfg.get("domain") or "office_demo")
+        paths = agent_runtime_paths(folder, domain)
+        files_dir = str(paths.artifacts)
+        logs_dir = str(paths.logs)
+        mem_path = str(paths.memory)
         speed, blurb = SPEED_HINT.get(name, ("", ""))
         out.append({
             "id": name,
             "name": cfg.get("name", name),
             "model": cfg["model"],
             "note": cfg.get("note", ""),
+            "domain": domain.name,
+            "domain_version": domain.version,
+            "presets": list(domain.presets),
             "speed": speed,
             "blurb": blurb,
             "installed": tag_installed(cfg["model"], tags),
@@ -122,83 +157,54 @@ def agent_list():
             "memories": sum(1 for _ in open(mem_path, encoding="utf-8"))
                         if os.path.isfile(mem_path) else 0,
         })
-    return {"agents": out, "ollama": tags is not None, "presets": PRESET_TASKS,
+    presets = out[0]["presets"] if out else []
+    return {"agents": out, "domains": available_domains(),
+            "ollama": tags is not None, "presets": presets,
             "project": PROJECT}
 
 
 # -------------------------------------------------------------- workspace ----
 
-def workspace(agent):
+def _agent_domain(agent, domain_name=None):
+    config = read_config(agent)
+    return load_domain(domain_name or config.get("domain") or "office_demo")
+
+
+def workspace(agent, domain_name=None):
     """The agent's folder as the browser shows it — same shape the runner emits
     during a run, so the panel renders identically live and at rest."""
     folder = agent_dir(agent)
-    state_path = os.path.join(folder, "workspace", "state.json")
-    files_dir = os.path.join(folder, "workspace", "files")
-    mem_path = os.path.join(folder, "memory", "memory.jsonl")
-    logs_dir = os.path.join(folder, "logs")
-
-    state = {}
-    if os.path.isfile(state_path):
-        try:
-            with open(state_path, encoding="utf-8") as f:
-                state = json.load(f)
-        except ValueError:
-            state = {}
-    if not state:  # never run: show the fixtures it will start from
-        from harness.world import CALENDAR, EMAILS
-        state = {"emails": [dict(e) for e in EMAILS], "events": [dict(e) for e in CALENDAR]}
-
-    files = []
-    if os.path.isdir(files_dir):
-        for name in sorted(os.listdir(files_dir)):
-            path = os.path.join(files_dir, name)
-            if os.path.isfile(path):
-                st = os.stat(path)
-                files.append({"name": name, "size": st.st_size, "mtime": st.st_mtime})
-
-    memory = []
-    if os.path.isfile(mem_path):
-        with open(mem_path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    try:
-                        memory.append(json.loads(line)["fact"])
-                    except (ValueError, KeyError):
-                        pass
+    domain = _agent_domain(agent, domain_name)
+    paths = agent_runtime_paths(folder, domain)
+    state = domain.inspect(paths.workspace, paths.memory)
 
     logs = []
-    if os.path.isdir(logs_dir):
-        for name in sorted(os.listdir(logs_dir), reverse=True):
+    if os.path.isdir(paths.logs):
+        for name in sorted(os.listdir(paths.logs), reverse=True):
             if name.startswith("run_") and name.endswith(".json"):
-                logs.append({"name": name,
-                             "mtime": os.path.getmtime(os.path.join(logs_dir, name))})
-
-    return {
-        "emails": state.get("emails", []),
-        "sent": state.get("sent_emails", []),
-        "events": sorted(state.get("events", []), key=lambda e: (e["date"], e["start"])),
-        "messages": state.get("messages", []),
-        "reminders": state.get("reminders", []),
-        "files": files,
-        "memory": memory,
-        "logs": logs[:25],
-        "folder": folder,
-    }
+                logs.append({
+                    "name": name,
+                    "mtime": os.path.getmtime(os.path.join(paths.logs, name)),
+                })
+    state["logs"] = logs[:25]
+    state["folder"] = str(paths.root)
+    return state
 
 
-def workspace_file(agent, name):
-    files_dir = os.path.join(agent_dir(agent), "workspace", "files")
+def workspace_file(agent, name, domain_name=None):
+    folder = agent_dir(agent)
+    domain = _agent_domain(agent, domain_name)
+    files_dir = str(agent_runtime_paths(folder, domain).artifacts)
     path = os.path.abspath(os.path.join(files_dir, os.path.basename(str(name))))
     if os.path.dirname(path) != os.path.abspath(files_dir) or not os.path.isfile(path):
         raise ValueError(f"no such file {name!r}")
     return path
 
 
-def preview(agent, name):
+def preview(agent, name, domain_name=None):
     """Render a generated file in the browser instead of making the user open
     PowerPoint — the whole point is to see what the agent produced."""
-    path = workspace_file(agent, name)
+    path = workspace_file(agent, name, domain_name)
     ext = os.path.splitext(path)[1].lower()
     if ext == ".pptx":
         from pptx import Presentation
@@ -232,19 +238,23 @@ def preview(agent, name):
             "text": blob.decode("utf-8", errors="replace")}
 
 
-def reset_agent(agent, what):
+def reset_agent(agent, what, domain_name=None):
     folder = agent_dir(agent)
+    domain = _agent_domain(agent, domain_name)
+    paths = agent_runtime_paths(folder, domain)
     done = []
     targets = {
-        "world": os.path.join(folder, "workspace", "state.json"),
-        "memory": os.path.join(folder, "memory", "memory.jsonl"),
+        "world": str(paths.workspace / "state.json"),
+        "memory": str(paths.memory),
     }
     for key, path in targets.items():
         if key in what and os.path.isfile(path):
             os.remove(path)
             done.append(key)
-    for key, path in (("files", os.path.join(folder, "workspace", "files")),
-                      ("logs", os.path.join(folder, "logs"))):
+    for key, path in (
+        ("files", str(paths.artifacts)),
+        ("logs", str(paths.logs)),
+    ):
         if key in what and os.path.isdir(path):
             shutil.rmtree(path)
             os.makedirs(path, exist_ok=True)
@@ -324,24 +334,26 @@ class Runs:
         with self.lock:
             if self.current and self.current.proc.poll() is None:
                 raise RuntimeError(f"{self.current.agent} is already running — "
-                                   "stop it first (one model at a time).")
+                                   "stop it first (one agent run at a time).")
             cmd = [sys.executable, "-u", "-m", "webui.runner",
                    "--agent", agent, "--task", task]
+            if options.get("domain"):
+                cmd += ["--domain", options["domain"]]
             if options.get("root"):
                 cmd += ["--root", options["root"]]
             if options.get("shell"):
                 cmd.append("--shell")
             if options.get("yolo"):
                 cmd.append("--yolo")
-            if options.get("with_office"):
-                cmd.append("--with-office")
+            if options.get("with_domain"):
+                cmd.append("--with-domain")
             if options.get("tiers"):
                 cmd.append("--tiers")
             if options.get("small"):
                 cmd += ["--small", options["small"]]
             if options.get("deep"):
                 cmd += ["--deep", options["deep"]]
-            if options.get("max_calls"):
+            if options.get("max_calls") is not None:
                 cmd += ["--max-calls", str(int(options["max_calls"]))]
             env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
             proc = subprocess.Popen(cmd, cwd=PROJECT, env=env, text=True,
@@ -430,11 +442,23 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if path == "/api/agents":
                 return self.send_json(agent_list())
             if path == "/api/workspace":
-                return self.send_json(workspace(q.get("agent", "")))
+                return self.send_json(
+                    workspace(q.get("agent", ""), q.get("domain"))
+                )
             if path == "/api/preview":
-                return self.send_json(preview(q.get("agent", ""), q.get("name", "")))
+                return self.send_json(
+                    preview(
+                        q.get("agent", ""),
+                        q.get("name", ""),
+                        q.get("domain"),
+                    )
+                )
             if path == "/api/download":
-                fpath = workspace_file(q.get("agent", ""), q.get("name", ""))
+                fpath = workspace_file(
+                    q.get("agent", ""),
+                    q.get("name", ""),
+                    q.get("domain"),
+                )
                 ctype = mimetypes.guess_type(fpath)[0] or "application/octet-stream"
                 with open(fpath, "rb") as f:
                     blob = f.read()
@@ -443,8 +467,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                      f'attachment; filename="{os.path.basename(fpath)}"')])
             if path == "/api/log":
                 folder = agent_dir(q.get("agent", ""))
+                domain = _agent_domain(
+                    q.get("agent", ""), q.get("domain")
+                )
+                paths = agent_runtime_paths(folder, domain)
                 name = os.path.basename(q.get("name", ""))
-                with open(os.path.join(folder, "logs", name), encoding="utf-8") as f:
+                with open(
+                    os.path.join(paths.logs, name), encoding="utf-8"
+                ) as f:
                     return self.send_json(json.load(f))
             if path == "/api/status":
                 run = RUNS.current
@@ -478,8 +508,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if root and not os.path.isdir(os.path.expanduser(root)):
                     raise ValueError(f"working folder {root} does not exist")
                 options = {"root": os.path.expanduser(root) if root else None,
+                           "domain": body.get("domain"),
                            "shell": body.get("shell"), "yolo": body.get("yolo"),
-                           "with_office": body.get("with_office"),
+                           "with_domain": body.get("with_domain")
+                                          or body.get("with_office"),
                            "tiers": body.get("tiers"), "small": body.get("small"),
                            "deep": body.get("deep"), "max_calls": body.get("max_calls")}
                 run = RUNS.start(agent, task, options)
@@ -495,12 +527,25 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self.send_json({"ok": ok})
             if path == "/api/reset":
                 what = set(body.get("what") or [])
-                return self.send_json({"cleared": reset_agent(body.get("agent", ""), what)})
+                return self.send_json({
+                    "cleared": reset_agent(
+                        body.get("agent", ""), what, body.get("domain")
+                    )
+                })
             if path == "/api/reveal":
                 agent = body.get("agent", "")
                 sub = body.get("sub") or ""
-                target = os.path.join(agent_dir(agent), *sub.split("/")) if sub \
-                    else agent_dir(agent)
+                folder = agent_dir(agent)
+                domain = _agent_domain(agent, body.get("domain"))
+                base = str(agent_runtime_paths(folder, domain).root)
+                target = os.path.abspath(
+                    os.path.join(base, *sub.split("/"))
+                ) if sub else os.path.abspath(base)
+                base_abs = os.path.abspath(base)
+                if target != base_abs and not target.startswith(
+                    base_abs.rstrip(os.sep) + os.sep
+                ):
+                    raise ValueError("requested folder is outside runtime state")
                 if not os.path.exists(target):
                     raise ValueError("that folder does not exist yet")
                 reveal(target)

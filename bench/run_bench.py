@@ -1,123 +1,245 @@
-"""Benchmark runner: models x conditions x tasks.
+"""Benchmark runner: domain x models x conditions x tasks.
 
-Usage:
-    python -m bench.run_bench --models llama3.2:1b llama3.2:3b llama3.1:8b \
-        --conditions raw harness [--tasks pptx_basic cal_add] [--outdir results]
-
-Each (model, condition) pair gets a fresh memory file shared across its tasks
-(so learn_store -> learn_use works), and each task gets a fresh seeded world.
-Results append to <outdir>/results.json after every task, so partial runs are
-still reportable. Transcripts are saved per task.
+Each (domain, model, condition) run receives fresh shared memory, while every
+task receives a fresh domain world and explicit attempt context.
 """
 import argparse
-import inspect
+import hashlib
 import json
 import os
+from pathlib import Path
+import re
 import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from harness.agent import MAX_CALLS, run_harness, run_raw  # noqa: E402
+from harness.agent import Episode, run  # noqa: E402
+from harness.domain import load_domain  # noqa: E402
 from harness.llm import LLM  # noqa: E402
 from harness.memory import MemoryStore  # noqa: E402
-from harness.world import World  # noqa: E402
-from bench.tasks import TASKS  # noqa: E402
+from harness.runtime import AttemptContext, RunConfig  # noqa: E402
 
 
-def slug(model):
-    return model.replace(":", "_").replace("/", "_")
+DEFAULT_MAX_CALLS = 14
+_WINDOWS_DEVICE_NAMES = frozenset(
+    {"con", "prn", "aux", "nul"}
+    | {f"com{index}" for index in range(1, 10)}
+    | {f"lpt{index}" for index in range(1, 10)}
+)
 
 
-def save_transcript(path, ep, task, model, condition, score, checks):
-    lines = [f"# {task['id']}  |  {model}  |  {condition}",
-             f"**Score: {score:.2f}**  (finished: {ep.finished})", "",
-             "| check | passed |", "|---|---|"]
-    for desc, ok in checks:
-        lines.append(f"| {desc} | {'PASS' if ok else 'FAIL'} |")
+def slug(value):
+    """Return a deterministic, non-traversing output-path component."""
+    if not isinstance(value, str) or not value:
+        raise ValueError("path component must be a nonempty string")
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", value).strip("._-")
+    if not cleaned:
+        raise ValueError(f"path component {value!r} has no safe characters")
+    if cleaned != value:
+        digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:8]
+        cleaned = f"{cleaned}-{digest}"
+    if cleaned.split(".", 1)[0].casefold() in _WINDOWS_DEVICE_NAMES:
+        raise ValueError(
+            f"path component {value!r} is a reserved Windows device name"
+        )
+    return cleaned
+
+
+def _reject_duplicates(parser, values, label):
+    if len(set(values)) != len(values):
+        parser.error(f"duplicate {label} values are not allowed")
+
+
+def save_transcript(
+    path, episode, task, model, condition, score, checks, domain
+):
+    lines = [
+        f"# {task.id}  |  {domain.name}@{domain.version}  |  "
+        f"{model}  |  {condition}",
+        f"**Score: {score:.2f}**  (finished: {episode.finished})",
+        "",
+        "| check | passed |",
+        "|---|---|",
+    ]
+    for description, ok in checks:
+        lines.append(
+            f"| {description} | {'PASS' if ok else 'FAIL'} |"
+        )
     lines.append("")
-    for item in ep.transcript:
+    for item in episode.transcript:
         lines.append(f"### {item['kind']}")
         lines.append("```")
         lines.append(str(item["content"]))
         lines.append("```")
-    with open(path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(lines))
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--models", nargs="+", required=True)
-    ap.add_argument("--conditions", nargs="+", default=["raw", "harness"])
-    ap.add_argument("--tasks", nargs="+", default=None)
-    ap.add_argument("--outdir", default="results")
-    args = ap.parse_args()
+def main(argv=None):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--domain", default="office_demo")
+    parser.add_argument("--models", nargs="+", required=True)
+    parser.add_argument(
+        "--conditions", nargs="+", default=["raw", "harness"]
+    )
+    parser.add_argument("--tasks", nargs="+", default=None)
+    parser.add_argument("--outdir", default="results")
+    parser.add_argument("--max-calls", type=int, default=DEFAULT_MAX_CALLS)
+    args = parser.parse_args(argv)
 
-    tasks = TASKS if not args.tasks else [t for t in TASKS if t["id"] in args.tasks]
+    domain = load_domain(args.domain)
+    _reject_duplicates(parser, args.models, "model")
+    _reject_duplicates(parser, args.conditions, "condition")
+    if args.tasks:
+        _reject_duplicates(parser, args.tasks, "task")
+    try:
+        model_slugs = {model: slug(model) for model in args.models}
+        if len(
+            {component.casefold() for component in model_slugs.values()}
+        ) != len(model_slugs):
+            raise ValueError(
+                "model names collide after cross-platform path normalization"
+            )
+        version_slug = slug(domain.version)
+        configs = {
+            condition: RunConfig(
+                condition=condition,
+                max_calls=args.max_calls,
+                today=domain.default_today,
+            )
+            for condition in args.conditions
+        }
+    except (TypeError, ValueError) as exc:
+        parser.error(str(exc))
+    tasks = (
+        domain.tasks
+        if not args.tasks
+        else tuple(task for task in domain.tasks if task.id in args.tasks)
+    )
+    unknown_tasks = set(args.tasks or ()) - {task.id for task in tasks}
+    if unknown_tasks:
+        parser.error(
+            "unknown tasks for domain "
+            f"{domain.name!r}: {', '.join(sorted(unknown_tasks))}"
+        )
     os.makedirs(args.outdir, exist_ok=True)
     results_path = os.path.join(args.outdir, "results.json")
     results = []
     if os.path.exists(results_path):
-        with open(results_path, encoding="utf-8") as f:
-            results = json.load(f)
+        with open(results_path, encoding="utf-8") as handle:
+            results = json.load(handle)
 
     for model in args.models:
         for condition in args.conditions:
-            run_dir = os.path.join(args.outdir, slug(model), condition)
+            run_dir = os.path.join(
+                args.outdir,
+                domain.name,
+                version_slug,
+                model_slugs[model],
+                condition,
+            )
             os.makedirs(run_dir, exist_ok=True)
-            mem_path = os.path.join(run_dir, "memory.jsonl")
-            if os.path.exists(mem_path):
-                os.remove(mem_path)  # fresh memory per (model, condition) run
+            memory_path = os.path.join(run_dir, "memory.jsonl")
+            if os.path.exists(memory_path):
+                os.remove(memory_path)
             for task in tasks:
-                # skip if already recorded (lets us resume interrupted runs)
-                if any(r["model"] == model and r["condition"] == condition
-                       and r["task"] == task["id"] for r in results):
-                    print(f"[skip] {model} {condition} {task['id']} already done", flush=True)
+                if any(
+                    result.get("domain", "office_demo") == domain.name
+                    and result.get("domain_version") == domain.version
+                    and result["model"] == model
+                    and result["condition"] == condition
+                    and result["task"] == task.id
+                    for result in results
+                ):
+                    print(
+                        f"[skip] {domain.name}@{domain.version} {model} "
+                        f"{condition} {task.id} already done",
+                        flush=True,
+                    )
                     continue
-                workdir = os.path.join(run_dir, task["id"])
-                os.makedirs(workdir, exist_ok=True)
-                world = World(workdir)
-                mem = MemoryStore(mem_path)
+                workdir = Path(run_dir, task.id)
+                workdir.mkdir(parents=True, exist_ok=True)
+                world = domain.make_world(workdir, persistent=False)
+                memory = MemoryStore(memory_path)
+                config = configs[condition]
+                attempt = AttemptContext(
+                    attempt_id=(
+                        f"{domain.name}:{domain.version}:{model}:"
+                        f"{condition}:{task.id}"
+                    ),
+                    config=config,
+                    domain=domain,
+                    tools=domain.registry_for(task),
+                    policy=domain.default_policy,
+                    world=world,
+                    memory=memory,
+                    workdir=workdir,
+                    artifact_dir=workdir / "files",
+                )
                 llm = LLM(model)
-                t0 = time.time()
-                err = None
+                initial_calls = llm.calls
+                started = time.time()
+                error = None
                 try:
-                    runner = run_harness if condition == "harness" else run_raw
-                    ep = runner(llm, world, mem, task["prompt"])
-                except Exception as e:
-                    from harness.agent import Episode
-                    ep = Episode()
-                    err = f"{type(e).__name__}: {e}"
-                    ep.note("runner_error", err)
-                    world.snapshot()
-                wall = time.time() - t0
+                    episode = run(llm, task.prompt, attempt)
+                except Exception as exc:
+                    episode = Episode()
+                    error = f"{type(exc).__name__}: {exc}"
+                    episode.note("runner_error", error)
+                    attempt.snapshot()
+                wall = time.time() - started
                 try:
-                    fn = task["grade"]
-                    if "mem" in inspect.signature(fn).parameters:
-                        score, checks = fn(world, mem=MemoryStore(mem_path))
-                    else:
-                        score, checks = fn(world)
-                except Exception as e:
-                    score, checks = 0.0, [(f"grader crashed: {e}", False)]
-                rec = {"model": model, "condition": condition, "task": task["id"],
-                       "caps": task["caps"], "score": round(score, 4),
-                       "checks": [[d, bool(ok)] for d, ok in checks],
-                       "finished": ep.finished, "llm_calls": llm.calls,
-                       "parse_failures": ep.parse_failures,
-                       "invalid_calls": ep.invalid_calls,
-                       "tool_errors": ep.tool_errors,
-                       "prompt_tokens": llm.prompt_tokens,
-                       "output_tokens": llm.output_tokens,
-                       "wall_seconds": round(wall, 1), "error": err,
-                       "max_calls": MAX_CALLS}
-                results.append(rec)
-                with open(results_path, "w", encoding="utf-8") as f:
-                    json.dump(results, f, indent=1)
-                save_transcript(os.path.join(workdir, "transcript.md"),
-                                ep, task, model, condition, score, checks)
-                print(f"[{model} | {condition}] {task['id']}: score={score:.2f} "
-                      f"calls={llm.calls} wall={wall:.0f}s"
-                      + (f" ERROR={err}" if err else ""), flush=True)
+                    score, checks = task.grade(attempt)
+                except Exception as exc:
+                    score, checks = 0.0, [
+                        (f"grader crashed: {exc}", False)
+                    ]
+                calls = llm.calls - initial_calls
+                record = {
+                    "domain": domain.name,
+                    "domain_version": domain.version,
+                    "model": model,
+                    "condition": condition,
+                    "task": task.id,
+                    "caps": list(task.capabilities),
+                    "tools": list(task.tool_names),
+                    "score": round(score, 4),
+                    "checks": [
+                        [description, bool(ok)]
+                        for description, ok in checks
+                    ],
+                    "finished": episode.finished,
+                    "llm_calls": calls,
+                    "parse_failures": episode.parse_failures,
+                    "invalid_calls": episode.invalid_calls,
+                    "tool_errors": episode.tool_errors,
+                    "prompt_tokens": llm.prompt_tokens,
+                    "output_tokens": llm.output_tokens,
+                    "wall_seconds": round(wall, 1),
+                    "error": error,
+                    "max_calls": config.max_calls,
+                }
+                results.append(record)
+                with open(results_path, "w", encoding="utf-8") as handle:
+                    json.dump(results, handle, indent=1)
+                save_transcript(
+                    workdir / "transcript.md",
+                    episode,
+                    task,
+                    model,
+                    condition,
+                    score,
+                    checks,
+                    domain,
+                )
+                print(
+                    f"[{domain.name}@{domain.version} | {model} | "
+                    f"{condition}] {task.id}: score={score:.2f} "
+                    f"calls={calls} wall={wall:.0f}s"
+                    + (f" ERROR={error}" if error else ""),
+                    flush=True,
+                )
     print("ALL DONE", flush=True)
 
 

@@ -3,6 +3,8 @@ import datetime
 import pytest
 
 from harness import agent
+from harness.domain import load_domain
+from domains.office_demo.normalize import normalize_date, normalize_time
 
 
 def test_strict_parser_accepts_an_object_and_strips_a_code_fence():
@@ -59,7 +61,7 @@ def test_lenient_parser_currently_mishandles_a_closing_brace_inside_a_string():
 )
 def test_date_normalization_current_cases(value, expected):
     today = datetime.date(2026, 7, 20)
-    assert agent.normalize_date(value, today=today) == expected
+    assert normalize_date(value, today=today) == expected
 
 
 @pytest.mark.parametrize(
@@ -75,7 +77,7 @@ def test_date_normalization_current_cases(value, expected):
     ],
 )
 def test_time_normalization_current_cases(value, expected):
-    assert agent.normalize_time(value) == expected
+    assert normalize_time(value) == expected
 
 
 @pytest.mark.characterization
@@ -87,7 +89,9 @@ def test_fuzzy_repair_can_map_an_unrelated_time_key_to_title():
         "end_time": "11:00",
     }
 
-    repaired, notes = agent.repair_args("add_event", args)
+    repaired, notes = agent.repair_args(
+        "add_event", args, load_domain("office_demo").registry
+    )
 
     assert repaired == {
         "title": "10:00",
@@ -99,7 +103,7 @@ def test_fuzzy_repair_can_map_an_unrelated_time_key_to_title():
 
 
 def test_observation_truncation_boundary():
-    exact = "x" * agent.OBS_LIMIT
+    exact = "x" * 2000
     long = exact + "tail"
 
     assert agent._obs(exact) == exact

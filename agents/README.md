@@ -1,7 +1,9 @@
 # Per-model research agents
 
-These folders are launch configurations for the same experimental harness. They
-are not production assistants, and the model labels are not performance claims.
+These folders are thin launch configurations over
+[`_shared/run_agent.py`](_shared/run_agent.py). They do not contain separate
+agent implementations. They are not production assistants, and the model
+labels are not performance claims.
 No benchmark results are committed that establish which configuration is faster,
 safer, or more reliable.
 
@@ -19,7 +21,15 @@ Qwen 2.5. The five folders therefore do not form a clean parameter-size sweep.
 
 ## What actually runs
 
-Without `--root`, each agent uses a simulated office:
+Without `--root`, each agent loads its configured domain (currently
+`office_demo` in all five checked-in configs). `--domain NAME` overrides it.
+The available packs are:
+
+- `office_demo@0.1.0`: simulated office actions and real local Office files;
+- `counter_demo@0.1.0`: a namespaced structural fixture, not a useful
+  assistant or performance benchmark.
+
+For office mode:
 
 - inbox and calendar records are hardcoded fixtures;
 - “sending” email or chat, and setting a reminder, only updates local JSON state;
@@ -31,16 +41,18 @@ This mode is useful for benchmark and interface experiments. It does not connect
 to Brix email, calendars, room-booking systems, SMS, CRM, invoicing, or approved
 document repositories.
 
-With `--root`, the runner instead exposes local file tools. By default it removes
-the simulated office and PowerPoint/Excel tools. `--with-office` keeps those
-tools, but their document output still goes to the agent's own
-`workspace/files/`, not to the supplied root.
+With `--root`, the runner instead exposes built-in plus local-file tools. By
+default it removes the selected domain's tools. `--with-domain` keeps the
+selected domain; `--with-office` is a compatibility alias. Domain-generated
+artifacts still go to the domain workspace, not the supplied root.
 
 ## Requirements and launch
 
-The runtime requires Python plus `requests`, `python-pptx`, and `openpyxl`, and a
-local Ollama server at `127.0.0.1:11434`. There is currently no root runtime
-dependency manifest or lock file.
+The runtime supports Python 3.9–3.13 and uses the pinned dependencies in the
+root `pyproject.toml`/`requirements.txt`. `requirements-lock.txt` pins
+transitive versions but has no hashes. Installation may require a package index
+or cache. A local Ollama server at `127.0.0.1:11434` and the requested model tag
+must already be available to run an agent.
 
 From the project root, a portable direct invocation is:
 
@@ -61,19 +73,21 @@ also invokes `powershell.exe`, so shell mode is not portable to macOS or Linux.
 
 | flag | current behavior |
 |---|---|
+| `--domain NAME` | selects a convention-loaded `domains.<name>.PACK` |
 | `--root PATH` | exposes read, write, append, move, delete, and search inside a lexically checked path |
 | `--shell` | adds arbitrary PowerShell execution; `cwd` is set to the root but the command is not sandboxed there |
 | `--yolo` | removes file and shell confirmation prompts |
-| `--with-office` | retains the simulated office/document tools alongside real-file tools |
+| `--with-domain` | retains selected domain tools alongside real-file tools (`--with-office` is an alias) |
 | `--tiers` | selects models by the hardcoded `router`, `driver`, and `verifier` roles |
 | `--small TAG` | assigns planning and verification to another tag |
 | `--deep TAG` | enables tier/router mode and configures a deep model; no current code dispatches a deep call |
-| `--max-calls N` | changes the successful LLM-call ceiling; values are not robustly validated |
+| `--max-calls N` | sets a validated positive successful-LLM-call ceiling |
 
 ## Safety limits
 
 Do not point `--root` at business records or any directory you cannot restore.
-This is an in-process path check, not an operating-system sandbox:
+This is an in-process path check, not an operating-system sandbox.
+`ActionPolicy` is only an action-classification and confirmation seam:
 
 - symlinks and Windows junctions are not resolved when containment is checked;
 - the configured root itself can be selected for deletion;
@@ -108,6 +122,7 @@ may contain sensitive text and are stored without encryption or access control.
 Memory is an append-only JSONL fact store with keyword-overlap retrieval. Facts
 may be written by the model and inserted into later system prompts without human
 approval or provenance. It is not an authoritative knowledge base.
+Runtime files are ignored by Git; no agent memory file is shipped.
 
 ## Router and adapter status
 
@@ -119,16 +134,27 @@ add reasoning or fine-tuning capability.
 
 ## Persistent files
 
-Each folder may create:
+`office_demo` preserves the legacy per-agent paths:
 
 - `workspace/state.json` and `workspace/files/`;
 - `memory/memory.jsonl`;
 - `logs/run_NNN.json`;
 - `logs/model_calls.jsonl` when tier routing is enabled.
 
+Other domains use:
+
+```text
+agents/<size>/runtime/<domain>/<version>/{workspace,memory,logs}/
+```
+
 Writes are not uniformly atomic or concurrency-safe. The log does not
 programmatically grade CLI tasks. Review actual side effects and artifacts
 manually.
+
+Configuration, tools, policies, hooks and clocks are passed through explicit
+runtime objects. This removes the prior supported process-global configuration
+path; it does not make filesystem writes, logs or persistent domain state safe
+for concurrent runs.
 
 The browser console is documented in [`../webui/README.md`](../webui/README.md).
 It exposes the same research runtime and does not make these agents production

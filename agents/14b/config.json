@@ -1,6 +1,7 @@
 ﻿{
-    "note":  "Qwen 2.5 14B (no Llama exists at 14B)",
+    "note":  "Qwen 2.5 14B configuration",
     "name":  "Agent 14B",
     "model":  "qwen2.5:14b",
-    "num_ctx":  8192
+    "num_ctx":  8192,
+    "domain":  "office_demo"
 }

@@ -39,8 +39,9 @@ const TOOL_ICON = {
 };
 
 const S = {
-  agents: [], agent: null, ws: null, run: null, es: null,
+  agents: [], domains: [], agent: null, domain: null, ws: null, run: null, es: null,
   call: null, banner: null, t0: 0, timer: null, seen: {}, first: true,
+  locked: false, runScope: null,
   open: new Set(['files', 'inbox', 'calendar']),
 };
 
@@ -49,10 +50,12 @@ const S = {
 async function loadAgents(keep) {
   const data = await api('/api/agents');
   S.agents = data.agents;
+  S.domains = data.domains || [];
+  renderDomains();
   $('meter-ollama').className = 'meter ' + (data.ollama ? 'up' : 'down');
   $('meter-ollama').querySelector('.label').textContent =
     data.ollama ? 'ollama running' : 'ollama not running';
-  renderPresets(data.presets);
+  renderDomainPresets();
   renderAgents();
   if (!keep) {
     const pick = S.agents.find((a) => a.installed) || S.agents[0];
@@ -66,11 +69,12 @@ function renderAgents() {
   for (const a of S.agents) {
     const card = el('button', 'agent' + (a.id === S.agent ? ' on' : ''));
     card.onclick = () => selectAgent(a.id);
+    card.disabled = S.locked;
 
     const top = el('div', 'agent-top');
     top.append(el('span', 'agent-size', a.name.replace(/^Agent\s*/, '')),
                el('span', 'agent-speed', a.speed));
-    card.append(top, el('div', 'agent-model', a.model));
+    card.append(top, el('div', 'agent-model', `${a.model} · ${a.domain}`));
 
     const stats = el('div', 'agent-stats');
     stats.append(el('span', null, `${a.runs} run${a.runs === 1 ? '' : 's'}`),
@@ -116,12 +120,36 @@ function pullModel(a, row) {
 }
 
 async function selectAgent(id) {
+  if (S.locked) return;
   S.agent = id;
   S.first = true;
   S.seen = {};
   renderAgents();
+  const selected = S.agents.find((a) => a.id === id);
+  S.domain = (selected && selected.domain) ||
+    (S.domains[0] && S.domains[0].name) || null;
+  renderDomains();
+  renderDomainPresets();
   await loadWorkspace();
   $('run').disabled = !!S.run;
+}
+
+function renderDomains() {
+  const select = $('opt-domain');
+  const current = S.domain;
+  select.textContent = '';
+  for (const domain of S.domains) {
+    const option = el('option', null, `${domain.name} @ ${domain.version}`);
+    option.value = domain.name;
+    option.selected = domain.name === current;
+    select.append(option);
+  }
+  if (!S.domain && S.domains.length) S.domain = S.domains[0].name;
+}
+
+function renderDomainPresets() {
+  const domain = S.domains.find((item) => item.name === S.domain);
+  renderPresets((domain && domain.presets) || []);
 }
 
 function renderPresets(list) {
@@ -139,7 +167,8 @@ function renderPresets(list) {
 
 async function loadWorkspace() {
   if (!S.agent) return;
-  S.ws = await api(`/api/workspace?agent=${S.agent}`);
+  S.ws = await api(`/api/workspace?agent=${encodeURIComponent(S.agent)}` +
+    `&domain=${encodeURIComponent(S.domain || '')}`);
   $('folder-path').textContent = S.ws.folder;
   renderTree(S.ws);
 }
@@ -196,36 +225,33 @@ function renderTree(ws) {
   const tree = $('tree');
   tree.textContent = '';
 
-  tree.append(section('files', '📁', 'files', ws.files, (f) =>
+  tree.append(section('files', '📁', 'files', ws.files || [], (f) =>
     itemNode(`<b>${esc(f.name)}</b>`, `${bytes(f.size)} · ${ago(f.mtime)}`,
              () => openFile(f.name)),
     'nothing created yet'));
 
-  tree.append(section('inbox', '📥', 'inbox', ws.emails, (e) =>
-    itemNode(`<b>${esc(e.subject)}</b>`, `${e.from} · ${e.date}`,
-             () => openEmail(e)),
-    'inbox empty'));
+  for (const domainSection of (ws.sections || [])) {
+    tree.append(section(
+      domainSection.id,
+      domainSection.icon || '▣',
+      domainSection.label,
+      domainSection.items || [],
+      (item) => {
+        const object = item && typeof item === 'object' ? item : { value: item };
+        const primary = object.subject ?? object.title ?? object.text ??
+          object.name ?? object.value ?? JSON.stringify(object);
+        const detail = Object.entries(object)
+          .filter(([key]) => !['subject', 'title', 'text', 'name', 'value', 'body'].includes(key))
+          .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
+          .join(' · ');
+        return itemNode(`<b>${esc(primary)}</b>`, clip(detail || object.body || '', 180),
+          () => openViewer(domainSection.label, jsonBody(object)));
+      },
+      `no ${domainSection.label}`,
+    ));
+  }
 
-  tree.append(section('calendar', '📅', 'calendar', ws.events, (v) =>
-    itemNode(`<b>${esc(v.title)}</b>`,
-             `${v.date} · ${v.start}–${v.end}${v.location ? ' · ' + v.location : ''}` +
-             (v.attendees && v.attendees.length ? ` · ${v.attendees.join(', ')}` : '')),
-    'no events'));
-
-  tree.append(section('messages', '💬', 'messages', ws.messages, (m) =>
-    itemNode(`to <b>${esc(m.to)}</b>`, clip(m.text, 160)),
-    'none sent'));
-
-  tree.append(section('reminders', '⏰', 'reminders', ws.reminders, (r) =>
-    itemNode(esc(r.text), `${r.date} at ${r.time}`),
-    'none set'));
-
-  tree.append(section('sent', '📤', 'sent mail', ws.sent, (m) =>
-    itemNode(`<b>${esc(m.subject || '(no subject)')}</b>`, `to ${m.to} · ${clip(m.body, 90)}`,
-             () => openViewer(m.subject || 'Sent mail', mailBody({ ...m, from: 'you' }))),
-    'nothing sent'));
-
-  tree.append(section('memory', '🧠', 'memory', ws.memory, (f) =>
+  tree.append(section('memory', '🧠', 'memory', ws.memory || [], (f) =>
     itemNode(esc(f), null), 'nothing learned yet'));
 
   if (ws.tree) {
@@ -239,6 +265,12 @@ function renderTree(ws) {
     'no runs yet'));
 
   S.first = false;
+}
+
+function jsonBody(value) {
+  const pre = el('pre', 'raw');
+  pre.textContent = JSON.stringify(value, null, 2);
+  return pre;
 }
 
 /* -------------------------------------------------------------- viewer --- */
@@ -264,10 +296,13 @@ function mailBody(e) {
 const openEmail = (e) => openViewer(e.subject, mailBody(e));
 
 async function openFile(name) {
-  const url = `/api/download?agent=${S.agent}&name=${encodeURIComponent(name)}`;
+  const domain = encodeURIComponent(S.domain || '');
+  const url = `/api/download?agent=${encodeURIComponent(S.agent)}` +
+    `&domain=${domain}&name=${encodeURIComponent(name)}`;
   let p;
   try {
-    p = await api(`/api/preview?agent=${S.agent}&name=${encodeURIComponent(name)}`);
+    p = await api(`/api/preview?agent=${encodeURIComponent(S.agent)}` +
+      `&domain=${domain}&name=${encodeURIComponent(name)}`);
   } catch (err) {
     return openViewer(name, el('div', 'plain', String(err.message)));
   }
@@ -303,7 +338,8 @@ async function openFile(name) {
 }
 
 async function openLog(name) {
-  const log = await api(`/api/log?agent=${S.agent}&name=${encodeURIComponent(name)}`);
+  const log = await api(`/api/log?agent=${encodeURIComponent(S.agent)}` +
+    `&domain=${encodeURIComponent(S.domain || '')}&name=${encodeURIComponent(name)}`);
   const box = el('div');
   box.append(el('div', 'mail-meta',
     `${log.model || ''} · ${log.finished ? 'finished' : 'ran out of budget'}${log.summary ? ' · ' + log.summary : ''}`));
@@ -348,6 +384,7 @@ function clearStage() {
 function onBanner(e) {
   const card = addCard('banner');
   head(card, e.name, [{ text: e.model, cls: 'role-driver' },
+                      { text: `${e.domain}@${e.domain_version}` },
                       { text: `${e.budget} call budget` },
                       { text: e.toolset }]);
   card.append(el('div', 'banner-title', e.task));
@@ -569,23 +606,34 @@ function handle(e) {
 }
 
 async function startRun() {
-  if (!S.agent) return;
+  if (!S.agent || S.locked) return;
   const task = $('task').value.trim();
   if (!task) { $('task').focus(); return; }
   const body = {
-    agent: S.agent, task,
+    agent: S.agent, domain: S.domain, task,
     root: $('opt-root').value.trim(),
     shell: $('opt-shell').checked,
     yolo: $('opt-yolo').checked,
-    with_office: $('opt-office').checked,
+    with_domain: $('opt-office').checked,
     tiers: $('opt-tiers').checked,
-    max_calls: parseInt($('opt-calls').value, 10) || null,
+    max_calls: Number.isNaN(parseInt($('opt-calls').value, 10))
+      ? null : parseInt($('opt-calls').value, 10),
   };
   clearStage();
+  S.locked = true;
+  S.runScope = { agent: S.agent, domain: S.domain };
+  $('opt-domain').disabled = true;
+  $('run').disabled = true;
+  renderAgents();
   let res;
   try {
     res = await post('/api/run', body);
   } catch (err) {
+    S.locked = false;
+    S.runScope = null;
+    $('opt-domain').disabled = false;
+    $('run').disabled = false;
+    renderAgents();
     $('empty').classList.add('hidden');
     return onError({ message: err.message });
   }
@@ -610,8 +658,12 @@ function finishRun() {
   if (S.es) { S.es.close(); S.es = null; }
   if (S.timer) { clearInterval(S.timer); S.timer = null; }
   S.run = null;
+  S.locked = false;
+  S.runScope = null;
   S.call = null;
   $('run').disabled = false;
+  $('opt-domain').disabled = false;
+  renderAgents();
   $('stop').classList.add('hidden');
   loadAgents(true);
   loadWorkspace();
@@ -628,14 +680,29 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) startRun();
 });
 
-$('reveal').onclick = () => post('/api/reveal', { agent: S.agent }).catch((e) => alert(e.message));
+$('opt-domain').onchange = async () => {
+  if (S.locked) {
+    $('opt-domain').value = S.domain || '';
+    return;
+  }
+  S.domain = $('opt-domain').value;
+  S.seen = {};
+  S.first = true;
+  renderDomainPresets();
+  await loadWorkspace();
+};
+$('reveal').onclick = () => post('/api/reveal', {
+  agent: S.agent, domain: S.domain,
+}).catch((e) => alert(e.message));
 $('reset').onclick = async () => {
-  if (!S.agent) return;
+  if (!S.agent || S.locked) return;
   const a = S.agents.find((x) => x.id === S.agent);
-  if (!confirm(`Factory-reset ${a.name}?\n\nThis clears its inbox and calendar back to the ` +
-               `starting fixtures, deletes the files it created, and erases everything ` +
+  if (!confirm(`Factory-reset ${a.name}'s ${S.domain} state?\n\nThis clears the selected ` +
+               `domain state, deletes the files it created, and erases everything ` +
                `it has learned. Past run transcripts are kept.`)) return;
-  await post('/api/reset', { agent: S.agent, what: ['world', 'memory', 'files'] });
+  await post('/api/reset', {
+    agent: S.agent, domain: S.domain, what: ['world', 'memory', 'files'],
+  });
   S.seen = {};
   S.first = true;
   await loadWorkspace();

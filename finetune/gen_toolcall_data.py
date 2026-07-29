@@ -1,17 +1,16 @@
-"""Source A: synthetic training data for the tool-calling LoRA (backbone).
+"""Experimental synthetic tool-call examples.
 
 Generates (context -> correct tool-call JSON) pairs by slot-filling natural
-tasks and emitting the ground-truth call deterministically. Because we choose
-the slot values, the target call is known-correct with no verification needed.
+tasks and emitting a deterministic target call.
 
-Each row carries the REAL serving system prompt (harness tool docs), so the
-adapter trains on exactly the context it will see at inference. The assistant
-turn is the pristine call in the harness SHAPE. Output is chat-format JSONL,
-ready for Unsloth / trl SFTTrainer with assistant-only loss.
+Each row carries the same office-demo system prompt builder used at serving.
+The surrounding serving trajectory is not reproduced: planning, observation,
+completion, masking, provenance, and label validity still require review
+before this output is suitable for training.
 
 Deliberately does NOT use the 12 benchmark tasks — keep those as held-out eval.
 Sources B (harvest results/ transcripts) and C (distill from 32B) are separate
-scripts; this is the free, exact, fully-local backbone.
+scripts; those sources and this generator remain unvalidated inputs.
 
     python -m finetune.gen_toolcall_data --n 1200 --out finetune/data/toolcall.jsonl
 """
@@ -25,13 +24,17 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 
-from harness.agent import HARNESS_SYSTEM, SHAPE  # noqa: E402
-from harness.tools import tool_docs  # noqa: E402
-from harness.world import SIM_TODAY, SIM_TODAY_HUMAN  # noqa: E402
+from harness.agent import SHAPE, build_harness_system  # noqa: E402
+from harness.domain import load_domain  # noqa: E402
 
-SYSTEM = HARNESS_SYSTEM.format(today=SIM_TODAY_HUMAN, shape=SHAPE,
-                               docs=tool_docs(with_examples=True),
-                               memory_block="", extra_rules="")
+DOMAIN = load_domain("office_demo")
+SYSTEM = build_harness_system(
+    DOMAIN.registry,
+    DOMAIN.default_today.strftime("%A, %B %d, %Y"),
+    DOMAIN.prompt_profile,
+    memory_block="",
+    extra_rules=DOMAIN.prompt_rules,
+)
 
 PEOPLE = [("Sam", "sam@corp.com"), ("Dana", "dana@corp.com"), ("Priya", "priya@corp.com"),
           ("Jordan", "jordan@corp.com"), ("Mia", "mia@corp.com"), ("Alex", "alex@corp.com")]
@@ -53,7 +56,7 @@ MONTHS = ["January", "February", "March", "April", "May", "June", "July",
 def pick_date(rng):
     """Return (natural_phrase, iso) that agree given 'today' in the system prompt."""
     d = rng.randint(1, 7)
-    date = SIM_TODAY + datetime.timedelta(days=d)
+    date = DOMAIN.default_today + datetime.timedelta(days=d)
     iso = date.isoformat()
     weekday = date.strftime("%A")
     opts = [f"on {MONTHS[date.month - 1]} {date.day}"]

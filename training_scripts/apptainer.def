@@ -1,12 +1,12 @@
-# Apptainer/Singularity definition — the HPC-native build (NO Docker required).
+# Experimental Apptainer/Singularity training definition.
 #
-# On a login node (which has internet), build the container once:
+# A build node needs network access plus working Apptainer/Singularity:
 #     apptainer build toolcall-lora.sif apptainer.def
 #   (older Singularity:  singularity build toolcall-lora.sif apptainer.def)
 #
-# The build bakes in torch+CUDA, all deps, llama.cpp, the ungated base model,
-# and the training data — so the GPU compute node runs fully offline, with no
-# Hugging Face token and nothing to edit. Then:  sbatch run.slurm
+# The resulting image includes dependencies, a downloaded model snapshot,
+# llama.cpp, and synthetic data. A network-isolated compute run is conditional
+# on local GPU/driver compatibility and prior review of artifacts and labels.
 Bootstrap: docker
 From: pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime
 
@@ -16,15 +16,15 @@ From: pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime
     download_assets.py /workspace/download_assets.py
     make_data.py       /workspace/make_data.py
     system_prompt.txt  /workspace/system_prompt.txt
-    data               /workspace/data
 
 %post
     apt-get update && apt-get install -y --no-install-recommends git && \
         rm -rf /var/lib/apt/lists/*
     cd /workspace
     pip install --no-cache-dir -r requirements.txt
-    # generate data if it wasn't shipped in, then bake model + llama.cpp in
-    [ -s data/toolcall.jsonl ] || python make_data.py --out data/toolcall.jsonl
+    # Generate the experimental synthetic data, then fetch model + llama.cpp.
+    mkdir -p data
+    python make_data.py --out data/toolcall.jsonl
     python download_assets.py
 
 %environment
@@ -32,7 +32,8 @@ From: pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime
     export HF_HUB_OFFLINE=1
     export TRANSFORMERS_OFFLINE=1
 
-# `apptainer run --nv toolcall-lora.sif --to-gguf` trains; args pass through.
+# `apptainer run --nv toolcall-lora.sif --to-gguf` attempts training and
+# conversion; arguments pass through.
 %runscript
     cd /workspace
     exec python train_lora.py "$@"
