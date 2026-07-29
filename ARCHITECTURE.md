@@ -98,7 +98,11 @@ display failure does not stop an attempt; a hook is therefore not an
 audit-completeness guarantee.
 
 `ActionPolicy` classifies tools as `read`, `state_write`, `external_write` or
-`shell`, with an optional confirmation callback. A missing callback preserves
+`shell`, with an optional confirmation callback. `DomainPack` construction
+requires exactly one explicit classification for every registered tool, so a
+pack cannot silently omit a mutating tool. `AttemptContext` also requires a
+classification for every tool active in that attempt while allowing unused
+pack classifications. A missing confirmation callback still preserves
 permissive compatibility behavior. The policy is not identity, authorization,
 an OS sandbox, rollback, or a security boundary.
 
@@ -117,7 +121,9 @@ provenance. The version is a label, not a code/data digest.
 
 The office pack uses a domain-owned `PromptProfile` to preserve legacy prompt
 wording and fixed-date behavior. `counter_demo` uses the generic profile and
-namespaced layout.
+namespaced layout. `legacy_agent_v0` is a trusted pack declaration rather than
+a globally unique allocation; new packs must use the namespaced layout to avoid
+colliding with the office compatibility paths.
 
 ## Ollama client and routing
 
@@ -236,10 +242,13 @@ lifecycle and crash/stop containment, not a security sandbox.
 The server has no authentication, session-bound capability, CSRF defense or
 Origin/Host allowlist. State-changing endpoints do not consistently enforce
 request origin/content type; model pulling is a state-changing GET; reset is not
-coordinated with an active child. Direct `..` traversal in `/api/reveal` is
-rejected, but lexical containment and symlink-following paths remain unsafe.
-Stopping the wrapper does not guarantee descendant processes or in-flight model
-work stopped.
+coordinated with an active child. Static, reveal, log and generated-file
+lookups resolve child components beneath trusted canonical roots and reject
+direct, same-prefix and child-symlink escapes observed at lookup time. They do
+not establish root integrity or race-free containment, protect the
+unauthenticated control plane, or harden the separate real-file tool overlay.
+Stopping the wrapper does not guarantee descendant processes or in-flight
+model work stopped.
 
 Model cards contain neutral tier descriptions and advise measuring on the
 actual hardware. They are not speed, reliability, memory-fit or quality
@@ -259,9 +268,11 @@ ceiling. This is partial metadata, not immutable provenance: model digest,
 quantization, runtime/code/dependency hashes, prompts/registries, hardware and
 OS remain unstamped.
 
-The reporter rejects duplicate identities, renders single-condition summaries
-and suppresses deltas when task sets are unpaired or recorded call-budget/tool
-surfaces differ. Those guardrails do not cure:
+The reporter requires core domain/version identity and metric fields, rejects
+malformed or duplicate identities, renders single-condition summaries and
+suppresses deltas when task sets are unpaired or recorded
+call-budget/tool/capability surfaces differ. It validates the current record
+shape, not complete experiment provenance. Those guardrails do not cure:
 
 - reused task directories and stale generated files;
 - memory deletion before resume checks and shared condition memory;
@@ -275,11 +286,13 @@ Generated results are exploratory and must not be published as evidence.
 
 ## Training track
 
-Two generators can create 1,200-row JSONL files locally. Those files are
-ignored and are not shipped. Generated examples contain substantial duplicates,
-cover only five office tools and have no validation/test split or dataset card.
-Repair conversations include a bad call followed by a correction while the
-trainer places loss on every assistant turn, so it trains the error too.
+Two generators can create 1,200-row JSONL files locally. Those files are ignored
+and are not shipped. The default generated examples contain substantial
+duplicates, cover only five office tools and have no validation/test split or
+dataset card. Repair conversations include a bad call followed by a correction
+while the trainer places loss on every assistant turn, so it trains the error
+too. Tests now pin both generators' system prompt to the serving builder, but
+that parity check does not validate the data or training objective.
 
 External revisions are not fully pinned, scripts may download models and
 llama.cpp, GGUF conversion is best effort, and Ollama does not apply the
@@ -289,9 +302,10 @@ resulting adapter. This is not a reproducible end-to-end training result.
 
 Supported execution configuration, registry, hooks, budget and simulation clock
 are explicit objects passed through the call graph. That removes the former
-supported process-global mutation design. It does not establish thread safety,
-transaction isolation, concurrent filesystem safety, unique log allocation,
-rollback or complete provenance.
+supported process-global mutation design. A nested two-domain test establishes
+single-threaded reentrancy and state separation; it does not establish thread
+safety, transaction isolation, concurrent filesystem safety, unique log
+allocation, rollback or complete provenance.
 
 ## Locality, privacy and release boundary
 
@@ -303,8 +317,9 @@ real Brix data.
 
 S0–S3 implementation is present and covered by the offline suite, but review
 and acceptance evidence remain open. Package status is not gate status: G0 and
-R1 are partial and unpassed. S4 is the next authorized package in the canonical
-segmented plan, [`PROJECT_SETUP.md`](PROJECT_SETUP.md).
+R1 are partial and unpassed. S4 is the next planned package and requires a
+separate scope decision under the canonical segmented plan,
+[`PROJECT_SETUP.md`](PROJECT_SETUP.md).
 
 ## Safe extension principles
 

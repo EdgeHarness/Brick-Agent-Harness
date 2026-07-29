@@ -90,6 +90,19 @@ def agent_dir(agent):
     return os.path.join(AGENTS_DIR, agent)
 
 
+def _resolve_under(root, *parts):
+    """Resolve an existing or prospective path beneath a canonical root."""
+    root = os.path.realpath(root)
+    target = os.path.realpath(os.path.join(root, *parts))
+    try:
+        contained = os.path.commonpath((root, target)) == root
+    except ValueError:
+        contained = False
+    if not contained:
+        raise ValueError("requested path is outside its allowed root")
+    return target
+
+
 def available_domains():
     root = os.path.join(PROJECT, "domains")
     found = []
@@ -195,8 +208,8 @@ def workspace_file(agent, name, domain_name=None):
     folder = agent_dir(agent)
     domain = _agent_domain(agent, domain_name)
     files_dir = str(agent_runtime_paths(folder, domain).artifacts)
-    path = os.path.abspath(os.path.join(files_dir, os.path.basename(str(name))))
-    if os.path.dirname(path) != os.path.abspath(files_dir) or not os.path.isfile(path):
+    path = _resolve_under(files_dir, os.path.basename(str(name)))
+    if not os.path.isfile(path):
         raise ValueError(f"no such file {name!r}")
     return path
 
@@ -472,9 +485,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 )
                 paths = agent_runtime_paths(folder, domain)
                 name = os.path.basename(q.get("name", ""))
-                with open(
-                    os.path.join(paths.logs, name), encoding="utf-8"
-                ) as f:
+                with open(_resolve_under(paths.logs, name), encoding="utf-8") as f:
                     return self.send_json(json.load(f))
             if path == "/api/status":
                 run = RUNS.current
@@ -538,14 +549,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 folder = agent_dir(agent)
                 domain = _agent_domain(agent, body.get("domain"))
                 base = str(agent_runtime_paths(folder, domain).root)
-                target = os.path.abspath(
-                    os.path.join(base, *sub.split("/"))
-                ) if sub else os.path.abspath(base)
-                base_abs = os.path.abspath(base)
-                if target != base_abs and not target.startswith(
-                    base_abs.rstrip(os.sep) + os.sep
-                ):
-                    raise ValueError("requested folder is outside runtime state")
+                target = _resolve_under(base, *sub.split("/")) if sub else (
+                    os.path.realpath(base)
+                )
                 if not os.path.exists(target):
                     raise ValueError("that folder does not exist yet")
                 reveal(target)
@@ -560,8 +566,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     # ---- static ----
     def static_file(self, rel):
-        path = os.path.abspath(os.path.join(STATIC, rel))
-        if not path.startswith(os.path.abspath(STATIC)) or not os.path.isfile(path):
+        try:
+            path = _resolve_under(STATIC, rel)
+        except ValueError:
+            return self.send_json({"error": "not found"}, 404)
+        if not os.path.isfile(path):
             return self.send_json({"error": "not found"}, 404)
         with open(path, "rb") as f:
             blob = f.read()

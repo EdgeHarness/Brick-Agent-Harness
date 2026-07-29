@@ -51,7 +51,9 @@ tests/              offline characterization and architecture tests
 The public runtime boundary is `RunConfig`, `RunHooks`, `ActionPolicy`,
 `AttemptContext`, `ToolRegistry`, and `DomainPack`. `ToolRegistry` exposes
 defensive copies of tool specifications, and domain callbacks have a validated
-shape. These are software interfaces, not authentication, process isolation,
+shape. A pack must classify every registered tool's effect explicitly, and an
+attempt rejects a policy missing any active tool. These are software
+interfaces, not authentication, process isolation,
 transactionality, provenance, or safety guarantees. Domain packs are trusted
 Python imports, and a domain version is a label rather than a content digest.
 
@@ -100,11 +102,12 @@ python -m bench.report --outdir results-dev-001
 
 The runner validates the selected domain, conditions, tasks and duplicate model
 labels. Results are namespaced by domain and version. The reporter rejects
-duplicate result identities and withholds raw-versus-harness deltas when task
-sets or recorded tool/call-budget surfaces are incompatible. Those checks do
-not cure the known stale-artifact, resume, grader, isolation and provenance
-defects in [`bench/README.md`](bench/README.md). Do not publish current scores,
-compare them across code revisions, or reuse a development output directory.
+missing or malformed core records and duplicate identities, and withholds
+raw-versus-harness deltas when task sets or recorded
+tool/capability/call-budget surfaces are incompatible. Those checks do not cure
+the known stale-artifact, resume, grader, isolation and provenance defects in
+[`bench/README.md`](bench/README.md). Do not publish current scores, compare
+them across code revisions, or reuse a development output directory.
 
 The listed models also do not form a clean parameter-size experiment: the 8B
 model is from a different Llama generation, and proposed larger models use
@@ -146,8 +149,15 @@ directory.
 
 The S0–S3 implementation packages in [`PROJECT_SETUP.md`](PROJECT_SETUP.md)
 have code and offline tests, but package completion is not gate acceptance:
-G0 and R1 are still partial and unpassed. S4 is the next authorized package.
-The segmented plan in `PROJECT_SETUP.md` is canonical; do not start a retained
-matrix before R1 and R2 pass. Brix discovery remains a separate P0 track.
-Fine-tuning remains blocked at R5 until a validated evaluation identifies a
-stable, model-addressable failure.
+G0 and R1 are still partial and unpassed. S4 is the next planned implementation
+package and requires a separate scope decision. The segmented plan in
+`PROJECT_SETUP.md` is canonical; do not start a retained matrix before R1 and
+R2 pass. Brix discovery remains a separate P0 track. Fine-tuning remains
+blocked at R5 until a validated evaluation identifies a stable,
+model-addressable failure.
+
+The canonical public repository is
+[`EdgeHarness/Brick-Agent-Harness`](https://github.com/EdgeHarness/Brick-Agent-Harness).
+It currently has no owner-selected license, so no reuse license should be
+inferred. Branch protection and cleanup of divergent legacy public copies are
+also unresolved G0 owner actions.

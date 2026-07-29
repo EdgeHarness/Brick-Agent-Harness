@@ -1,4 +1,5 @@
 """Shared on-device runner used by every configured agent folder."""
+import argparse
 import datetime
 import json
 import os
@@ -31,55 +32,55 @@ from harness.storage import agent_runtime_paths  # noqa: E402
 from harness.tools import ToolRegistry  # noqa: E402
 
 
+def _positive_int(value):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError("must be an integer") from exc
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return parsed
+
+
 def parse_flags(argv):
+    """Parse the shared CLI without treating misspelled flags as model tasks."""
+    parser = argparse.ArgumentParser(
+        description=(
+            "Run one configured local research agent. Real-file and shell "
+            "options are unsafe for valuable data."
+        ),
+        allow_abbrev=False,
+    )
+    parser.add_argument("--root")
+    parser.add_argument("--shell", action="store_true")
+    parser.add_argument("--yolo", action="store_true")
+    parser.add_argument("--max-calls", type=_positive_int)
+    parser.add_argument("--tiers", action="store_true")
+    parser.add_argument("--small")
+    parser.add_argument("--deep")
+    parser.add_argument("--domain", dest="domain_name")
+    parser.add_argument(
+        "--with-domain",
+        "--with-office",
+        dest="include_domain",
+        action="store_true",
+    )
+    parser.add_argument("task", nargs="*")
+    # Preserve the historical ability to put flags between unquoted task
+    # words while retaining argparse's strict option validation.
+    parsed = parser.parse_intermixed_args(argv)
     options = {
-        "root": None,
-        "shell": False,
-        "yolo": False,
-        "max_calls": None,
-        "tiers": False,
-        "small": None,
-        "deep": None,
-        "domain_name": None,
-        "include_domain": False,
+        "root": parsed.root,
+        "shell": parsed.shell,
+        "yolo": parsed.yolo,
+        "max_calls": parsed.max_calls,
+        "tiers": parsed.tiers or bool(parsed.small) or bool(parsed.deep),
+        "small": parsed.small,
+        "deep": parsed.deep,
+        "domain_name": parsed.domain_name,
+        "include_domain": parsed.include_domain,
     }
-    rest = []
-    index = 0
-    while index < len(argv):
-        arg = argv[index]
-        if arg == "--root" and index + 1 < len(argv):
-            options["root"] = argv[index + 1]
-            index += 2
-        elif arg == "--shell":
-            options["shell"] = True
-            index += 1
-        elif arg == "--yolo":
-            options["yolo"] = True
-            index += 1
-        elif arg == "--max-calls" and index + 1 < len(argv):
-            options["max_calls"] = int(argv[index + 1])
-            index += 2
-        elif arg == "--tiers":
-            options["tiers"] = True
-            index += 1
-        elif arg == "--small" and index + 1 < len(argv):
-            options["small"] = argv[index + 1]
-            options["tiers"] = True
-            index += 2
-        elif arg == "--deep" and index + 1 < len(argv):
-            options["deep"] = argv[index + 1]
-            options["tiers"] = True
-            index += 2
-        elif arg == "--domain" and index + 1 < len(argv):
-            options["domain_name"] = argv[index + 1]
-            index += 2
-        elif arg in ("--with-domain", "--with-office"):
-            options["include_domain"] = True
-            index += 1
-        else:
-            rest.append(arg)
-            index += 1
-    return options, " ".join(rest).strip()
+    return options, " ".join(parsed.task).strip()
 
 
 def build_llm(config, options, log_dir, stream_hook=None):

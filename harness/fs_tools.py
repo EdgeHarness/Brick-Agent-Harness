@@ -480,7 +480,7 @@ def build_overlay(
         if not (shell_only and name != "run_command")
         and not (name == "run_command" and not allow_shell)
     }
-    effects = {}
+    effects = {name: "read" for name in selected}
     for name in WRITE_TOOLS:
         if name in selected:
             effects[name] = (

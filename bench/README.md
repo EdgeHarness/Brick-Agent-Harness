@@ -20,10 +20,10 @@ conclusion.
 
 ## Current implementation
 
-`run_bench.py` iterates over model tags, condition names and selected tasks.
-Each task receives a new `World` object seeded with ten emails, seven calendar
-events and a fixed clock of Monday 2026-07-20. A model/condition pair shares one
-JSONL memory file across its tasks.
+`run_bench.py` loads one named `DomainPack`, then iterates over model tags,
+validated condition names and validated task IDs. Every task receives a fresh
+world from that pack and an explicit attempt context. A model/condition pair
+still shares one JSONL memory file across its tasks.
 
 There are two intended conditions:
 
@@ -33,9 +33,9 @@ There are two intended conditions:
   lenient parsing, argument repair, shape feedback, date/time normalization,
   planning, duplicate suppression, model verification and memory injection.
 
-Only the exact string `harness` selects the harness runner. Any other condition
-string currently falls through to `raw`; condition values are not validated.
-An unknown task ID also produces an empty task selection rather than an error.
+The only implemented condition IDs are exactly `raw` and `harness`.
+`RunConfig` rejects any other value, duplicate options are rejected, and an
+unknown task ID is an argument error before the output directory is created.
 
 The raw loop is a deliberately weak prompt-only JSON baseline. It is not a
 reasonable native function-calling baseline and must not be presented as “the
@@ -45,8 +45,8 @@ normal production implementation.”
 
 The current conditions share:
 
-- the same default 14-tool registry and executors;
-- the same synthetic fixtures and fixed clock;
+- the same domain pack, task-selected registry and executors;
+- the same task prompt, initial world factory and configured clock;
 - the same 14-total-LLM-call ceiling;
 - the same client temperature and seed defaults;
 - the same 2,000-character observation truncation.
@@ -60,10 +60,12 @@ Temperature zero and seed 42 improve repeatability but do not guarantee exact
 reproduction across model digests, quantizations, runtime versions, hardware or
 drivers. The current result record does not capture those dependencies.
 
-## Current task suite
+## Current office task suite
 
-The suite has 12 fixed prompts in a fixed order. The check counts below are the
-maximum checks produced when conditional artifact/action branches exist.
+`office_demo@0.1.0` has 12 fixed prompts in a fixed order.
+`counter_demo@0.1.0` has one structural counter task and must not be treated as
+transfer evidence. The check counts below are the office maximums produced when
+conditional artifact/action branches exist.
 
 | # | Task | Nominal checks | Intended behavior |
 |---|---|---:|---|
@@ -167,13 +169,14 @@ character to `ord()`.
 Runner exceptions and grader exceptions are not represented with a complete,
 separate validity status.
 
-### Non-atomic and unversioned results
+### Non-atomic and incompletely versioned results
 
 `results.json` is truncated and rewritten after every task. An interruption in
 that window can corrupt the ledger used for resume. There is no lock for two
 writers.
 
-Records do not include:
+Records now include domain/version and the canonical selected tool surface.
+They still do not include:
 
 - benchmark/task/grader/harness versions;
 - Git commit and dirty-state digest;
@@ -220,7 +223,9 @@ Each completed runner iteration appends:
 
 | Field | Current meaning and caution |
 |---|---|
-| `model`, `condition`, `task`, `caps` | requested labels, not immutable versions |
+| `domain`, `domain_version` | pack labels; the version is not a content digest |
+| `model`, `condition`, `task`, `caps` | requested labels, not immutable model/task/grader versions |
+| `tools` | canonical ordered tool names actually exposed for the attempt; schemas are not hashed |
 | `score`, `checks` | current grader output, including disguised grader errors |
 | `finished` | agent called `done`; not proof that work is correct or verified |
 | `llm_calls`, `max_calls` | request counts, not total compute |
@@ -231,9 +236,11 @@ Each completed runner iteration appends:
 | `wall_seconds` | outer elapsed time; ordering/system load are uncontrolled |
 | `error` | runner exception only; grader error is not separated |
 
-`report.py` emits descriptive means by model, capability and task. If only one
-condition exists, the overall table currently omits that model row because it
-requires both `raw` and `harness`.
+`report.py` emits descriptive means by model, capability and task. It renders
+single-condition data, rejects missing/malformed core rows and duplicate
+identities, separates domain versions, and withholds a delta when task sets or
+recorded tools/capabilities/call ceilings differ. It does not validate complete
+provenance or repair the underlying instrument.
 
 ## Files currently produced
 
@@ -242,7 +249,7 @@ results/
   results.json
   summary.json
   SUMMARY.md
-  <model-slug>/<condition>/
+  <domain>/<domain-version>/<model-slug>/<condition>/
     memory.jsonl
     <task>/
       transcript.md

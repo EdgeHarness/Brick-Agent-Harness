@@ -182,10 +182,14 @@ def office_specs():
 
 
 OFFICE_EFFECTS = {
+    "list_emails": "read",
+    "read_email": "read",
     "send_email": "state_write",
+    "list_events": "read",
     "add_event": "state_write",
     "send_message": "state_write",
     "set_reminder": "state_write",
     "create_presentation": "state_write",
     "create_spreadsheet": "state_write",
+    "read_spreadsheet": "read",
 }

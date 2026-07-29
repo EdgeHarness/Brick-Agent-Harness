@@ -72,4 +72,9 @@ def builtin_specs(examples=None):
     }
 
 
-BUILTIN_EFFECTS = {"save_memory": "state_write"}
+BUILTIN_EFFECTS = {
+    "think": "read",
+    "save_memory": "state_write",
+    "recall_memories": "read",
+    "done": "read",
+}

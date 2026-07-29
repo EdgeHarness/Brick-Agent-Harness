@@ -13,11 +13,59 @@ changes only. The canonical acceptance gates in
 `R1` remain partial and unpassed. No entry below should be read as evidence that
 the research instrument is valid or that any measured effect exists.
 
+## [0.3.1] — 2026-07-29
+
+Corrective release after an independent audit of `0.3.0`. It tightens the S2/S3
+contracts and reconciles documentation with the code. It does not complete S4,
+S5, S5F, G0, or R1.
+
+### Fixed
+
+- Domain packs must explicitly classify every registered tool in
+  `ActionPolicy`; missing or extra classifications now fail pack construction
+  instead of silently treating an omitted mutating tool as read-only. Attempt
+  contexts also reject a policy missing any tool on their active surface.
+- Benchmark result metadata records the canonical `ToolRegistry` order actually
+  rendered to the model, not a pack author's possibly reordered selection.
+- The report rejects missing domain/version identity, unknown conditions,
+  incomplete or impossible metrics, invalid tool/capability/check lists, and
+  duplicate records. It escapes untrusted table labels and no longer invents
+  `office_demo@unversioned` provenance for incomplete rows.
+- The shared agent CLI uses a real argument parser. `--help`, misspelled flags,
+  missing flag values, and non-positive call budgets now stop before any model
+  request.
+- Windows launchers discover Python or honor `PYTHON`; Agent Lab launchers
+  install from the checked-in lock rather than unpinned package names.
+- Agent Lab resolves child components beneath trusted canonical roots and
+  rejects direct, same-prefix, and child-symlink escapes observed at lookup
+  time. This is not root-integrity enforcement, race-free containment,
+  authentication, CSRF protection, or an OS sandbox.
+- Publication tests cover additional runtime/key paths and selected
+  high-confidence credential formats. They remain a narrow automated check,
+  not proof that arbitrary secrets or private data are absent.
+- Both training generators' serving prompts are now checked against the live
+  office harness prompt.
+
+### Documentation
+
+- Reconciled the benchmark, Agent Lab, training, agent, architecture,
+  remediation, project-guide, setup, security, and release documents with the
+  implemented S0–S3 state.
+- Clarified that S4 is incomplete rather than literally untouched, `0.2.0` was
+  not a standalone tagged release, the interleaving test proves reentrancy
+  rather than thread safety, and generated training corpora are ignored local
+  artifacts rather than shipped data.
+- Recorded unresolved publication governance: the EdgeHarness repository is
+  canonical, but license selection, branch protection, and cleanup of a
+  divergent legacy public repository require owner action.
+
 ## [0.3.0] — 2026-07-28
 
 Implements packages **S2** (explicit runtime contracts) and **S3** (domain-pack
 extraction and a second portability pack). Scope was limited to those packages;
-`S4` and later remain unstarted.
+S4 remains incomplete. Limited path namespacing, resume-key, and report
+groundwork landed while migrating S3 callers, but none of S4's transactional,
+crash-recovery, stale-artifact, or concurrent-writer exit checks passed.
 
 The office demo's behavior is preserved deliberately: both office system prompts
 are byte-identical to the pre-extraction baseline (`d4278c7`), verified by SHA-256
@@ -88,9 +136,10 @@ in `tests/test_runtime_architecture.py`.
   namespaced.
 - `finetune/gen_toolcall_data.py` builds its system prompt from the same
   serving-path builder as the harness rather than a duplicated string.
-- `README.md`, `ARCHITECTURE.md`, `PROJECT_SETUP.md`, `bench/README.md`,
-  `agents/README.md`, and `webui/README.md` describe the implemented contracts,
-  the preserved office layout, and the remaining defects.
+- `README.md`, `ARCHITECTURE.md`, `PROJECT_SETUP.md`, and the agent
+  documentation describe the implemented contracts and preserved office
+  layout. Benchmark, Agent Lab, training, and remediation documentation was
+  subsequently reconciled in `0.3.1`.
 
 ### Removed
 
@@ -170,8 +219,8 @@ Unchanged and still open after this release:
 ## [0.2.0] — 2026-07-28
 
 Implements packages **S0** (offline test and CI foundation) and **S1**
-(behavior characterization). Committed but never tagged or published; its
-contents reach a published tag as part of `0.3.0`.
+(behavior characterization). This was never tagged as a standalone release; the
+commit first became publicly reachable as an ancestor of `v0.3.0`.
 
 ### Added
 
@@ -189,8 +238,10 @@ contents reach a published tag as part of `0.3.0`.
   and execution, world and memory behavior, agent-loop boundaries, and every
   existing grader. Tests that encode behavior documented as defective are
   marked, so a later fix must change a test deliberately rather than silently.
-- A test asserting that no secret, runtime memory, workspace, log, generated
-  training corpus, or model weight file is tracked by Git.
+- A tracked-path policy test for runtime memory, workspaces, logs, generated
+  training corpora, model artifacts, and common sensitive filenames. The
+  narrower high-confidence content scan was added in `0.3.1`; neither replaces
+  publication review or a dedicated secret scanner.
 - `SECURITY.md` describing the supported scope, reporting expectations, and the
   controls this repository does not implement.
 
@@ -223,6 +274,7 @@ agent runtime memory, generated training corpora with unresolved provenance,
 benchmark outputs, model artifacts, credentials, and the original client contact
 address.
 
+[0.3.1]: https://github.com/EdgeHarness/Brick-Agent-Harness/releases/tag/v0.3.1
 [0.3.0]: https://github.com/EdgeHarness/Brick-Agent-Harness/releases/tag/v0.3.0
 [0.2.0]: https://github.com/EdgeHarness/Brick-Agent-Harness/commit/d8cbd7a
 [0.1.0]: https://github.com/EdgeHarness/Brick-Agent-Harness/releases/tag/v0.1.0

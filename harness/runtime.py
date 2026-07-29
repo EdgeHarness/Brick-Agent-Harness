@@ -111,6 +111,37 @@ class ActionPolicy:
     def is_mutating(self, tool_name):
         return self.effect(tool_name) != "read"
 
+    def validate_tools(self, tool_names):
+        """Require classifications for every tool active in one attempt."""
+        missing = set(tool_names) - set(self.effect_by_tool)
+        if missing:
+            raise ValueError(
+                "action policy is missing classifications for active tools: "
+                + ", ".join(sorted(missing))
+            )
+
+    def validate_registry(self, tool_names):
+        """Require one explicit effect classification per registered tool."""
+        registered = set(tool_names)
+        classified = set(self.effect_by_tool)
+        missing = registered - classified
+        unknown = classified - registered
+        if missing or unknown:
+            details = []
+            if missing:
+                details.append(
+                    "missing classifications: " + ", ".join(sorted(missing))
+                )
+            if unknown:
+                details.append(
+                    "unknown classifications: " + ", ".join(sorted(unknown))
+                )
+            raise ValueError(
+                "action policy must classify exactly the domain registry ("
+                + "; ".join(details)
+                + ")"
+            )
+
     def with_effects(self, effects, confirmer=None):
         merged = dict(self.effect_by_tool)
         merged.update(effects)
@@ -153,6 +184,7 @@ class AttemptContext:
             raise TypeError("tools must be a ToolRegistry")
         if not isinstance(self.policy, ActionPolicy):
             raise TypeError("policy must be an ActionPolicy")
+        self.policy.validate_tools(self.tools.names())
         if not isinstance(self.hooks, RunHooks):
             raise TypeError("hooks must be RunHooks")
         self.workdir = Path(self.workdir)

@@ -1,6 +1,6 @@
 # Project Guide
 
-Last reconciled with the local project tree: 28 July 2026.
+Last reconciled with the local project tree: 29 July 2026.
 
 Related material:
 
@@ -15,7 +15,10 @@ Related material:
 Brick is currently a **synthetic research scaffold** for testing tool-using local language
 models. It contains:
 
-- a simulated office world;
+- explicit per-attempt runtime, registry, policy, hook, and domain-pack
+  contracts;
+- `office_demo@0.1.0`, a simulated office world, and
+  `counter_demo@0.1.0`, a structural portability fixture;
 - raw and harnessed agent loops;
 - simulated email, calendar, messaging, and reminder tools;
 - local document-generation tools;
@@ -394,11 +397,12 @@ backups.
 
 Fine-tuning is last, not a prerequisite.
 
-The two current 1,200-row datasets differ, contain substantial exact duplication, cover
-only part of the tool surface, and do not provide a defensible held-out evaluation.
-Repair conversations are also trained in a way that can reward the deliberately bad
-assistant call. Base-model and conversion-tool revisions are not fully pinned, and
-conversion failure is not reliably propagated.
+The default 1,200-row outputs of the two generators differ, contain substantial exact
+duplication, cover only part of the tool surface, and do not provide a defensible
+held-out evaluation. Generated JSONL files are ignored local artifacts; no corpus is
+shipped. Repair conversations are also trained in a way that can reward the
+deliberately bad assistant call. Base-model and conversion-tool revisions are not fully
+pinned, and conversion failure is not reliably propagated.
 
 Training is justified only after a frozen evaluation identifies a stable failure mode
 that:
@@ -415,20 +419,28 @@ base model at recorded quality and resource costs.
 
 ## 12. Repository and documentation governance
 
-Brick is the local system under examination. The EdgeHarness repository is not present
-in this workspace, so earlier detailed claims about its runtime behavior, saved results,
-line counts, and portability are not independently verified here. Before reusing code
-or citing evidence from it:
+This workspace is the checkout of the canonical public repository,
+[`EdgeHarness/Brick-Agent-Harness`](https://github.com/EdgeHarness/Brick-Agent-Harness).
+The audit verified the released `bf8aabf` tree and its successful Python
+3.9–3.13 CI. This `0.3.1` tree passes the local offline suite; the per-commit
+GitHub Actions result is the authoritative cross-version evidence. That
+establishes repository state, not research validity.
 
-1. pin the exact commit;
-2. run its tests or add characterization tests;
-3. verify licenses and dependencies;
-4. reproduce any result under a documented protocol;
-5. port only a bounded capability with an explicit acceptance test.
+Repository governance is still incomplete:
 
-Repository ownership, authorship, and institutional policy should be agreed before
-external publication or client operation. Use protected branches, reviewed changes,
-continuous integration, and no secrets or private client artifacts in Git.
+- a divergent legacy public repository remains active and contains runtime/training
+  artifacts excluded from the canonical history; do not merge it wholesale or push
+  local legacy refs with `--all` or `--mirror`;
+- the owner must archive, privatize, or sanitize that legacy repository and declare the
+  EdgeHarness location canonical everywhere;
+- no reuse license has been selected, so external reuse rights must not be inferred;
+- `main` is not protected and CI is not yet a required merge check; and
+- current commits and tags are unsigned.
+
+Repository ownership, authorship, licensing, signing identity, and institutional policy
+must be agreed before external research publication or client operation. Require
+reviewed changes and passing continuous integration, prohibit force pushes to `main`,
+and keep secrets or private client artifacts out of every public copy.
 
 Documentation is part of the instrument. When behavior changes, update code, tests,
 version stamps, and relevant documentation in the same reviewed change. A “current

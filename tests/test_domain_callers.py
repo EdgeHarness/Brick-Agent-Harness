@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 import subprocess
 import sys
@@ -54,12 +55,16 @@ def result_row(
         "caps": [capability],
         "tools": tools or ["done"],
         "score": 1.0,
+        "checks": [["expected outcome", True]],
+        "finished": True,
         "parse_failures": 0,
         "invalid_calls": 0,
         "tool_errors": 0,
         "llm_calls": 1,
+        "prompt_tokens": 1,
         "wall_seconds": 0.1,
         "output_tokens": 1,
+        "error": None,
         "max_calls": 4,
     }
 
@@ -109,14 +114,20 @@ def test_agent_flag_precedence_and_domain_overlay_surface(tmp_path):
             "counter_demo",
             "--with-domain",
             "--max-calls",
-            "0",
+            "2",
             "increment",
         ]
     )
     assert options["domain_name"] == "counter_demo"
     assert options["include_domain"] is True
-    assert options["max_calls"] == 0
+    assert options["max_calls"] == 2
     assert task == "increment"
+
+    options, task = shared_runner.parse_flags(
+        ["increment", "--domain", "counter_demo", "twice"]
+    )
+    assert options["domain_name"] == "counter_demo"
+    assert task == "increment twice"
 
     root = tmp_path / "root"
     root.mkdir()
@@ -131,6 +142,31 @@ def test_agent_flag_precedence_and_domain_overlay_surface(tmp_path):
     assert profile is counter.prompt_profile
     assert str(root) in rules
     assert resolved == str(root)
+
+
+def test_agent_cli_rejects_bad_flags_and_help_never_starts_a_model():
+    for argv in (
+        ["--unknown"],
+        ["--max-c", "2"],
+        ["--domain"],
+        ["--root"],
+        ["--max-calls", "0"],
+        ["--max-calls", "not-an-int"],
+    ):
+        with pytest.raises(SystemExit):
+            shared_runner.parse_flags(argv)
+
+    completed = subprocess.run(
+        [sys.executable, "agents/1b/run_agent.py", "--help"],
+        cwd=PROJECT,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert completed.returncode == 0
+    assert "--domain" in completed.stdout
+    assert "127.0.0.1:11434/api/chat" not in completed.stderr
 
 
 def test_runtime_paths_preserve_legacy_office_and_namespace_other_domains(
@@ -212,6 +248,13 @@ def test_benchmark_rejects_slug_collisions_before_output_mutation(
 def test_counter_domain_runs_through_generic_benchmark(
     monkeypatch, tmp_path
 ):
+    base = load_domain("counter_demo")
+    reordered_task = replace(
+        base.tasks[0],
+        tool_names=tuple(reversed(base.tasks[0].tool_names)),
+    )
+    domain = replace(base, tasks=(reordered_task,))
+    monkeypatch.setattr(run_bench, "load_domain", lambda _name: domain)
     monkeypatch.setattr(run_bench, "LLM", CounterBenchLLM)
     outdir = tmp_path / "results"
     run_bench.main(
@@ -235,6 +278,10 @@ def test_counter_domain_runs_through_generic_benchmark(
     assert records[0]["domain"] == "counter_demo"
     assert records[0]["domain_version"] == "0.1.0"
     assert records[0]["score"] == 1.0
+    assert records[0]["tools"] == list(
+        domain.registry_for(reordered_task).names()
+    )
+    assert records[0]["tools"] != list(reordered_task.tool_names)
     transcripts = list(
         (outdir / "counter_demo" / "0.1.0").rglob("transcript.md")
     )
@@ -284,6 +331,43 @@ def test_report_rejects_duplicate_identity_and_incompatible_delta():
     }
 
 
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        (lambda row: row.pop("domain"), "missing fields"),
+        (lambda row: row.pop("domain_version"), "missing fields"),
+        (lambda row: row.pop("invalid_calls"), "missing fields"),
+        (lambda row: row.pop("output_tokens"), "missing fields"),
+        (lambda row: row.update(condition="typo"), "invalid condition"),
+        (lambda row: row.update(score=float("nan")), "invalid score"),
+        (lambda row: row.update(max_calls=0), "invalid max_calls"),
+        (
+            lambda row: row.update(llm_calls=row["max_calls"] + 1),
+            "exceeds max_calls",
+        ),
+        (lambda row: row.update(tools=["done", "done"]), "invalid tools"),
+    ],
+)
+def test_report_rejects_missing_or_malformed_identity_and_metrics(
+    mutation, message
+):
+    row = result_row("counter_demo", "0.1.0", "raw")
+    mutation(row)
+    with pytest.raises(ValueError, match=message):
+        report.build_report([row])
+
+
+def test_report_escapes_html_in_untrusted_labels():
+    row = result_row("counter_demo", "0.1.0", "raw")
+    row["model"] = "<img src=x onerror=alert(1)>"
+    row["caps"] = ["<b>counter</b>"]
+    markdown, _ = report.build_report([row])
+    assert "<img" not in markdown
+    assert "<b>" not in markdown
+    assert "&lt;img src=x onerror=alert(1)&gt;" in markdown
+    assert "&lt;b&gt;counter&lt;/b&gt;" in markdown
+
+
 def test_training_system_prompt_uses_serving_builder():
     domain = load_domain("office_demo")
     expected = build_harness_system(
@@ -295,6 +379,9 @@ def test_training_system_prompt_uses_serving_builder():
     )
     assert gen_toolcall_data.DOMAIN is domain
     assert gen_toolcall_data.SYSTEM == expected
+    assert (
+        PROJECT / "training_scripts/system_prompt.txt"
+    ).read_text(encoding="utf-8") == expected
 
 
 def test_web_workspace_consumes_both_domain_envelopes(
@@ -333,6 +420,29 @@ def test_web_runner_rejects_agent_traversal():
     for value in ("../8b", r"..\\8b", "/tmp", ""):
         with pytest.raises(ValueError):
             web_runner.resolve_agent_folder(value)
+
+
+def test_web_path_resolution_rejects_prefix_and_symlink_escape(tmp_path):
+    root = tmp_path / "static"
+    sibling = tmp_path / "static-private"
+    root.mkdir()
+    sibling.mkdir()
+    (root / "ok.txt").write_text("ok", encoding="utf-8")
+    (sibling / "secret.txt").write_text("secret", encoding="utf-8")
+
+    assert Path(web_server._resolve_under(root, "ok.txt")) == (
+        root / "ok.txt"
+    ).resolve()
+    with pytest.raises(ValueError, match="outside"):
+        web_server._resolve_under(root, "..", "static-private", "secret.txt")
+
+    link = root / "linked"
+    try:
+        link.symlink_to(sibling, target_is_directory=True)
+    except (NotImplementedError, OSError):
+        return
+    with pytest.raises(ValueError, match="outside"):
+        web_server._resolve_under(root, "linked", "secret.txt")
 
 
 def test_frontend_passes_and_locks_selected_domain():

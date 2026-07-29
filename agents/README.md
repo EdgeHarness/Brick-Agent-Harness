@@ -60,14 +60,10 @@ From the project root, a portable direct invocation is:
 python agents/8b/run_agent.py "List my simulated Wednesday meetings"
 ```
 
-The supplied per-agent `run.ps1` files are Windows-specific and hardcode:
-
-```text
-C:\Users\Lab User\SAIL\python\python.exe
-```
-
-They need editing or replacement on other machines. The real-file shell tool
-also invokes `powershell.exe`, so shell mode is not portable to macOS or Linux.
+The supplied per-agent `run.ps1` files discover `python` or the Windows `py`
+launcher and honor a `PYTHON` environment-variable override. The real-file
+shell tool itself still invokes `powershell.exe`, so shell mode is not portable
+to macOS or Linux.
 
 ## Flags
 
@@ -82,6 +78,10 @@ also invokes `powershell.exe`, so shell mode is not portable to macOS or Linux.
 | `--small TAG` | assigns planning and verification to another tag |
 | `--deep TAG` | enables tier/router mode and configures a deep model; no current code dispatches a deep call |
 | `--max-calls N` | sets a validated positive successful-LLM-call ceiling |
+| `--help` | prints usage and exits before constructing a model client |
+
+Unknown flags, missing flag values, and non-positive `--max-calls` values are
+rejected rather than being passed to the model as task text.
 
 ## Safety limits
 

@@ -1,4 +1,5 @@
 import pathlib
+import re
 import subprocess
 
 import pytest
@@ -33,7 +34,7 @@ def test_pep621_metadata_matches_the_locked_direct_dependencies():
     ]
     test_dependencies = ["pytest==8.3.5"]
     assert project["name"] == "brick-agent-harness"
-    assert project["version"] == "0.3.0"
+    assert project["version"] == "0.3.1"
     assert project["requires-python"] == ">=3.9,<3.14"
     assert project["dependencies"] == runtime_dependencies
     assert project["optional-dependencies"]["test"] == test_dependencies
@@ -85,6 +86,10 @@ def test_sensitive_and_runtime_artifacts_are_not_tracked():
     runtime_segments = ("/memory/", "/workspace/", "/logs/")
     sensitive_suffixes = (
         ".private.md",
+        ".pem",
+        ".key",
+        ".p12",
+        ".pfx",
         ".gguf",
         ".safetensors",
         ".onnx",
@@ -94,13 +99,62 @@ def test_sensitive_and_runtime_artifacts_are_not_tracked():
         ".pth",
     )
 
-    offenders = [
-        path
-        for path in tracked
-        if path == ".env"
-        or (path.startswith(".env.") and path != ".env.example")
-        or path.startswith(runtime_prefixes)
-        or any(segment in f"/{path}" for segment in runtime_segments)
-        or path.endswith(sensitive_suffixes)
-    ]
+    offenders = []
+    for path in tracked:
+        folded_path = path.casefold()
+        filename = pathlib.PurePosixPath(folded_path).name
+        if (
+            filename == "brix.md"
+            or filename == ".env"
+            or (
+                filename.startswith(".env.")
+                and filename != ".env.example"
+            )
+            or folded_path.startswith(runtime_prefixes)
+            or any(
+                segment in f"/{folded_path}"
+                for segment in runtime_segments
+            )
+            or "/runtime/" in f"/{folded_path}"
+            or folded_path.endswith(sensitive_suffixes)
+        ):
+            offenders.append(path)
     assert offenders == []
+
+    # This is deliberately a narrow high-confidence credential scan, not a
+    # substitute for publication review or a dedicated secret-scanning tool.
+    credential_patterns = (
+        re.compile(
+            rb"-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----"
+        ),
+        re.compile(rb"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),
+        re.compile(rb"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),
+        re.compile(rb"\bsk-[A-Za-z0-9_-]{20,}\b"),
+        re.compile(rb"\bxox[baprs]-[A-Za-z0-9-]{20,}\b"),
+        re.compile(rb"\bAIza[0-9A-Za-z_-]{35}\b"),
+    )
+    content_offenders = []
+    for relative in tracked:
+        candidate = PROJECT_ROOT / relative
+        blob = (
+            str(candidate.readlink()).encode("utf-8")
+            if candidate.is_symlink()
+            else candidate.read_bytes()
+        )
+        if b"\0" in blob:
+            continue
+        if any(pattern.search(blob) for pattern in credential_patterns):
+            content_offenders.append(relative)
+    assert content_offenders == []
+
+
+def test_public_launchers_do_not_embed_the_original_machine_path():
+    launchers = [
+        PROJECT_ROOT / "Agent Lab.bat",
+        *(PROJECT_ROOT / "agents").glob("*/run.ps1"),
+    ]
+    assert launchers
+    for launcher in launchers:
+        source = launcher.read_text(encoding="utf-8")
+        assert r"C:\Users\Lab User" not in source
+        assert "run_agent.py" in source or "webui.server" in source

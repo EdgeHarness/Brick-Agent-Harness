@@ -84,14 +84,16 @@ result produced by this instrument is retained evidence.
 
 | Package | Status | Evidence |
 |---|---|---|
-| S0 | Implemented | `pyproject.toml`, `requirements*.txt`, `.github/workflows/ci.yml` on Python 3.9–3.13, an autouse network guard, and a tracked-artifact scan (`tests/test_offline_foundation.py`) |
+| S0 | Implemented | `pyproject.toml`, `requirements*.txt`, a successful `.github/workflows/ci.yml` matrix on Python 3.9–3.13, an autouse common-Python-network guard, and tracked-path/high-confidence-credential checks (`tests/test_offline_foundation.py`) |
 | S1 | Implemented | Scripted-model characterization of parsing, normalization, tools, world, memory, loop boundaries, and every current grader, with known defects locked rather than silently fixed |
-| S2 | Implemented | `RunConfig`, `RunHooks`, `ActionPolicy`, `AttemptContext`, `ToolRegistry`; no supported runtime path reads a mutable module-level registry, clock, hook, budget, or policy |
-| S3 | Implemented | `domains/office_demo` and `domains/counter_demo` run through one core; office system prompts are byte-identical to the pre-extraction baseline; only the two named deprecation shims import a domain from `harness/` |
-| S4–S18, S5F | Not started | — |
+| S2 | Implemented | `RunConfig`, `RunHooks`, `ActionPolicy`, `AttemptContext`, `ToolRegistry`; packs require total effect-policy coverage; no supported runtime path reads a mutable module-level registry, clock, hook, budget, or policy |
+| S3 | Implemented | `domains/office_demo` and `domains/counter_demo` run through one core; office system prompts are byte-identical to the pre-extraction baseline; the benchmark records and Agent Lab emits the canonical executed tool surface; only the two named deprecation shims import a domain from `harness/` |
+| S4, S5F | Not completed | S3 migration added limited domain/version path and report checks, and `0.3.1` hardened selected web paths. Transactionality, crash/resume isolation, filesystem-overlay containment, fail-closed confirmation, and package exit tests remain unimplemented. |
+| S5–S18 | Not started | — |
 
-The currently authorized implementation scope is **S0 through S3**. S4, S5F, and later
-packages remain out of scope until S0–S3 are reviewed and continuation is explicit.
+The currently authorized implementation scope is **S0 through S3 plus audit
+corrections to those contracts**. S4, S5F, and later package completion remains
+out of scope until S0–S3 are reviewed and continuation is explicit.
 
 ## 3. Workstreams and dependencies
 
@@ -431,9 +433,9 @@ Do not promise an integration duration before the spike.
 ### R4.2 Generalization packs
 
 Add a second internal domain only if its tasks and ground truth can be independently
-specified. External EdgeHarness tasks may be candidates, but first pin its commit,
-verify licenses and source evidence, and reconstruct the tasks without importing
-uncontrolled state.
+specified. Tasks from another harness or the divergent legacy Brick repository may be
+candidates, but first pin the exact source commit, verify licenses and source evidence,
+and reconstruct the tasks without importing uncontrolled state or history.
 
 Report each pack separately. Compare within-pack condition effects; do not average
 absolute scores across packs of different difficulty.
@@ -664,15 +666,17 @@ The research scaffold and private Brix configuration/data remain separate artifa
 S0–S3 are implemented. The dependency/CI baseline, offline characterization suite,
 explicit runtime contracts, and two-domain extraction exist and are covered by the
 offline suite. G0 and R1 are nonetheless still open, because the remaining G0 items
-(machine-readable version manifest, capability defaults, launcher labeling review) and
-the remaining R1 subsections were never in the S0–S3 scope.
+(legacy-repository containment, license and branch governance, a machine-readable
+version manifest, capability defaults, and launcher labeling review) and the remaining
+R1 subsections were never completed by the S0–S3 scope.
 
-The following work is unblocked:
+The following work is eligible for a later, explicitly authorized package:
 
-1. Finish the outstanding G0 items: a machine-readable version manifest covering harness,
-   tasks, graders, domain pack, analysis, dependencies, model digest, runtime, and commit;
-   and a review that every real filesystem, shell, and external-message capability is
-   disabled by default.
+1. Finish the outstanding G0 items: archive/private/sanitize the divergent legacy
+   public repository; choose a license; protect `main` and require CI; add a
+   machine-readable version manifest covering harness, tasks, graders, domain pack,
+   analysis, dependencies, model digest, runtime, and commit; and review that every
+   real filesystem, shell, and external-message capability is disabled by default.
 2. Implement S4 attempt identity, state/artifact/memory isolation, transactional result
    commit, safe resume, and separated failure statuses.
 3. Implement S5 strict graders with golden positive, minimally wrong, extra-action,

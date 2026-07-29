@@ -31,11 +31,12 @@ cd agents\32b
 .\run.ps1 "List my simulated Wednesday meetings"
 ```
 
-`run_agent.py` is a thin shim over the shared runner. `run.ps1` hardcodes the
-original lab Python path. Direct invocation uses the root package manifest and
-pinned requirements; the transitive lock has no hashes and installation may
-need network/cache access. Ollama, sufficient local resources, and the
-configured model tag are prerequisites the runner does not validate in advance.
+`run_agent.py` is a thin shim over the shared runner. `run.ps1` discovers
+`python`/`py` and honors the `PYTHON` environment variable. Install from the
+root pinned requirements first; the transitive lock has no hashes and
+installation may need network/cache access. Ollama, sufficient local resources,
+and the configured model tag are prerequisites the runner does not validate in
+advance.
 
 ## Scope and safety
 

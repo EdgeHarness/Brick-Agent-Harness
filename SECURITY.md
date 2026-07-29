@@ -12,8 +12,17 @@ change without backward compatibility.
 Version `0.2.0` adds offline characterization tests and continuous integration.
 Version `0.3.0` adds explicit runtime and domain-pack interfaces. Neither
 constitutes a security review or acceptance of G0/R1, and the filesystem and
-process hardening tracked as `S5F` is not yet implemented. No release is
+process hardening tracked as `S5F` is not complete. Version `0.3.1` tightens
+effect-policy coverage, publication checks, selected web path containment and
+public launchers; it is still not a security-reviewed release. No release is
 approved for real Brix data.
+
+Only
+[`EdgeHarness/Brick-Agent-Harness`](https://github.com/EdgeHarness/Brick-Agent-Harness)
+is canonical. A divergent legacy public repository contains artifacts excluded
+by this policy and is not a supported release source. Its archive, privacy, or
+sanitization requires owner action; do not merge or mirror its history into the
+canonical repository.
 
 ## Reporting a vulnerability
 

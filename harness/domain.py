@@ -207,6 +207,7 @@ class DomainPack:
                 or not callable(think["run"])
             ):
                 raise ValueError("domain redefines reserved tool 'think'")
+        self.default_policy.validate_registry(registry_names)
         if not all(isinstance(task, TaskSpec) for task in self.tasks):
             raise TypeError("tasks must contain TaskSpec values")
         task_ids = [task.id for task in self.tasks]

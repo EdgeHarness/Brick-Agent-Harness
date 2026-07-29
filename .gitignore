@@ -1,11 +1,16 @@
 # --- Project-specific ---
 # Internal design doc — not for the repo
 LocalAgentArchitecture.md
+/brix.md
 
 # Local agent/editor configuration and private working material
 .claude/
 private/
 *.private.md
+*.pem
+*.key
+*.p12
+*.pfx
 .env
 .env.*
 !.env.example

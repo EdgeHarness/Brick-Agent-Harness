@@ -203,7 +203,9 @@ def main(argv=None):
                     "condition": condition,
                     "task": task.id,
                     "caps": list(task.capabilities),
-                    "tools": list(task.tool_names),
+                    # Record the canonical registry order actually rendered in
+                    # the prompt, not the pack author's selection order.
+                    "tools": list(attempt.tools.names()),
                     "score": round(score, 4),
                     "checks": [
                         [description, bool(ok)]

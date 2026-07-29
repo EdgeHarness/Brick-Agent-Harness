@@ -30,9 +30,9 @@ reminders are local JSON records. No email is delivered, no reminder fires, and
 no external room or calendar is reserved. PowerPoint and Excel outputs are real
 files under the selected agent's `workspace/files/`.
 
-The UI currently displays hardcoded qualitative speed/reliability blurbs for
-model cards. Those strings are not measurements and should be ignored. No
-committed repeated benchmark establishes a model ranking.
+The UI displays neutral parameter-tier hints for model cards and tells the user
+to measure fit, quality and latency locally. Those hints are not measurements.
+No committed repeated benchmark establishes a model ranking.
 
 ## Start
 
@@ -49,12 +49,12 @@ http://127.0.0.1:8765
 ```
 
 `Agent Lab.command` on macOS and `Agent Lab.bat` on Windows are convenience
-launchers. Both may install unpinned `requests`, `python-pptx`, and `openpyxl`
-packages into the selected Python environment, potentially outside an isolated
-virtual environment. The macOS launcher also attempts
-to start Ollama if its health check fails; the Windows launcher does not start
-Ollama. There is no root runtime dependency manifest, virtual-environment setup,
-or lock file.
+launchers. Both may install the checked-in `requirements-lock.txt` into the
+selected Python environment, potentially outside an isolated virtual
+environment. The lock has exact versions but no hashes, so this is not a
+cryptographic supply-chain boundary. The macOS launcher also attempts to start
+Ollama if its health check fails; the Windows launcher does not start Ollama.
+Neither launcher creates a virtual environment.
 
 Model downloads initiated by **Get it** call Ollama's pull endpoint and may cause
 network downloads. `--shell` can also execute network-capable commands. Therefore
@@ -82,9 +82,12 @@ Sensitive and destructive endpoints include:
   without tying the answer to an authenticated browser session;
 - `POST /api/reset` — deletes selected state, memory, generated files, or logs
   without an independent server-side confirmation;
-- `POST /api/reveal` — accepts an unchecked `sub` path; `..` components can
-  escape the selected agent folder and ask the operating system to reveal
-  another existing path;
+- `POST /api/reveal` — asks the operating system to reveal a path under the
+  selected runtime state; child-component resolution beneath a trusted
+  canonical root rejects direct, same-prefix, and child-symlink escapes
+  observed at lookup time, but does not establish root integrity or race-free
+  containment, and any caller can still reveal allowed paths because the API
+  is unauthenticated;
 - `GET /api/pull` — performs a state-changing, potentially large model download;
 - workspace, log, preview, download, status, and event endpoints — expose local
   agent data to any caller that can reach the server.
@@ -110,10 +113,11 @@ server on loopback does not make filesystem or shell execution safe.
 
 ## Process and Stop behavior
 
-Only one runner subprocess is accepted at a time. This isolates the harness's
-process-global registry and hooks, but it does **not** guarantee one model in RAM:
-Ollama controls model residency, uses keep-alive settings, and tier mode may use
-more than one tag.
+Only one runner subprocess is accepted at a time. Runtime configuration,
+registries and hooks are already attempt-scoped; the process boundary provides
+lifecycle/crash containment for the active run. It does **not** guarantee one
+model in RAM: Ollama controls model residency, uses keep-alive settings, and
+tier mode may use more than one tag.
 
 **Stop** calls `terminate()` on the runner process. It does not manage an OS
 process group, so shell-created child processes may survive. Real-file side

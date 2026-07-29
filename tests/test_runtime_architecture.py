@@ -267,6 +267,50 @@ def test_domain_contract_rejects_bad_versions_registry_and_reserved_tools():
         replace(pack, tasks=(missing_done_task,))
 
 
+def test_domain_policy_must_classify_every_registered_tool_exactly():
+    for name in ("office_demo", "counter_demo"):
+        pack = load_domain(name)
+        assert set(pack.default_policy.effect_by_tool) == set(
+            pack.registry.names()
+        )
+
+    pack = load_domain("counter_demo")
+    missing = dict(pack.default_policy.effect_by_tool)
+    missing.pop("increment_counter")
+    with pytest.raises(ValueError, match="missing classifications"):
+        replace(pack, default_policy=ActionPolicy(missing))
+
+    unknown = dict(pack.default_policy.effect_by_tool)
+    unknown["unregistered_tool"] = "state_write"
+    with pytest.raises(ValueError, match="unknown classifications"):
+        replace(pack, default_policy=ActionPolicy(unknown))
+
+
+def test_attempt_policy_must_classify_every_active_tool(tmp_path):
+    pack = load_domain("counter_demo")
+    active_tools = pack.registry.selected(("increment_counter", "done"))
+    attempt = make_attempt(
+        tmp_path,
+        "counter_demo",
+        tools=active_tools,
+        policy=pack.default_policy,
+        suffix="classified-subset",
+    )
+    assert attempt.tools.names() == ("increment_counter", "done")
+
+    incomplete = dict(pack.default_policy.effect_by_tool)
+    incomplete.pop("increment_counter")
+    with pytest.raises(
+        ValueError, match="missing classifications for active tools"
+    ):
+        make_attempt(
+            tmp_path,
+            "counter_demo",
+            tools=active_tools,
+            policy=ActionPolicy(incomplete),
+        )
+
+
 def test_domain_contract_rejects_duplicate_capabilities_and_presets():
     pack = load_domain("counter_demo")
     with pytest.raises(ValueError, match="domain name"):

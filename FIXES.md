@@ -4,15 +4,35 @@ This is the prioritized plan for turning the current synthetic research
 scaffold into a trustworthy measuring instrument and, separately, building a
 safe Brix workflow.
 
-All items below are **pending unless a code change and its acceptance test are
-linked from this document**. Describing a fix here does not mean it is
-implemented.
+All items below remain pending except for the explicitly marked partial work in
+the status ledger. Describing a target control does not mean its acceptance
+criteria passed.
 
 The canonical gate names and dependencies live in
 [`PROJECT_SETUP.md`](PROJECT_SETUP.md): G0 for repository truth and
 containment, R1–R5 for research, and P0–P4 for the Brix product. This file is the
 code-level defect register mapped to those gates; it does not define a second
 gate taxonomy.
+
+### Implementation status ledger
+
+This ledger prevents a still-valid defect description from being mistaken for
+the current implementation state. `Partial` means useful prerequisites landed;
+it does not satisfy the item's acceptance criteria.
+
+| Item | Status at 0.3.1 | Implemented evidence and remaining boundary |
+|---|---|---|
+| B-01 filesystem/shell | Pending | Per-attempt overlays exist, but real-path/TOCTOU containment, safe-root refusal, fail-closed confirmation, and process sandboxing do not. |
+| B-02 stale artifacts | Pending | Domain/version path components exist, but task directories are reused and have no attempt manifest. |
+| B-03 result integrity | Pending | Resume identity includes domain/version and report rows are validated, but the ledger is non-atomic and failures are still conflated. |
+| B-04 web control plane | Partial | `0.3.1` uses canonical child-component containment for static/reveal/log/generated-file lookups under trusted resolved roots. Root integrity, race-free access, authentication, Origin/CSRF checks, typed bodies, run-bound confirmation, safe process groups, and reset coordination remain absent. |
+| B-05 runtime state | Partial | Canonical `main` tracks no runtime memory and ignores agent runtime paths. Persistent state still lives under the source tree, malformed memory handling is incomplete, and a divergent legacy public repository still exposes excluded artifacts. |
+| R-01 offline tests | Partial | The offline suite, CI matrix, prompt parity, caller, and architecture tests exist. Adversarial parser/grader/isolation/resume/atomic-write/security coverage remains incomplete. |
+| R-02 through R-05 | Pending | Typed semantic schemas, conservative parsing, fail-closed completion, and strict graders are not implemented. |
+| R-06 isolation/ablation | Partial | Attempt dependencies and two domain packs are explicit; benchmark task memory, reused directories, fixed ordering, and bundled mechanisms remain. |
+| R-07 through R-10 | Pending | Complete provenance, defensible baselines, independent instances, and a controlled model series do not exist. |
+| R-11 reporting | Partial | Single-condition rows, domain/version strata, duplicate rejection, core record validation, and incompatible-surface suppression exist; strict success, harmful effects, instrument-error strata, and complete provenance do not. |
+| R-12 explicit runtime | Partial | Runtime objects, thin per-model shims, portable launchers, and single-threaded nested domain isolation exist. Thread/concurrent-run safety and duplicated CLI/web construction are not proven or removed. |
 
 Do not preserve comparability with known-invalid historical results. There are
 no committed results, and correcting the instrument is more important than
@@ -134,9 +154,11 @@ writers cannot corrupt or overwrite one another.
 
 Loopback binding is not authentication. The server has no session token,
 Origin/Host validation or CSRF defense; accepts state-changing requests without
-checking `Content-Type`; exposes model pulling as GET; permits unchecked
-`/api/reveal` subpaths; and does not coordinate reset/confirm/stop with a
-specific run capability.
+checking `Content-Type`; exposes model pulling as GET; and does not coordinate
+reset/confirm/stop with a specific run capability. Version `0.3.1` resolves
+child components under trusted canonical roots and rejects direct, same-prefix,
+and child-symlink escapes observed at lookup time. It does not establish root
+integrity or race-free access, and is not control-plane authorization.
 
 **Change**
 
@@ -164,8 +186,11 @@ child process and no concurrent writer.
 **Finding**
 
 Model-authored memory is untrusted, potentially private runtime data. A memory
-fact is currently tracked under an agent folder, and the ignore rules do not
-fully exclude runtime memory/state/logs.
+fact was tracked in the legacy history. Canonical EdgeHarness `main` no longer
+tracks agent memory and now ignores legacy and namespaced runtime
+memory/state/logs. A separate divergent public legacy repository still exposes
+excluded runtime/training artifacts, so repository-level containment is not
+complete.
 
 **Change**
 
@@ -201,8 +226,10 @@ Until then, use synthetic disposable data only and label every number
 
 ### R-01: Build the offline test suite before changing scores
 
-Add a root dependency lock/manifest and continuous integration. Tests must not
-require Ollama unless explicitly marked as integration tests.
+The root dependency inputs, continuous integration, and an Ollama-free offline
+suite now exist. The autouse guard blocks `requests` and `urllib` paths but is
+not an OS network sandbox. The remaining suites below are still required before
+R1 acceptance.
 
 Minimum suites:
 
@@ -437,14 +464,14 @@ condition order and record thermal/system telemetry where latency is analyzed.
 
 ### R-12: Replace process globals with explicit run objects
 
-Create immutable `RunConfig`, `ToolRegistry`, `DomainPack`, `Policy` and hook
-objects. Pass them through documentation, validation, repair and execution.
-Do not mutate shared module dictionaries, dates, roots, hooks or budgets at
-startup.
+`RunConfig`, `ToolRegistry`, `DomainPack`, `ActionPolicy`, hook and attempt
+objects now pass through validation and execution. Pack policies must classify
+every registered tool. Five per-model Python bodies were replaced by thin
+shims, and `0.3.1` removed hard-coded interpreter paths from public launchers.
 
-Deduplicate the six identical `run_agent.py` copies and the overlapping web
-runner setup. Add one cross-platform launcher path rather than hard-coded
-machine-specific PowerShell paths.
+Remaining work is to deduplicate the overlapping CLI/web runner construction,
+define a supported cross-platform shell strategy, and prove actual concurrent
+execution rather than only single-threaded nested reentrancy.
 
 **Acceptance**
 
@@ -590,7 +617,8 @@ Training remains blocked until R3 demonstrates a recurring,
 model-addressable failure that deterministic code, schemas or workflow design do
 not solve more safely. Before training:
 
-- deduplicate the two datasets and establish one source of truth;
+- generate reviewed corpora, deduplicate them, and establish one source of
+  truth; no JSONL corpus is shipped by canonical `main`;
 - split by prompt/template/entity/policy family;
 - cover the tools and scenarios relevant to the diagnosed failure;
 - mask intentionally erroneous assistant turns from loss unless the objective

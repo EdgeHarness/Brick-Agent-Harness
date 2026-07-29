@@ -115,7 +115,10 @@ def _grade(attempt):
 
 _specs = counter_specs()
 _specs.update(builtin_specs())
-_effects = {"increment_counter": "state_write"}
+_effects = {
+    "read_counter": "read",
+    "increment_counter": "state_write",
+}
 _effects.update(BUILTIN_EFFECTS)
 
 PACK = DomainPack(

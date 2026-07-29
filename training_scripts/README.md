@@ -2,7 +2,7 @@
 
 > **Do not train or treat the output as usable yet.**
 >
-> The packaging paths are prototypes, but the current dataset and evaluation
+> The packaging paths are prototypes, but the current generator and evaluation
 > design are not sufficient for a valid adapter experiment. Fix the data,
 > masking, splits, provenance, and evaluation gates described below before
 > spending GPU time.
@@ -14,15 +14,17 @@ the resulting adapter improves the harness.
 
 ## Blocking defects
 
-### 1. The shipped data is narrow and duplicated
+### 1. The default generated data is narrow and duplicated
 
-`data/toolcall.jsonl` currently contains 1,200 rows, but an exact-row count finds
-only 737 unique rows: 463 rows are duplicates. There are 661 unique user prompts.
-The finite slot lists make additional near-duplicates likely.
+No JSONL corpus is tracked or shipped. With the checked-in generator's defaults
+(`--n 1200 --seed 42 --repair-frac 0.15`), a reproducible local output at
+`data/toolcall.jsonl` contains 1,200 rows but only 737 unique rows: 463 rows are
+duplicates. There are 661 unique user prompts. The finite slot lists make
+additional near-duplicates likely.
 
 Only five of the harness's fourteen default tools appear as targets:
 
-| target tool | shipped rows |
+| target tool | rows in the default generated output |
 |---|---:|
 | `add_event` | 373 |
 | `list_events` | 228 |
@@ -36,14 +38,16 @@ There is no target coverage for `list_emails`, `read_email`,
 claims about general harness tool calling, multi-step work, document creation,
 memory use, or completion behavior.
 
-The second file at `../finetune/data/toolcall.jsonl` is not a harvested or
-teacher-distilled expansion. It is another narrow synthetic set with the same
-five target tools and its own duplicates. The harvested “Source B” and distilled
-“Source C” scripts referenced elsewhere are not present.
+The separate `../finetune/gen_toolcall_data.py` generator is not a harvested or
+teacher-distilled expansion. Its default local output is another narrow
+synthetic set with the same five target tools and its own duplicates. The
+harvested “Source B” and distilled “Source C” scripts referenced elsewhere are
+not present.
 
 ### 2. Repair examples train on the bad call
 
-The shipped set contains 172 multi-turn repair rows. Each contains:
+The default `training_scripts/make_data.py` output contains 172 multi-turn
+repair rows. Each contains:
 
 1. a deliberately malformed assistant call;
 2. an error observation;
@@ -136,8 +140,8 @@ Only after these gates pass should GPU training begin.
 |---|---|
 | `train_lora.py` | LoRA training and optional best-effort GGUF conversion |
 | `make_data.py` | standalone five-tool synthetic generator |
-| `system_prompt.txt` | manually frozen harness prompt; no automated drift check |
-| `data/toolcall.jsonl` | shipped synthetic training-only rows |
+| `system_prompt.txt` | frozen harness prompt; the offline suite checks byte parity with the live serving builder |
+| `data/toolcall.jsonl` | ignored local generator output; absent from a clean clone |
 | `download_assets.py` | downloads an unpinned base snapshot and shallow-clones unpinned llama.cpp |
 | `Dockerfile` / `run_local.sh` | NVIDIA Docker packaging prototype |
 | `apptainer.def` / `run.slurm` | Apptainer/Slurm packaging prototype |
@@ -165,5 +169,6 @@ python train_lora.py \
   --output out/toolcall-lora
 ```
 
-Do not run it against the current shipped dataset. The command is documented so
-the code can be reviewed while the blocking data and evaluation work is fixed.
+Do not train on an unreviewed default generator output. The command is
+documented so the code can be reviewed while the blocking data and evaluation
+work is fixed.

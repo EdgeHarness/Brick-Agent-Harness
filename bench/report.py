@@ -1,8 +1,11 @@
 """Report benchmark results without pooling domains or domain versions."""
 import argparse
 from collections import defaultdict
+import html
 import json
+import math
 import os
+import re
 
 
 CAP_LABELS = {
@@ -17,29 +20,190 @@ CAP_LABELS = {
     "learning": "Learning (memory)",
 }
 
+_DOMAIN_ID = re.compile(r"^[a-z][a-z0-9_]*$")
+_TASK_ID = re.compile(r"^[a-z][a-z0-9_]*$")
+_TOOL_ID = re.compile(r"^[a-z][a-z0-9_]*$")
+_SEMVER = re.compile(
+    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+    r"(?:-(?:"
+    r"(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)"
+    r"(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*"
+    r"))?"
+    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
+)
+
 
 def _dataset_key(record):
-    return (
-        record.get("domain", "office_demo"),
-        record.get("domain_version", "unversioned"),
-    )
+    return record["domain"], record["domain_version"]
 
 
 def validate_results(results):
+    if not isinstance(results, list):
+        raise TypeError("benchmark results must be a JSON array")
     seen = set()
     for index, record in enumerate(results):
+        if not isinstance(record, dict):
+            raise TypeError(
+                f"benchmark result row {index} must be a JSON object"
+            )
+        required = {
+            "domain",
+            "domain_version",
+            "model",
+            "condition",
+            "task",
+            "caps",
+            "tools",
+            "score",
+            "checks",
+            "finished",
+            "parse_failures",
+            "invalid_calls",
+            "tool_errors",
+            "llm_calls",
+            "prompt_tokens",
+            "output_tokens",
+            "wall_seconds",
+            "error",
+            "max_calls",
+        }
+        missing = required - set(record)
+        if missing:
+            raise ValueError(
+                f"benchmark result row {index} is missing fields: "
+                + ", ".join(sorted(missing))
+            )
+        if (
+            not isinstance(record["domain"], str)
+            or not _DOMAIN_ID.fullmatch(record["domain"])
+        ):
+            raise ValueError(
+                f"benchmark result row {index} has an invalid domain"
+            )
+        if (
+            not isinstance(record["domain_version"], str)
+            or not _SEMVER.fullmatch(record["domain_version"])
+        ):
+            raise ValueError(
+                f"benchmark result row {index} has an invalid domain_version"
+            )
+        if not isinstance(record["model"], str) or not record["model"].strip():
+            raise ValueError(
+                f"benchmark result row {index} has an invalid model"
+            )
+        if record["condition"] not in {"raw", "harness"}:
+            raise ValueError(
+                f"benchmark result row {index} has an invalid condition"
+            )
+        if (
+            not isinstance(record["task"], str)
+            or not _TASK_ID.fullmatch(record["task"])
+        ):
+            raise ValueError(
+                f"benchmark result row {index} has an invalid task"
+            )
+        for field, pattern in (
+            ("caps", None),
+            ("tools", _TOOL_ID),
+        ):
+            values = record[field]
+            if (
+                not isinstance(values, list)
+                or not all(
+                    isinstance(value, str)
+                    and bool(value)
+                    and (pattern is None or bool(pattern.fullmatch(value)))
+                    for value in values
+                )
+                or len(set(values)) != len(values)
+            ):
+                raise ValueError(
+                    f"benchmark result row {index} has invalid {field}"
+                )
+        for field in (
+            "parse_failures",
+            "invalid_calls",
+            "tool_errors",
+            "llm_calls",
+            "prompt_tokens",
+            "output_tokens",
+            "max_calls",
+        ):
+            value = record[field]
+            minimum = 1 if field == "max_calls" else 0
+            if type(value) is not int or value < minimum:
+                raise ValueError(
+                    f"benchmark result row {index} has an invalid {field}"
+                )
+        if record["llm_calls"] > record["max_calls"]:
+            raise ValueError(
+                f"benchmark result row {index} llm_calls exceeds max_calls"
+            )
+        checks = record["checks"]
+        if (
+            not isinstance(checks, list)
+            or not checks
+            or not all(
+                isinstance(check, list)
+                and len(check) == 2
+                and isinstance(check[0], str)
+                and bool(check[0])
+                and type(check[1]) is bool
+                for check in checks
+            )
+        ):
+            raise ValueError(
+                f"benchmark result row {index} has invalid checks"
+            )
+        if type(record["finished"]) is not bool:
+            raise ValueError(
+                f"benchmark result row {index} has an invalid finished"
+            )
+        if record["error"] is not None and (
+            not isinstance(record["error"], str)
+            or not record["error"]
+        ):
+            raise ValueError(
+                f"benchmark result row {index} has an invalid error"
+            )
+        score = record["score"]
+        if (
+            isinstance(score, bool)
+            or not isinstance(score, (int, float))
+            or not math.isfinite(score)
+            or not 0 <= score <= 1
+        ):
+            raise ValueError(
+                f"benchmark result row {index} has an invalid score"
+            )
+        wall = record["wall_seconds"]
+        if (
+            isinstance(wall, bool)
+            or not isinstance(wall, (int, float))
+            or not math.isfinite(wall)
+            or wall < 0
+        ):
+            raise ValueError(
+                f"benchmark result row {index} has an invalid wall_seconds"
+            )
         identity = (
-            record.get("domain", "office_demo"),
-            record.get("domain_version", "unversioned"),
-            record.get("model"),
-            record.get("condition"),
-            record.get("task"),
+            record["domain"],
+            record["domain_version"],
+            record["model"],
+            record["condition"],
+            record["task"],
         )
         if identity in seen:
             raise ValueError(
                 f"duplicate benchmark identity at row {index}: {identity!r}"
             )
         seen.add(identity)
+
+
+def _markdown_cell(value):
+    return html.escape(str(value), quote=False).replace(
+        "\\", "\\\\"
+    ).replace("|", "\\|").replace("\r", " ").replace("\n", " ")
 
 
 def _pair_status(model, results):
@@ -63,6 +227,7 @@ def _pair_status(model, results):
             or "tools" not in right
             or left["max_calls"] != right["max_calls"]
             or left["tools"] != right["tools"]
+            or left["caps"] != right["caps"]
         ):
             return False, "incompatible surfaces"
     return True, ""
@@ -101,11 +266,11 @@ def summarize_dataset(domain, version, results):
         aggregate["n"] += 1
         aggregate["perfect"] += record["score"] >= 0.999
         aggregate["parse_failures"] += record["parse_failures"]
-        aggregate["invalid_calls"] += record.get("invalid_calls", 0)
+        aggregate["invalid_calls"] += record["invalid_calls"]
         aggregate["tool_errors"] += record["tool_errors"]
         aggregate["calls"] += record["llm_calls"]
         aggregate["wall"] += record["wall_seconds"]
-        aggregate["out_tokens"] += record.get("output_tokens", 0)
+        aggregate["out_tokens"] += record["output_tokens"]
         per_task[record["task"]][key] = record["score"]
         for capability in record.get("caps", []):
             item = per_capability[
@@ -188,7 +353,7 @@ def summarize_dataset(domain, version, results):
             ),
         }
         lines.append(
-            f"| {model} | {raw_cell} | {harness_cell} | "
+            f"| {_markdown_cell(model)} | {raw_cell} | {harness_cell} | "
             f"{delta_cell} |"
         )
 
@@ -198,13 +363,17 @@ def summarize_dataset(domain, version, results):
         "",
         "| capability | "
         + " | ".join(
-            f"{model} raw | {model} harness" for model in models
+            f"{_markdown_cell(model)} raw | "
+            f"{_markdown_cell(model)} harness"
+            for model in models
         )
         + " |",
         "|" + "---|" * (1 + 2 * len(models)),
     ]
     for capability in capabilities:
-        cells = [CAP_LABELS.get(capability, capability)]
+        cells = [
+            _markdown_cell(CAP_LABELS.get(capability, capability))
+        ]
         capability_data = {}
         for model in models:
             for condition in ("raw", "harness"):
@@ -227,13 +396,15 @@ def summarize_dataset(domain, version, results):
         "",
         "| task | "
         + " | ".join(
-            f"{model} raw | {model} harness" for model in models
+            f"{_markdown_cell(model)} raw | "
+            f"{_markdown_cell(model)} harness"
+            for model in models
         )
         + " |",
         "|" + "---|" * (1 + 2 * len(models)),
     ]
     for task, scores in per_task.items():
-        cells = [task]
+        cells = [_markdown_cell(task)]
         task_data = {}
         for model in models:
             for condition in ("raw", "harness"):
