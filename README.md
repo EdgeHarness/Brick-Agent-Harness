@@ -23,6 +23,8 @@ The Mac is a source-development and offline-test host only.
 
 ## Read first
 
+- [`CLAUDE.md`](CLAUDE.md) is the short orientation for a coding agent or new
+  contributor: hard rules, current position, the F0 gate, and remaining stages.
 - [`PROJECT_GUIDE.md`](PROJECT_GUIDE.md) defines the canonical evidence,
   research, product, and governance rules.
 - [`PROJECT_SETUP.md`](PROJECT_SETUP.md) is the canonical staged

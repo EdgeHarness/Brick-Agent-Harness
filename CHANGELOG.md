@@ -46,6 +46,14 @@ Lenovo F0 evidence is pending.
 
 ### Added
 
+- `CLAUDE.md`, a short always-loaded orientation for coding agents and new
+  contributors: the hard rules (clean worktree during an evidence gate, report a
+  failing gate rather than repairing it, live-model work only on the native
+  Lenovo, one stage at a time, no domain imports in the core), current release
+  position, the F0 gate and its consequences, the remaining stage sequence, the
+  primary contrast and claim gate, what completing the plan produces, the four
+  valid conclusions, and the claims that must never be made. It defers to
+  `PROJECT_SETUP.md` and `PROJECT_GUIDE.md` on any disagreement.
 - A first-time Lenovo host setup section in `bench/README.md` covering native
   ARM64 shell/Python/Ollama verification, server start, power mode, required
   Defender and Windows Search state, pre-pull free space, output-path rules,
