@@ -41,3 +41,53 @@ jobs:
         env:
           AGENT_LAB_NO_BROWSER: "1"
         run: python -m pytest
+
+  windows-x64:
+    name: Windows x64 / Python 3.13
+    runs-on: windows-2022
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-lock.txt
+
+      - name: Install pinned test environment
+        run: python -m pip install --disable-pip-version-check -r requirements-test.txt
+
+      - name: Run offline tests
+        env:
+          AGENT_LAB_NO_BROWSER: "1"
+        run: python -m pytest
+
+  windows-arm-advisory:
+    name: Windows ARM64 advisory / Python 3.13
+    if: github.event_name == 'workflow_dispatch'
+    continue-on-error: true
+    runs-on: windows-11-arm
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: requirements-lock.txt
+
+      - name: Install pinned test environment
+        run: python -m pip install --disable-pip-version-check -r requirements-test.txt
+
+      - name: Run supporting offline tests
+        env:
+          AGENT_LAB_NO_BROWSER: "1"
+        run: python -m pytest

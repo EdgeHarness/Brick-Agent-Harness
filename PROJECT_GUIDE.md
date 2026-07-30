@@ -2,478 +2,346 @@
 
 Last reconciled with the local project tree: 29 July 2026.
 
-Related material:
-
-- [Brix discovery summary](BRIX_DISCOVERY.md)
-- [Brick repository documentation](README.md)
-- [Brick architecture notes](ARCHITECTURE.md)
-- [Implementation plan](PROJECT_SETUP.md)
-- [Canonical repository](https://github.com/EdgeHarness/Brick-Agent-Harness)
+The canonical execution plan is [`PROJECT_SETUP.md`](PROJECT_SETUP.md). This
+guide defines the durable evidence, architecture, and claim rules. Released
+history is recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## 1. Current status
 
-Brick is currently a **synthetic research scaffold** for testing tool-using local language
-models. It contains:
+The latest release is `v0.3.1`. Brick is an experimental local agent-harness
+research scaffold with:
 
-- explicit per-attempt runtime, registry, policy, hook, and domain-pack
-  contracts;
-- `office_demo@0.1.0`, a simulated office world, and
-  `counter_demo@0.1.0`, a structural portability fixture;
-- raw and harnessed agent loops;
-- simulated email, calendar, messaging, and reminder tools;
-- local document-generation tools;
-- a small, hand-authored benchmark;
-- an Ollama client, a demonstration web interface, and experimental adapter-training code.
+- explicit runtime, registry, policy, hook, and domain-pack contracts;
+- `office_demo@0.1.0`, a synthetic office fixture;
+- `counter_demo@0.1.0`, a structural portability fixture;
+- legacy prompt-JSON raw and harness loops;
+- simulated email, calendar, messaging, and reminder effects;
+- local PowerPoint and spreadsheet generation;
+- an exploratory benchmark, local Ollama client, Agent Lab development console,
+  and blocked experimental training code.
 
-It does **not** currently contain:
+Work toward F0/Q0 and `v0.4.0` is **unreleased**. The native Lenovo F0 evidence is
+pending, so `v0.4.0` is not complete or taggable.
 
-- a valid retained benchmark result;
-- evidence that the harness improves any model;
-- a production Brix workflow;
-- a Brix email, calendar, messaging, document, CRM, billing, or room-booking integration;
-- production authentication, authorization, audit, retention, or recovery controls;
-- a safe general-purpose filesystem or shell sandbox;
-- a tested fine-tuned model that is served through the application.
+Brick currently has no valid retained result, demonstrated harness improvement,
+production Brix workflow, real Brix integration, production identity/access
+control, or served fine-tuned model. Existing benchmark outputs are exploratory.
 
-No result directory or retained result is present, and result paths are excluded from
-version control. The existing benchmark and graders also have validity defects described
-in the [implementation plan](PROJECT_SETUP.md).
-No performance, reliability, cost, or safety conclusion may be drawn until those defects
-are repaired and a protocol is frozen.
+The Mac is a source-development and offline-test host only. Live-model evidence
+runs on the native Windows 11 ARM64 Lenovo described in the canonical plan.
 
-The web interface is an experiment console over simulated state. It is not a Brix
-application or a deployment candidate.
+## 2. Evidence vocabulary
 
-## 2. Evidence rules
-
-Project language must distinguish the following states:
+Use these states precisely:
 
 - **Implemented:** code exists.
-- **Tested:** an automated test exercises the stated behavior.
-- **Validated:** the behavior passed a frozen evaluation with recorded provenance.
-- **Integrated:** the code communicates with the named external system in an approved
-  test environment.
-- **Piloted:** approved users exercised the integrated workflow under a written pilot
-  protocol.
-- **Deployed:** the system has an accountable owner, access controls, monitoring,
-  recovery procedures, and an approved production boundary.
-
-These terms are not interchangeable. A simulated calendar tool is implemented; it is
-not a calendar integration. A model-generated completion checked by the same model is
-not independently verified. A loopback HTTP endpoint limits one network path; it does
-not prove that no data can leave the machine.
-
-Every experimental performance, reliability, safety, latency, resource, or cost
-statement must point to:
-
-1. the immutable result bundle;
-2. the task, grader, harness, and domain versions;
-3. the exact model identifier and digest;
-4. the runtime and dependency versions;
-5. the hardware and execution settings;
-6. the analysis that produced the reported number.
-
-Static code and dataset claims instead require a pinned commit, source path, and
-reproducible inspection or test.
-
-Predictions belong under “hypotheses,” not in model READMEs as observed behavior.
-
-## 3. Two separate tracks
-
-The work has two related but distinct tracks.
-
-### Track R: research instrument and experiments
-
-Track R asks whether explicitly identified orchestration mechanisms improve agent
-performance under recorded resource constraints. Its artifacts are synthetic task
-instances, frozen graders, run manifests, result bundles, and a reproducible analysis.
-
-Track R must not depend on private Brix data. Brix-inspired task classes may be used,
-but retained public experiments must use synthetic or properly redacted records with
-documented provenance.
-
-### Track P: Brix product discovery and pilot
-
-Track P identifies one valuable Brix workflow, builds the required deterministic
-service and approved integrations, and evaluates it first in shadow mode and then in a
-controlled pilot. Its artifacts include process maps, policies, data agreements,
-integration contracts, access controls, audit records, and operational acceptance
-tests.
-
-Track P is not evidence for Track R unless its task instances and scoring procedure
-were frozen in advance and can be evaluated without disclosing protected data.
-Likewise, a research benchmark score is not evidence that the product is safe or
-valuable in operation.
-
-The tracks may share generic interfaces, telemetry formats, and synthetic domain
-models. They must not share uncontrolled state, private data, or unexamined assumptions.
-
-## 4. Research question
-
-The research question is deliberately neutral:
-
-> Under fully recorded resource constraints, which explicit orchestration mechanisms,
-> if any, improve strict end-state task success and reduce harmful side effects for
-> comparable local language models?
-
-Secondary questions are:
-
-- How do any gains change with model size within one model family?
-- What token, latency, memory, energy, and approval costs accompany those gains?
-- Which task classes remain beyond a model despite orchestration?
-- Do observed effects persist across independently constructed task instances and an
-  appropriate external benchmark?
-
-“Scaffolding beats scale” is a possible result, not a premise. The experiment must be
-able to find no improvement, a capability floor, or a cost increase that outweighs an
-accuracy gain.
-
-No claim of frontier-model parity is planned. Cross-model comparisons remain
-descriptive unless family and generation are controlled, training and post-training
-comparability are documented, and quantization, serving configuration, prompt format,
-and inference mode are held constant. Even then, parameter count is an association
-unless the releases were designed as a controlled scale series.
-
-## 5. What the current comparison does and does not establish
-
-Brick presently exposes two agent paths:
-
-- **Raw:** prompt-based JSON tool selection with the shared simulated tools.
-- **Harness:** the same basic loop plus planning, examples, parsing and repair,
-  normalization, loop handling, memory injection, and a model-based completion check.
-
-This is useful prototype structure, but it is not yet a fair or causal experiment.
-
-### Call count is not inference budget
-
-A shared 14-call ceiling equalizes only the maximum number of calls. The conditions can
-use different prompts, output limits, planning and completion-check calls, history
-lengths, and total tokens. They therefore do not have an equal inference budget.
-
-Runs must record total input and output tokens, model execution time, wall time, memory,
-energy where measurable, retries, approvals, and calls. Results should show an
-accuracy/safety/cost frontier rather than declaring one budget “the same.”
-
-### The raw condition is not sufficient by itself
-
-Prompt-only JSON is a useful minimal baseline, but it can be a weak representation of
-ordinary tool integration. Where supported, the protocol should include:
-
-1. a deterministic workflow or rules baseline for tasks that do not require a model;
-2. a reasonable native-function-calling baseline with ordinary validation and retry;
-3. the full harness;
-4. preregistered harness ablations.
-
-Comparisons must use the same authoritative tool implementations and world transitions.
-
-### The current harness mechanisms are not all safety mechanisms
-
-The present “schema validation” largely checks parameter names, not complete types and
-business semantics. Fuzzy argument repair can convert an uncertain write into a valid
-but wrong write. The completion checker uses the same model, can fail open, and does not
-independently inspect all artifacts or authoritative state. Model-authored memory is
-untrusted input, not durable business knowledge.
-
-These mechanisms may improve formatting or recovery. Their effects and failure modes
-must be measured; they must not be presented as enforcement boundaries.
-
-## 6. Valid experiment design
-
-### Experimental unit
-
-Independent task instances—not repeated decoding of an identical prompt—are the main
-experimental units. Instances should vary entities, dates, policies, document wording,
-initial world state, and valid action sequences while preserving a declared task class.
-
-A fixed seed and temperature-zero decoding can aid replay, but neither guarantees
-bit-for-bit reproducibility across runtimes and hardware. Changing a seed does not by
-itself create an independent business case. The number of instances and repetitions
-must be justified before retained runs, using a power or simulation analysis appropriate
-to paired binary outcomes.
-
-### Model comparison
-
-The primary size analysis must use models from the same family and generation, with
-documented training/post-training comparability and the following controls:
-
-- immutable model digests;
-- consistent instruction and chat templates;
-- consistent quantization policy;
-- a pinned serving runtime;
-- controlled thinking or non-thinking behavior;
-- recorded context and generation limits.
-
-Mixing Llama 3.2 at 1B/3B, Llama 3.1 at 8B, and Qwen at larger sizes changes family and
-size together and cannot identify a size effect. Cross-family results may be reported
-as separate system comparisons, not as one parameter-size curve.
-
-### Outcome measures
-
-Primary measures:
-
-- strict complete-task success;
-- unauthorized or harmful side-effect rate;
-- success without human correction;
-- reliability across independent task instances.
-
-Secondary diagnostics:
-
-- fixed-denominator component checks;
-- invalid-call and repair counts;
-- retries, loops, and completion-check disagreements;
-- tokens, model time, wall time, memory, energy, and approvals;
-- cost per strict success under a stated cost model.
-
-A loose average over grader checks is not a substitute for strict success. Additional
-unrequested messages, events, reminders, or files must count as failures or harmful
-effects where appropriate.
-
-### Isolation and provenance
-
-Every independent attempt requires:
-
-- a fresh artifact directory and memory scope;
-- an immutable initial-world snapshot;
-- no artifacts inherited from a prior attempt;
-- a single-writer or locked transactional attempt commit covering state, result,
-  artifacts, and completion, with durable-write and recovery validation;
-- a unique attempt identifier;
-- explicit task-instance, condition, repeat, ordering, and seed fields;
-- task, grader, harness, domain-pack, model, runtime, dependency, Git, and hardware
-  versions;
-- separate recording of execution failure, grader failure, and task failure.
-
-An explicitly declared multi-episode scenario, such as memory write followed by memory
-use, is one experimental unit: its dependent episodes share only that scenario's memory,
-run in fixed internal order, and remain isolated from every other scenario.
-
-Reports must refuse incompatible versions by default. Absolute scores from different
-domain packs must not be pooled as though their difficulty were equal.
-
-### Causal attribution
-
-All intended ablations must exist as configuration before the protocol is frozen.
-Removing one mechanism at a time may still miss interactions, so causal language should
-be limited to the tested contrasts. Mechanism counters are descriptive; by themselves
-they do not prove why a score changed.
-
-## 7. External validation
-
-An external benchmark is useful only if its task semantics, side effects, model
-interface, and scoring answer the research question. Adoption requires a short fit
-assessment and a pinned benchmark version or commit.
-
-Candidates to assess include:
-
-- [WorkBench](https://github.com/olly-styles/WorkBench), because it emphasizes workplace
-  tasks, final state, and harmful side effects;
-- [Berkeley Function Calling Leaderboard](https://github.com/ShishirPatil/gorilla),
-  for function-call correctness and format behavior;
-- [τ-bench / τ²-bench](https://github.com/sierra-research/tau2-bench), for policy-aware,
-  multi-turn agent behavior;
-- [AutomationBench](https://github.com/zapier/AutomationBench), for simulated SaaS
-  workflows.
-
-These projects change over time. Their current requirements, licenses, task leakage,
-provider assumptions, and evaluation semantics must be checked immediately before a
-selection. No duration, cost, or compatibility estimate should be stated before a
-small integration spike.
-
-External benchmarks supplement rather than validate weak internal graders. The internal
-instrument must be sound first.
-
-## 8. Brix discovery comes before use-case commitment
-
-The [Brix discovery summary](BRIX_DISCOVERY.md) identifies several needs but does not provide enough
-evidence to rank them conclusively. It names email and task organization, lead and
-member follow-up, onboarding, conference-room scheduling, maintenance tracking, and
-approved-document search. Brix also prefers one or two reliable functions first.
-
-Before recommending a build, conduct workflow discovery with the accountable Brix
-owner and the people who perform the work. For each candidate, record:
-
-- event volume, current time spent, error rate, and cost of failure;
-- current systems and authoritative records;
-- actors, roles, approvals, and exception paths;
-- policy rules, service-level expectations, and escalation;
-- data categories, retention, access, and legal or contractual restrictions;
-- integration availability and test environments;
-- reversibility, observability, and how success will be measured.
-
-Score candidates on business value, frequency, data readiness, integration effort,
-determinism, reversibility, and potential harm. Have Brix approve the scorecard and the
-selected workflow.
-
-Two plausible starting hypotheses—not commitments—are:
-
-- a read-only daily action/follow-up dashboard or approved-document assistant;
-- room conflict checking with a drafted booking and confirmation, approved by a person.
-
-Automatic booking should not be assumed to be the first release. Scheduling is not a
-four-step closed problem: production requirements can include room identity, capacity,
-equipment, opening hours, time zones, recurrence, buffers, rates, entitlements,
-concurrent requests, cancellation, no-shows, reminders, and provider reconciliation.
-
-Approved-document search is also not harmless merely because it is read-only. It can
-disclose data, use stale or unauthorized material, follow instructions embedded in a
-document, or provide a confident wrong policy answer.
-
-## 9. Product architecture principles
-
-The language model may interpret a request or propose an action. It must not own the
-business invariant.
-
-For every write workflow:
-
-1. resolve the authenticated actor and authorization;
-2. retrieve current authoritative state;
-3. construct a typed action proposal;
-4. validate policy and business invariants in deterministic code;
-5. show the exact effect to an authorized approver when approval is required;
-6. commit transactionally with an idempotency key;
-7. write an immutable audit event;
-8. reconcile the provider result and expose rollback or correction.
-
-### Scheduling requirements
-
-A scheduling service—not the model—must enforce overlap prevention, resource identity,
-hours, timezone handling, capacity and equipment, recurrence, cancellation, and
-idempotency. Concurrency tests must demonstrate that two simultaneous valid-looking
-requests cannot both reserve the same resource.
-
-### Knowledge requirements
-
-An approved-document service must enforce access before retrieval, record document
-owner/version/effective date, cite the evidence used, distinguish quotation from model
-text, detect conflicts, and abstain when evidence is missing or unauthorized. Retrieval
-quality and answer faithfulness are separate measures.
-
-### Capability boundary
-
-The Brix product should not expose a general shell or general filesystem mutation to the
-model. Use narrowly allowlisted adapters and least-privilege service accounts. Human
-confirmation is an additional control, not a sandbox.
-
-The current filesystem implementation is unsuitable for private or production data:
-lexical path containment can be bypassed by filesystem links, deletion can target the
-configured root, and a shell can leave its initial directory or use the network.
-
-### Web and operational boundary
-
-Loopback binding is not authentication. Any product interface requires authenticated
-sessions, authorization, request-origin protection, bounded inputs and logs, secure
-secret handling, safe process termination, monitoring, backup, recovery, and an
-incident owner. Confirmations must be bound to a specific authenticated user, proposal,
-and expiry.
-
-## 10. Data governance
-
-No real Brix data may be copied into the repository, benchmark artifacts, model memory,
-or logs until a written data plan is approved.
-
-The plan must specify:
-
-- data owner and accountable system owner;
-- permitted sources and purposes;
-- fields collected and fields excluded;
-- storage location, encryption, and backup;
-- user and service-account access;
-- retention and deletion periods;
-- log and transcript redaction;
-- whether external inference, telemetry, package downloads, or updates are allowed;
-- breach and incident response;
-- how a person can inspect and correct records.
-
-Committed tasks and examples must use synthetic or approved redacted data. Runtime
-memory must be treated as untrusted, private state with provenance, scope, expiration,
-validation, and deletion—not as a text file the model may silently rewrite.
-
-“Local inference” may be a valuable privacy property, but it must be demonstrated by
-network and deployment controls. It does not follow from using Ollama, and it does not
-cover package downloads, hosted comparisons, shell commands, browser access, logs, or
-backups.
-
-## 11. Training policy
-
-Fine-tuning is last, not a prerequisite.
-
-The default 1,200-row outputs of the two generators differ, contain substantial exact
-duplication, cover only part of the tool surface, and do not provide a defensible
-held-out evaluation. Generated JSONL files are ignored local artifacts; no corpus is
-shipped. Repair conversations are also trained in a way that can reward the
-deliberately bad assistant call. Base-model and conversion-tool revisions are not fully
-pinned, and conversion failure is not reliably propagated.
-
-Training is justified only after a frozen evaluation identifies a stable failure mode
-that:
-
-- is plausibly learned rather than better enforced in code;
-- appears on independent held-out task families;
-- has enough licensed, provenance-tracked examples;
-- has a leakage-resistant train/validation/test split;
-- can be served through the same recorded evaluation path.
-
-The relevant comparison is not simply “adapter versus no adapter.” It should compare
-the trained system with deterministic fixes, orchestration, and an appropriate larger
-base model at recorded quality and resource costs.
-
-## 12. Repository and documentation governance
-
-This workspace is the checkout of the canonical public repository,
-[`EdgeHarness/Brick-Agent-Harness`](https://github.com/EdgeHarness/Brick-Agent-Harness).
-The audit verified the released `bf8aabf` tree and its successful Python
-3.9–3.13 CI. This `0.3.1` tree passes the local offline suite; the per-commit
-GitHub Actions result is the authoritative cross-version evidence. That
-establishes repository state, not research validity.
-
-Repository governance is still incomplete:
-
-- a divergent legacy public repository remains active and contains runtime/training
-  artifacts excluded from the canonical history; do not merge it wholesale or push
-  local legacy refs with `--all` or `--mirror`;
-- the owner must archive, privatize, or sanitize that legacy repository and declare the
-  EdgeHarness location canonical everywhere;
-- no reuse license has been selected, so external reuse rights must not be inferred;
-- `main` is not protected and CI is not yet a required merge check; and
-- current commits and tags are unsigned.
-
-Repository ownership, authorship, licensing, signing identity, and institutional policy
-must be agreed before external research publication or client operation. Require
-reviewed changes and passing continuous integration, prohibit force pushes to `main`,
-and keep secrets or private client artifacts out of every public copy.
-
-Documentation is part of the instrument. When behavior changes, update code, tests,
-version stamps, and relevant documentation in the same reviewed change. A “current
-state” section must be generated or checked against the repository before release.
-
-## 13. Definition of success
-
-### Research success
-
-Research is complete only when:
-
-- the instrument passes adversarial validity tests;
-- the protocol and analysis are frozen before retained runs;
-- result bundles carry complete provenance;
-- primary outcomes and uncertainty are reported without pooling incompatible tasks;
-- negative and null results are retained;
-- claims are limited to the tested models, tasks, conditions, and resource settings;
-- another person can reproduce the analysis from the published artifacts.
-
-A result that orchestration does not help, or helps only at unacceptable cost, is still
-a valid research result.
-
-### Product success
-
-A Brix pilot is ready only when:
-
-- Brix has selected and documented the workflow;
-- an authoritative data source and accountable owner exist;
-- deterministic business invariants and access checks pass;
-- approved integrations work in a test environment;
-- private-data handling is documented and enforced;
-- shadow evaluation meets a threshold agreed before testing;
-- human approvals, audit, monitoring, recovery, and support ownership are operational.
-
-The next actions and all dependencies are specified in the
-[gated implementation plan](PROJECT_SETUP.md).
+- **Tested:** an automated test exercises the named behavior.
+- **Validated:** the behavior passed a frozen evaluation with complete recorded
+  provenance.
+- **Integrated:** code communicates with the named external system in an
+  approved test boundary.
+- **Piloted:** approved users exercised the integration under a written pilot.
+- **Deployed:** an accountable owner, access controls, monitoring, recovery, and
+  an approved production boundary exist.
+
+These states are not interchangeable. A local simulated calendar is not a
+calendar integration. A model verifier is not independent outcome evidence.
+Loopback binding is not authentication. A release tag is not proof that a
+research gate passed.
+
+Every experimental performance, safety, latency, resource, or cost statement
+must identify:
+
+1. the validated immutable result bundle;
+2. task generator, instance, grader, harness, and domain versions;
+3. exact model tag, digest, quantization, template, and sampling options;
+4. runtime, dependency, code, and analysis digests;
+5. hardware, operating-system, driver, backend, and power settings; and
+6. the exact analysis that produced the number.
+
+Predictions and model-folder labels are hypotheses, not observations.
+
+## 3. Active milestone and product boundary
+
+The active milestone has two related outputs:
+
+- **Research:** a valid fixed-family comparison of a generic harness against a
+  competent native-tools baseline.
+- **Synthetic layering:** a planned fictional Brix lead-follow-up pack intended
+  to test whether a business layer can be replaced without rewriting the
+  harness.
+
+The synthetic Brix pack may share generic interfaces, telemetry, and evidence
+formats with the research instrument. Generic packages may not import it or
+contain Brix branches. It may not use real Brix data, credentials, providers, or
+systems.
+
+The synthetic pack is not a selected Brix production workflow. Actual workflow
+discovery, data authorization, integration, shadow evaluation, pilot, and
+deployment remain future work outside the `v0.14.0` milestone.
+
+## 4. Research question and scope
+
+The sole confirmatory question is:
+
+> For the 11 fixed synthetic Brick task-family generator distributions, does
+> `harness_full` improve strict whole-task success over a competent
+> `native_tools` implementation on the pinned Qwen3.5 4B system under the same
+> end-to-end opportunity budget?
+
+The primary result is limited to those frozen generator distributions, model
+digest, conditions, and budgets. It does not establish:
+
+- performance across all office work or unseen domains;
+- production value or safety for Brix;
+- parity with a frontier model;
+- a universal benefit from orchestration;
+- a causal model-size law; or
+- within-instance repeatability.
+
+Qwen3.5 2B and 9B are descriptive system replications. Same family name and
+quantization do not prove controlled training or post-training across sizes.
+Broader generalization requires a later independently developed domain or
+suitable pinned external benchmark.
+
+“The harness helps,” “the harness does not help,” and “deterministic rules are
+preferable” are all acceptable outcomes. A positive result is not a completion
+requirement.
+
+## 5. Fair condition design
+
+The released `v0.3.1` raw and harness paths are legacy exploratory
+implementations. They differ in prompting, parser behavior, repair, planning,
+verification, history, and memory. `raw` is a lower bound, not a competent native
+tool baseline.
+
+The retained primary instead compares `native_tools` and `harness_full` using the
+same:
+
+- Ollama native function-call endpoint and chat template;
+- Qwen3.5 4B digest;
+- `ToolSpec` names, schemas, order, and tool-result transport;
+- deterministic validators, authorization rules, and state transitions;
+- task instance, initial state, and hidden grader; and
+- context, sampling, call, and output opportunity limits.
+
+The full harness may add only its versioned planning, scoped untrusted memory,
+known-alias recovery, duplicate suppression, observation management, and
+completion guard. Hidden grader logic is unavailable to both.
+
+All driver, planning, and completion calls count against the same end-to-end
+ledger. This deliberately asks whether the harness pays for its own overhead.
+It does not make calls, tokens, FLOPs, energy, or latency identical. Reports show
+the complete success/safety/resource frontier.
+
+The frozen candidate settings are:
+
+- context 8192;
+- thinking disabled;
+- temperature 1.0, `top_p=1.0`, `top_k=20`, and `min_p=0`;
+- presence penalty 2.0 and repeat penalty 1.0;
+- maximum 700 generated tokens per request;
+- maximum 4096 generated tokens and 14 total model calls per attempt; and
+- a deterministic per-instance seed base reused for the paired conditions.
+
+F0 saves the exact accepted payloads and requires the selected Lenovo Ollama
+build to reject a request containing the unknown
+`brick_f0_unknown_option`. It also captures the effective template and loaded
+context and requires thinking to remain disabled. This detects arbitrary-map
+acceptance; a black-box request cannot prove the numerical behavioral effect of
+every accepted sampling value, and Brick makes no such claim.
+
+## 6. Experimental units and outcomes
+
+Independent structural task instances are the units. They vary task structure,
+policies, state, valid action sequences, wording, entities, dates, conflicts, and
+distractors. Seed changes and renamed entities inside one template do not create
+independent business cases.
+
+The learning family remains one case and one logical attempt. Its ordered
+store-then-use subepisodes share one isolated memory scope and the same
+14-call/4096-generated-token ledger without a reset. Both subepisodes must pass
+strictly; an instrument failure in either makes the case null. This definition,
+rather than treating the subepisodes as separate attempts, preserves the stated
+440-primary and 662-default-maximum counts.
+
+The primary outcome is strict whole-task success. Any harmful, unauthorized,
+stale, missing, extra, or incorrect effect makes strict success false. A runner,
+store, grader, or analysis failure produces null model outcome, never a score of
+zero.
+
+The estimand gives equal weight to the 11 fixed families:
+
+```text
+Delta = (1 / 11) * sum(family_mean(harness_success - native_success))
+```
+
+The default retained design has 20 cases per family, 220 pairs, and 440 model
+attempts. D0 may select the predeclared 12-per-family fallback using runtime
+only.
+
+The inferential gate for the equal-family estimand is a predeclared 95%
+within-family percentile-bootstrap interval. It uses 20,000 draws, seed
+`20260729`, NumPy `Generator(PCG64)`, draw-major/family-major resampling of paired
+case differences, and Hyndman–Fan type-7 quantiles. Families and cases are sorted
+by frozen IDs. Every family contributes `N` replacement draws and equal weight;
+constant families remain as point masses rather than being dropped or jittered.
+
+A two-sided exact paired sign-flip p-value is retained only as a diagnostic under
+the sharp pairwise-exchangeability null. It is numerically McNemar with complete
+equal allocation, but it is not an exact test of the weaker null `Delta=0` when
+family effects differ. A positive claim still requires a positive effect,
+diagnostic `p < 0.05`, and a bootstrap lower bound above zero. Publish all family
+effects and leave-one-family-out sensitivity. The pinned analysis environment and
+golden fixtures must reproduce the draw indices, p-values, estimates, and
+interval endpoints exactly.
+
+There is one stochastic draw per retained cell. Report the success distribution
+across independent cases; do not report pass-at-\(k\), run-to-run reliability, or
+absence of stochastic variance.
+
+All 2B/9B replications, raw results, rules results, harness ablations, memory
+ablation, and equal-action sensitivity are descriptive. They receive no
+confirmatory p-values and cannot support “mechanism X does not matter.”
+
+## 7. Evidence integrity
+
+Every logical attempt has one full key and one or more auditable physical
+candidates. A candidate executes directly in a never-reused
+`attempts/<logical-hash>/<physical-uuid>/` directory.
+
+After every evidence file is closed and hashed, the writer creates and validates
+`PREPARED.json`, then publishes by exclusively creating the empty regular file
+`COMMITTED`. No attempt directory is renamed or replaced.
+
+A reader accepts only a marker-present bundle whose prepared manifest and hashes
+validate. Valid prepared evidence without the marker is adopted without another
+model call. Incomplete evidence is preserved as abandoned. Duplicate valid
+candidates, logical collisions, or invalid committed evidence halt the run.
+Committed bundles are immutable. `results.json` is a rebuildable projection, not
+source evidence.
+
+The guarantee is fail-closed process-termination recovery. Sudden-power-loss
+durability is not claimed.
+
+Execution, grader, tool, publication, and strict-task statuses remain orthogonal.
+Only a fully committed, validated, graded attempt may have a non-null strict
+outcome.
+
+F0 uses a separate disposable implementation and external evidence bundle, not
+this production S4 store. The exact Lenovo commands and candidate-commit
+`C`/metadata-only release-descendant `R` attestation are defined in
+[`PROJECT_SETUP.md`](PROJECT_SETUP.md). Any behavioral byte changed after `C`
+invalidates that attestation and requires another complete F0 run.
+
+## 8. Runtime and safety principles
+
+Tool schemas are executable contracts. Prompt documentation and native Ollama
+schemas derive from the same `ToolSpec`. Domain services enforce types, semantic
+values, authorization, and business invariants.
+
+Parser recovery and argument repair are separate. Mutation arguments may only be
+repaired through an explicit versioned known-alias map. Fuzzy mutation repair is
+not allowed.
+
+Completion is `complete`, `incomplete`, or `unknown`. A model verifier may explain
+missing work but cannot authorize an action or establish authoritative outcome
+success.
+
+Model-authored memory is untrusted input. It requires subject and tenant scope,
+provenance, version, expiry, validation, and explicit write policy. It is not a
+business database or an approved-document store.
+
+Supported surfaces reject legacy general filesystem, shell, skip-confirmation,
+and overlay-composition options before side effects. Domain-specific Office
+artifact writers remain confined to attempt-owned synthetic workspaces.
+
+Agent Lab remains a local development console until its later control-plane
+stage passes. Loopback binding and process separation are not authentication,
+authorization, or sandboxing. Q0 removes the old browser/stdin confirmation
+channel; S5W introduces a newly run-bound confirmation protocol rather than
+reviving that unbound channel.
+
+## 9. Planned synthetic Brix principles
+
+The B0 Brix layer will use fictional tenants, actors, leads, addresses, policies,
+and a fake provider. The model may read assigned synthetic leads and create typed
+follow-up proposals. It may not approve, dispatch, select another tenant, choose
+an arbitrary recipient, bypass deterministic policy, or use memory as
+authoritative state.
+
+Deterministic code owns:
+
+1. actor and tenant authorization;
+2. current-state retrieval;
+3. proposal validation, version, payload hash, revision, and expiry;
+4. approval and dispatch revalidation;
+5. idempotency and concurrency;
+6. fake-provider reconciliation; and
+7. immutable audit events.
+
+Ambiguous fake delivery will enter `delivery_unknown` and reconcile before retry.
+All delivery will be fake. Passing B0 will demonstrate the tested replaceable
+layer and safety shape, not Brix acceptance or production readiness.
+
+## 10. Retained execution
+
+A standalone Python or PowerShell scheduler owns the queue, lock, heartbeat,
+health checks, commits, logs, and resume. It does not depend on an active Codex
+session.
+
+D0 freezes `N` to 20 or 12 cases per family using timing only. The primary then
+runs in `N` balanced waves. Paired conditions are contiguous and AB/BA order is
+counterbalanced across families and waves.
+
+Reboots are allowed after fixed warm-up only if every code, protocol, model,
+runtime, OS, driver, backend, and power fingerprint is identical. Different
+environment strata are never pooled. Sustained throughput degradation triggers
+the predeclared cooldown and environment stop rule without inspecting task
+outcomes.
+
+A partial primary is `INCOMPLETE/DESCRIPTIVE`. It receives no confirmatory
+inference and cannot be replaced with a selected subset. A sealed complete
+primary remains reportable if a later descriptive phase is interrupted.
+
+## 11. Data, training, and future work
+
+Do not place real Brix member, payment, agreement, email, document, or
+access-control data in the repository, benchmark, model memory, or logs.
+
+“Local inference” must be demonstrated through deployment and network controls.
+It does not follow merely from using Ollama and does not cover downloads,
+browser access, telemetry, logs, or backups.
+
+Fine-tuning is outside the current milestone. It may be considered only after a
+frozen evaluation identifies a stable failure that is plausibly learned rather
+than better fixed through schemas, deterministic logic, task design, or
+orchestration. The existing generators and training scripts are not a valid
+training experiment.
+
+External validation and real Brix product work are later tracks. They do not
+block an honest fixed-family internal result, and an internal result does not
+validate either one.
+
+## 12. Definition of completion
+
+The research milestone is complete when:
+
+- F0 passes on the Lenovo;
+- supported unsafe capability paths are quarantined;
+- storage, runtime, graders, generators, conditions, and analysis pass their
+  versioned gates;
+- the sentinel contains zero instrument-invalid cells;
+- the primary is complete and sealed;
+- null, negative, adverse, and rules-dominant findings remain visible;
+- claims stay inside the tested generators, model, conditions, and resources; and
+- a clean checkout reproduces the final evidence and report.
+
+An incomplete primary must still be reported honestly as
+`INCOMPLETE/DESCRIPTIVE`, but it does not complete the research milestone or
+answer the primary question.
+
+The synthetic-layer milestone is complete when the fictional Brix follow-up
+slice passes its deterministic authorization, approval, concurrency,
+idempotency, reconciliation, audit, and no-network tests without a Brix import in
+generic packages.

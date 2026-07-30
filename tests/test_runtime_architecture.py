@@ -1,6 +1,7 @@
 import datetime
 from dataclasses import replace
 import hashlib
+import importlib.util
 from pathlib import Path
 
 import pytest
@@ -13,7 +14,6 @@ from harness.agent import (
     run_harness,
     run_raw,
 )
-from harness.builtin_tools import BUILTIN_EFFECTS, builtin_specs
 from harness.domain import (
     DomainPack,
     GENERIC_PROMPT_PROFILE,
@@ -22,7 +22,6 @@ from harness.domain import (
     load_domain,
     state_envelope,
 )
-from harness.fs_tools import build_overlay
 from harness.llm import LLM
 from harness.memory import MemoryStore
 from harness.model_router import ModelRouter
@@ -760,89 +759,30 @@ def test_office_worlds_and_canonical_fixtures_are_deeply_isolated(
         office_world.CALENDAR[2]["attendees"][:] = original
 
 
-def test_filesystem_overlays_are_isolated_and_compose_atomically(
-    tmp_path,
-):
-    root_one = tmp_path / "one"
-    root_two = tmp_path / "two"
-    root_one.mkdir()
-    root_two.mkdir()
-    confirmations = []
-
-    def confirmer(action, detail):
-        confirmations.append((action, detail))
-        return True
-
-    first_overlay = build_overlay(root_one, confirmer=confirmer)
-    second_overlay = build_overlay(root_two, confirmer=confirmer)
-    domain = load_domain("office_demo")
-    composed = first_overlay.compose(
-        domain.registry,
-        domain.default_policy,
-        domain.prompt_rules,
-    )
-    assert composed.policy.effect("send_email") == "state_write"
-    assert composed.policy.effect("write_file") == "external_write"
-    assert composed.policy.confirmer is confirmer
-
-    first = make_attempt(
-        tmp_path,
-        tools=composed.registry,
-        policy=composed.policy,
-        suffix="fs-first",
-    )
-    second_surface = second_overlay.compose(
-        ToolRegistry(builtin_specs()),
-        ActionPolicy(BUILTIN_EFFECTS),
-    )
-    second = make_attempt(
-        tmp_path,
-        tools=second_surface.registry,
-        policy=second_surface.policy,
-        suffix="fs-second",
-    )
-    assert first.tools.execute(
+def test_general_filesystem_and_shell_overlay_is_not_importable():
+    assert importlib.util.find_spec("harness.fs_tools") is None
+    retired = {
+        "list_dir",
+        "read_file",
         "write_file",
-        {"path": "notes/x.txt", "content": "one"},
-        first,
-    )[0]
-    assert first.tools.execute(
-        "read_file", {"path": "notes/x.txt"}, first
-    ) == (True, "one")
-    assert first.tools.execute(
+        "append_file",
+        "delete_path",
         "move_path",
-        {"path": "notes/x.txt", "to": "archive/x.txt"},
-        first,
-    )[0]
-    assert second.tools.execute(
-        "write_file",
-        {"path": "notes/x.txt", "content": "two"},
-        second,
-    )[0]
-    assert not (root_one / "notes" / "x.txt").exists()
-    assert (root_one / "archive" / "x.txt").read_text() == "one"
-    assert (root_two / "notes" / "x.txt").read_text() == "two"
-    assert confirmations and confirmations[-1][0] == "move"
+        "search_files",
+        "run_command",
+    }
+    for name in ("office_demo", "counter_demo"):
+        assert retired.isdisjoint(load_domain(name).registry.names())
 
 
-def test_filesystem_overlay_flag_and_confirmer_contract(tmp_path):
-    root = tmp_path / "root"
-    root.mkdir()
-    with pytest.raises(ValueError):
-        build_overlay(root, shell_only=True, allow_shell=False)
-    shell = build_overlay(root, shell_only=True, allow_shell=True)
-    assert shell.registry.names() == ("run_command",)
-    assert shell.policy.effect("run_command") == "shell"
-    assert "list_dir" not in shell.prompt_rules
-
-    first = lambda action, detail: True
-    second = lambda action, detail: True
-    overlay = build_overlay(root, confirmer=first)
-    with pytest.raises(ValueError, match="different confirmers"):
-        overlay.compose(
-            ToolRegistry(builtin_specs()),
-            ActionPolicy(BUILTIN_EFFECTS, second),
-        )
+def test_action_confirmation_fails_closed_without_a_callback():
+    assert not ActionPolicy({"write": "external_write"}).confirm(
+        "write", "synthetic detail"
+    )
+    assert ActionPolicy(
+        {"write": "external_write"},
+        confirmer=lambda action, detail: True,
+    ).confirm("write", "synthetic detail")
 
 
 def test_model_router_freezes_roles_and_isolates_role_clients(

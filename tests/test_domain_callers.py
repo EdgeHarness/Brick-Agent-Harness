@@ -107,19 +107,17 @@ for name in ("domains.office_demo", "harness.world", "harness.office"):
     )
 
 
-def test_agent_flag_precedence_and_domain_overlay_surface(tmp_path):
+def test_agent_flag_precedence_and_domain_selection():
     options, task = shared_runner.parse_flags(
         [
             "--domain",
             "counter_demo",
-            "--with-domain",
             "--max-calls",
             "2",
             "increment",
         ]
     )
     assert options["domain_name"] == "counter_demo"
-    assert options["include_domain"] is True
     assert options["max_calls"] == 2
     assert task == "increment"
 
@@ -129,20 +127,6 @@ def test_agent_flag_precedence_and_domain_overlay_surface(tmp_path):
     assert options["domain_name"] == "counter_demo"
     assert task == "increment twice"
 
-    root = tmp_path / "root"
-    root.mkdir()
-    counter = load_domain("counter_demo")
-    tools, policy, profile, rules, resolved = shared_runner._surface(
-        counter, root, True, False, None
-    )
-    assert "increment_counter" in tools
-    assert "write_file" in tools
-    assert policy.effect("increment_counter") == "state_write"
-    assert policy.effect("write_file") == "external_write"
-    assert profile is counter.prompt_profile
-    assert str(root) in rules
-    assert resolved == str(root)
-
 
 def test_agent_cli_rejects_bad_flags_and_help_never_starts_a_model():
     for argv in (
@@ -150,6 +134,11 @@ def test_agent_cli_rejects_bad_flags_and_help_never_starts_a_model():
         ["--max-c", "2"],
         ["--domain"],
         ["--root"],
+        ["--root", "/tmp", "task"],
+        ["--shell", "task"],
+        ["--yolo", "task"],
+        ["--with-domain", "task"],
+        ["--with-office", "task"],
         ["--max-calls", "0"],
         ["--max-calls", "not-an-int"],
     ):
@@ -166,7 +155,32 @@ def test_agent_cli_rejects_bad_flags_and_help_never_starts_a_model():
     )
     assert completed.returncode == 0
     assert "--domain" in completed.stdout
+    for removed in shared_runner.REMOVED_CAPABILITY_FLAGS:
+        assert removed not in completed.stdout
     assert "127.0.0.1:11434/api/chat" not in completed.stderr
+
+
+def test_agent_config_allowlist_rejects_capability_escape_fields():
+    safe = {
+        "name": "safe",
+        "model": "local",
+        "domain": "office_demo",
+        "num_ctx": 8192,
+    }
+    shared_runner.validate_config(safe)
+    for field in ("root", "allow_shell", "shell", "yolo",
+                  "with_domain", "with_office", "tools"):
+        with pytest.raises(ValueError, match="unsupported"):
+            shared_runner.validate_config({**safe, field: False})
+
+
+def test_every_checked_in_agent_config_satisfies_the_allowlist():
+    for path in PROJECT.glob("agents/*/config.json"):
+        if path.parent.name.startswith("_"):
+            continue
+        shared_runner.validate_config(
+            json.loads(path.read_text(encoding="utf-8-sig"))
+        )
 
 
 def test_runtime_paths_preserve_legacy_office_and_namespace_other_domains(
@@ -422,6 +436,30 @@ def test_web_runner_rejects_agent_traversal():
             web_runner.resolve_agent_folder(value)
 
 
+def test_web_ingress_rejects_retired_capabilities_before_start():
+    for field in web_server.REMOVED_RUN_FIELDS:
+        with pytest.raises(ValueError, match="unsupported"):
+            web_server.reject_removed_run_fields({field: False})
+    web_server.reject_removed_run_fields(
+        {
+            "agent": "1b",
+            "domain": "office_demo",
+            "task": "safe synthetic task",
+        }
+    )
+
+    base = ["--agent", "1b", "--task", "safe"]
+    for extra in (
+        ["--root", "/tmp"],
+        ["--shell"],
+        ["--yolo"],
+        ["--with-domain"],
+        ["--with-office"],
+    ):
+        with pytest.raises(SystemExit):
+            web_runner.main(base + extra)
+
+
 def test_web_path_resolution_rejects_prefix_and_symlink_escape(tmp_path):
     root = tmp_path / "static"
     sibling = tmp_path / "static-private"
@@ -454,13 +492,24 @@ def test_frontend_passes_and_locks_selected_domain():
     )
     assert 'id="opt-domain"' in html
     assert "domain: S.domain" in source
-    assert "with_domain:" in source
     assert "/api/workspace?agent=" in source
     assert "&domain=" in source
     assert "S.locked = true" in source
     assert "if (!S.agent || S.locked) return" in source
     assert "$('opt-domain').disabled = true" in source
     assert "$('run').disabled = false" in source
+    retired_tokens = (
+        "opt-root",
+        "opt-shell",
+        "opt-yolo",
+        "opt-office",
+        "with_domain",
+        "with_office",
+        "/api/confirm",
+    )
+    for token in retired_tokens:
+        assert token not in source
+        assert token not in html
     runner_source = (PROJECT / "webui/runner.py").read_text(
         encoding="utf-8"
     )

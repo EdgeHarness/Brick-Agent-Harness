@@ -34,8 +34,6 @@ const TOOL_ICON = {
   add_event: '📅', send_message: '💬', set_reminder: '⏰',
   create_presentation: '📊', create_spreadsheet: '📈', read_spreadsheet: '📈',
   think: '💭', save_memory: '🧠', recall_memories: '🧠', done: '✅',
-  list_dir: '📁', read_file: '📄', write_file: '✏️', append_file: '➕',
-  delete_path: '🗑️', move_path: '↔️', search_files: '🔎', run_command: '⌨️',
 };
 
 const S = {
@@ -391,8 +389,6 @@ function onBanner(e) {
   const grid = el('div', 'banner-grid');
   grid.append(el('span', 'chip', `today: ${e.today}`),
               el('span', 'chip', e.endpoint));
-  if (e.root) grid.append(el('span', 'chip', `real folder: ${e.root}`));
-  if (e.yolo) grid.append(el('span', 'chip', 'confirmations off'));
   if (e.tiers) grid.append(el('span', 'chip', `tiers: ${Object.values(e.tiers.roles).join(', ')}`));
   card.append(grid);
   S.banner = card;
@@ -536,26 +532,6 @@ function onNote(e) {
   }
 }
 
-function onConfirm(e) {
-  const card = addCard('confirm');
-  card.append(el('div', 'tag', `the agent wants to ${e.action}`),
-              el('div', 'note-text', e.detail));
-  const row = el('div', 'confirm-actions');
-  const allow = el('button', 'allow', 'Allow');
-  const deny = el('button', 'deny', 'Deny');
-  const answer = (ok) => {
-    post('/api/confirm', { id: e.id, allow: ok }).catch(() => {});
-    card.classList.add('answered');
-    row.textContent = '';
-    row.append(el('div', 'note-text', ok ? 'you allowed it' : 'you declined it'));
-  };
-  allow.onclick = () => answer(true);
-  deny.onclick = () => answer(false);
-  row.append(allow, deny);
-  card.append(row);
-  autoscroll();
-}
-
 function onEnd(e) {
   const card = addCard(e.finished ? 'done' : 'note');
   head(card, e.finished ? 'run complete' : 'run stopped at the budget', []);
@@ -597,7 +573,6 @@ function handle(e) {
     case 'note': return onNote(e);
     case 'tool': return onTool(e);
     case 'world': return renderTree({ ...S.ws, ...e, logs: (S.ws || {}).logs || [] });
-    case 'confirm': return onConfirm(e);
     case 'end': return onEnd(e);
     case 'error': return onError(e);
     case 'stdout': return void console.log('[runner]', e.text);
@@ -611,10 +586,6 @@ async function startRun() {
   if (!task) { $('task').focus(); return; }
   const body = {
     agent: S.agent, domain: S.domain, task,
-    root: $('opt-root').value.trim(),
-    shell: $('opt-shell').checked,
-    yolo: $('opt-yolo').checked,
-    with_domain: $('opt-office').checked,
     tiers: $('opt-tiers').checked,
     max_calls: Number.isNaN(parseInt($('opt-calls').value, 10))
       ? null : parseInt($('opt-calls').value, 10),

@@ -152,9 +152,12 @@ class ActionPolicy:
         )
 
     def confirm(self, action, detail):
-        # Compatibility behavior only.  The safety remediation changes the
-        # historical "no callback means allow" default in its own version.
-        return True if self.confirmer is None else bool(self.confirmer(action, detail))
+        # Absence of an explicit decision channel is denial, never consent.
+        return (
+            False
+            if self.confirmer is None
+            else bool(self.confirmer(action, detail))
+        )
 
 
 @dataclass

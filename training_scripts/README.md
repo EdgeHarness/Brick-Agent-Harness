@@ -12,6 +12,11 @@ generator, and Docker, Apptainer/Slurm, and bare-Linux launch paths. It targets 
 Llama 3.2 1B-style base by default. None of those launch paths establishes that
 the resulting adapter improves the harness.
 
+This legacy training path is outside the `v0.14.0` milestone. It cannot supply a
+model, adapter, training result, or condition to the retained Qwen3.5 protocol.
+The latest release remains `v0.3.1`; F0/Q0 work is **unreleased** and does not
+authorize training.
+
 ## Blocking defects
 
 ### 1. The default generated data is narrow and duplicated

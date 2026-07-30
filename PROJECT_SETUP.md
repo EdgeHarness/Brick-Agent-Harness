@@ -1,716 +1,685 @@
-# Gated Implementation Plan
-
-This plan implements the standards in the [Project Guide](PROJECT_GUIDE.md). It uses
-acceptance gates rather than calendar promises. A gate advances only when its evidence
-exists; elapsed time does not make incomplete work acceptable.
-
-## 1. Rules for executing the plan
-
-1. Treat the current system as a synthetic research scaffold.
-2. Do not retain benchmark results until the instrument and protocol gates pass.
-3. Do not use real Brix data until the discovery and data-governance gate passes.
-4. Do not expose general shell or filesystem mutation to a Brix-facing system.
-5. Keep research conclusions separate from product acceptance.
-6. Record failures of the runner, model, tool, grader, and analysis separately.
-7. Make all comparisons from immutable, versioned artifacts.
-8. Freeze hypotheses, primary outcomes, exclusions, and analysis before retained runs.
-9. Do not use unsupported time, cost, performance, or compatibility estimates.
-10. Fine-tune only after a frozen evaluation identifies a training-addressable failure.
-
-## 2. Session-sized implementation packages
-
-The gate taxonomy below remains authoritative. The `S0`–`S18` identifiers divide that
-work into bounded implementation sessions; they do not create a second set of gates.
-Only one package is active in a coding session unless the project owner explicitly
-changes the scope.
-
-Each package follows the same control loop:
-
-1. State the package identifier, files in scope, acceptance checks, and prohibited work.
-2. Verify the prerequisite evidence before editing.
-3. Implement only the declared package.
-4. Run its offline checks and inspect the complete diff.
-5. Update documentation and `CHANGELOG.md` when behavior or a public contract changes.
-6. Report changed files, test evidence, limitations, and unresolved risks.
-7. Stop. A later package begins only after a separate review decision.
-
-| Package | Canonical gate | Depends on | Bounded deliverable | Exit evidence |
-|---|---|---|---|---|
-| S0 | G0 | Nothing | Reproducible project metadata, dependency groups, offline test command, publication exclusions, and clean repository baseline | A clean environment can install the declared development dependencies and run the offline smoke suite without Ollama or network access |
-| S1 | R1 | S0 | Deterministic characterization tests for parsing, normalization, tools, memory, context limits, agent-loop boundaries, and existing graders | Tests reproduce current behavior and separately mark known defects without silently fixing them |
-| S2 | R1 | S1 | Explicit `RunConfig`, `ToolRegistry`, `DomainPack`, `ActionPolicy`, and attempt context passed through the execution path | Two configurations execute in one process without registry, clock, hook, policy, or budget leakage |
-| S3 | R1 | S2 | Existing fictional office extracted as `office_demo` plus a minimal second domain used only as a portability fixture | Both domains run through the same core; the second domain requires zero edits to core modules |
-| S4 | R1 | S1–S3 | Immutable attempt identity, isolated state/artifacts/memory, transactional result commit, safe resume, and explicit failure statuses | Crash, stale-artifact, resume, and concurrent-writer tests pass |
-| S5 | R1 | S1, S4 | Strict outcome graders with positive, minimally wrong, extra-action, stale-artifact, missing-artifact, and corrupt-artifact fixtures | Every adversarial fixture that should fail does fail, and grader errors cannot become model scores |
-| S6 | R2 | S3, S5 | Versioned independent task generators and separated development, validation, retained, and adversarial families | Instances replay from manifests and retained families pass semantic-leakage review |
-| S7 | R2 | S4–S6 | Frozen research question, conditions, baselines, ablations, models, budgets, metrics, sample-size rationale, ordering, and analysis | Protocol inputs and analysis are reviewed, versioned, and hash-pinned before outcome inspection |
-| S8 | R1/R2 | S7 | Scripted-agent checks and a small live-model sentinel | End-to-end instrumentation passes; sentinel outcomes are labeled diagnostic and are not retained evidence |
-| S9 | R3 | S8 | Frozen paired retained experiment | Immutable result bundle and preregistered analysis complete without instrument changes |
-| S10 | R4 | S9 | Version-pinned external benchmark or independently developed generalization domain | Transfer results are reported separately with compatibility limits and complete provenance |
-| S11 | P0 | S0 and owner authorization | Brix workflow map, value/risk score, selected workflow, accountable owners, and approved data plan | Brix approves the workflow boundary and data handling before any real record is accessed |
-| S12 | P1 | S3, S11 | Product contract, roles, typed proposals, deterministic invariants, approval rules, provider contracts, and threat model | Brix approves acceptance tests and failure behavior; no invariant depends on a prompt |
-| S13 | P2 | S12 | Synthetic Brix organization/domain pack and complete vertical slice | Product, security, concurrency, fault, recovery, and audit tests pass using synthetic data |
-| S14 | P2 | S13 and separate owner authorization | Official provider sandbox or isolated test-tenant integration | Create, reconcile, retry/idempotency, correction, and rollback tests pass; absent a safe provider boundary, writes remain blocked |
-| S15 | P3 | S11, S14 | Approved-data shadow evaluation without external mutations | Predeclared quality, safety, disclosure, and correction-burden thresholds pass |
-| S16 | P4 | S15 | Bounded, human-approved pilot with monitoring and rollback | Brix explicitly accepts measured benefit and residual risk; production remains a separate decision |
-| S17 | R5 | S9 and a diagnosed learnable failure | Provenance-complete, deduplicated training experiment evaluated through the frozen serving path | The adapter beats declared alternatives on held-out outcomes and resource tradeoffs |
-| S18 | G1 | Applicable completed gates | Reproducibility release and accountable Brix handoff | Published evidence is reproducible and private Brix configuration/data remain separate |
-
-S11 may be scheduled after S0 whenever authorized Brix stakeholders are available; it
-does not block S1–S10. Calendar-level parallelism does not permit two packages to make
-overlapping repository changes in the same implementation session.
-
-### Gate coverage of the package table
-
-Each R1 subsection maps to a package: R1.1 to S1, R1.2 to S4, R1.3 and R1.4 to S5, and
-R1.5 to S2 and S3. R1.6 had no row because it governs the opt-in on-device filesystem and
-shell tools rather than the benchmark instrument. Leaving it unscheduled would have let an
-R1 acceptance review pass with that subsection unbuilt, so it is scheduled explicitly as a
-sibling of S5 under the same gate; the two may run in either order.
-
-| Package | Canonical gate | Depends on | Bounded deliverable | Exit evidence |
-|---|---|---|---|---|
-| S5F | R1 | S2 | Real-path containment, rejection of symlink/junction and time-of-check/time-of-use escapes, refusal of filesystem and repository roots, deny-by-default destructive confirmation, bounded file/process limits, and verified process-tree termination | Every escape, broad-root, and destructive-default case fails closed on supported platforms, and each removed protection breaks a targeted test |
-
-S5F must also replace the write deny-list in `harness/fs_tools.py`, which is hard-coded to
-one Windows installation and therefore protects neither this repository's own code nor its
-results directory in any other checkout.
-
-### Package status
-
-`Implemented` means the bounded deliverable exists in the repository and its offline
-checks pass. It is not gate acceptance: G0 and R1 remain partial and unpassed, so no
-result produced by this instrument is retained evidence.
-
-| Package | Status | Evidence |
-|---|---|---|
-| S0 | Implemented | `pyproject.toml`, `requirements*.txt`, a successful `.github/workflows/ci.yml` matrix on Python 3.9–3.13, an autouse common-Python-network guard, and tracked-path/high-confidence-credential checks (`tests/test_offline_foundation.py`) |
-| S1 | Implemented | Scripted-model characterization of parsing, normalization, tools, world, memory, loop boundaries, and every current grader, with known defects locked rather than silently fixed |
-| S2 | Implemented | `RunConfig`, `RunHooks`, `ActionPolicy`, `AttemptContext`, `ToolRegistry`; packs require total effect-policy coverage; no supported runtime path reads a mutable module-level registry, clock, hook, budget, or policy |
-| S3 | Implemented | `domains/office_demo` and `domains/counter_demo` run through one core; office system prompts are byte-identical to the pre-extraction baseline; the benchmark records and Agent Lab emits the canonical executed tool surface; only the two named deprecation shims import a domain from `harness/` |
-| S4, S5F | Not completed | S3 migration added limited domain/version path and report checks, and `0.3.1` hardened selected web paths. Transactionality, crash/resume isolation, filesystem-overlay containment, fail-closed confirmation, and package exit tests remain unimplemented. |
-| S5–S18 | Not started | — |
-
-The currently authorized implementation scope is **S0 through S3 plus audit
-corrections to those contracts**. S4, S5F, and later package completion remains
-out of scope until S0–S3 are reviewed and continuation is explicit.
-
-## 3. Workstreams and dependencies
-
-Track R is the research instrument. Track P is the Brix product. Track G covers shared
-governance.
-
-| Gate | Workstream | Depends on | Authorizes |
-|---|---|---|---|
-| G0 | Repository truth and containment | Nothing | Safe synthetic development |
-| R1 | Instrument validity | G0 | Protocol design and diagnostic pilots |
-| R2 | Frozen research protocol | R1 | Retained calibration runs |
-| R3 | Retained calibration experiment | R2 | Evidence-limited research claims |
-| R4 | External validation and generalization | R3 | Broader, still bounded claims |
-| P0 | Brix discovery and data governance | G0 | Selection of one product workflow |
-| P1 | Product contract and threat model | P0 | Synthetic integration build |
-| P2 | Synthetic vertical slice | P1 | Approved-data shadow evaluation |
-| P3 | Shadow evaluation | P2 | Controlled live pilot decision |
-| P4 | Controlled pilot | P3 | Production-readiness decision |
-| R5 | Training experiment | R3 and a diagnosed failure | Adapter evaluation |
-| G1 | Research publication and client handoff | Applicable completed gates | Release |
-
-R1/R2 and P0 can proceed in parallel. R3 does not wait for a Brix integration. P2 may
-reuse generic typed interfaces from R1, but it must not reuse benchmark state or
-model-writable memory as a business database.
-
-## Gate G0 — Establish repository truth and containment
-
-### Work
-
-1. Record the canonical repository, ownership, branch policy, and institutional/client
-   publication requirements.
-2. Add a root runtime dependency specification and a lock strategy. Keep research,
-   web, office-file, and training dependencies separable.
-3. Add continuous integration for syntax, unit tests, deterministic integration tests,
-   dependency checks, and documentation links.
-4. Define an artifact policy:
-   - synthetic/redacted fixtures may be committed;
-   - private Brix data, secrets, runtime memory, and identifiable transcripts may not;
-   - retained research results require an immutable manifest and redaction review.
-5. Remove tracked runtime state and host-specific settings from the intended published
-   artifact. Add appropriate ignore rules without deleting a user's local records.
-6. Create a machine-readable version manifest for the harness, tasks, graders, domain
-   pack, analysis, dependencies, model digest, runtime, and Git commit.
-7. Mark every unsupported model-performance statement as a hypothesis or remove it.
-8. Ensure launchers label the UI and simulated tools as a demonstration, not a Brix
-   deployment.
-9. Default all real filesystem, shell, external-message, and external-calendar
-   capabilities to disabled.
-
-### Acceptance gate
-
-- A clean checkout can install the intended environment from declared inputs.
-- CI runs without Ollama, private data, or network-dependent tests.
-- No secret, real Brix record, runtime memory, or identifying transcript is tracked.
-- Documentation and UI describe the current status accurately.
-- Synthetic development cannot invoke a general shell or mutate a real user folder by
-  default.
-
-## Gate R1 — Make the research instrument valid
-
-Do not run a retained model matrix during this gate. Use scripted model responses and
-small diagnostic runs whose outputs are explicitly disposable.
-
-### R1.1 Offline harness characterization
-
-Build scripted-model tests for:
-
-- valid single-call and multi-call tasks;
-- malformed JSON, braces inside strings, prose around JSON, and truncated output;
-- long observations, inaccessible truncated tails, paging, and context-window
-  exhaustion;
-- missing, unknown, mistyped, and semantically invalid parameters;
-- impossible dates and times;
-- duplicate-call and loop behavior;
-- tool exceptions and timeouts;
-- premature `done`, empty summaries, completion-check parse failures, and budget
-  exhaustion;
-- memory load, write, corruption, poisoning, scope, and expiration;
-- planner output that contains arbitrary prose or nonexistent tools.
-
-Required changes:
-
-- use typed schemas and semantic validators at the tool boundary;
-- distinguish parser recovery from argument repair;
-- do not fuzzy-repair write parameters; return structured correction feedback;
-- make completion-check failure `unknown` or `incomplete`, never implicitly complete;
-- inspect authoritative state and artifact requirements before accepting completion;
-- log raw planner/completion-check output and error categories safely;
-- treat model-authored memory as untrusted, scoped input with explicit write policy;
-- define explicit statuses and recovery behavior for observation truncation, missing
-  pagination, and context exhaustion rather than silently losing required evidence.
-
-### R1.2 Attempt isolation and result integrity
-
-Refactor the runner so every attempt has:
-
-- a unique identifier;
-- a new world, memory scope, and artifact directory;
-- no stale PPTX, XLSX, JSON, or other file from a prior attempt;
-- an immutable initial-world snapshot;
-- one transactional attempt-commit protocol covering state, result, artifact manifest,
-  and completion marker;
-- single-writer enforcement or locking, durable atomic writes, and recovery validation
-  after interruption;
-- resume based on the full attempt key;
-- no deletion or reset of state needed by an already completed attempt.
-
-Represent a dependent learning pair as one isolated multi-episode scenario. Its episodes
-share only that scenario's memory and execute in fixed internal order.
-
-Reject unknown condition names, unknown task IDs, incompatible versions, and malformed
-configuration. Do not silently map an unknown condition to raw.
-
-Record execution failure, model failure, tool failure, grader failure, timeout, and
-strict task failure as different statuses. A grader exception must invalidate the
-attempt; it must not become a model score of zero.
-
-### R1.3 Rewrite the graders
-
-Create golden positive, negative, boundary, and adversarial artifacts before modifying
-the grader. At minimum:
-
-- require exact intended file identity, not filename substring;
-- associate spreadsheet values with the correct rows and columns;
-- associate slide values with the correct slide, title, region, and structure;
-- use fixed denominators;
-- inspect the current attempt's action log and state only;
-- require task-specific content rather than broad substrings such as `yes`;
-- reject extra unrequested emails, messages, events, reminders, or files;
-- distinguish a correct final state reached through a harmful action where the task
-  requires safe execution;
-- make strict complete-task pass the primary result;
-- keep component checks as diagnostics.
-
-Version task definitions and graders independently. The report must refuse to combine
-incompatible versions unless a deliberate migration analysis is requested.
-
-### R1.4 Correct spreadsheet and artifact handling
-
-Replace the spreadsheet column conversion with a tested multi-letter implementation.
-Test formulas, cached values, missing files, corrupted files, extra files, and files
-whose names merely contain the requested stem. Test document-generation behavior
-against the actual supported library versions.
-
-### R1.5 Explicit configuration and domain packs
-
-Before retained runs, replace mutable module-level research configuration with explicit
-objects such as:
-
-- `RunConfig`;
-- `ToolRegistry`;
-- `DomainPack`;
-- `ActionPolicy`;
-- `ArtifactStore`.
-
-A domain pack should supply a versioned registry, initial world, task instances,
-graders, clock policy, and domain rules. The runner, command-line launcher, and web
-console must receive these objects explicitly rather than mutate shared globals.
-
-Move the existing fictional office into a calibration pack. Preserve behavior with
-offline golden traces and a small diagnostic sentinel set. Do not demand identical
-model output across a refactor: compare recorded configuration, deterministic state
-transitions, grader outputs on golden artifacts, and prespecified diagnostic tolerances.
-
-### R1.6 Filesystem and process safety tests
-
-Although no general filesystem or shell belongs in the Brix product, harden the
-research tools that remain:
-
-- resolve real paths and verify containment with `commonpath`;
-- reject symlink, junction, and time-of-check/time-of-use escapes;
-- refuse filesystem roots, repository roots, and deletion of the configured root;
-- use narrowly created temporary workspaces;
-- default destructive confirmation to deny when no callback exists;
-- make deletion recoverable where practical;
-- remove or separately sandbox network and process execution;
-- verify that stop terminates the entire owned process tree;
-- apply limits to file size, count, process duration, and log volume.
-
-Confirmation is not a sandbox and must not be described as one.
-
-### Acceptance gate
-
-- All offline harness, grader, isolation, resume, parser, schema, provenance, and safety
-  tests pass on supported platforms.
-- Deliberately reintroducing each known defect causes a targeted test to fail.
-- A repeated or interrupted attempt cannot inherit artifacts or memory.
-- A grader failure cannot be reported as model failure.
-- The calibration pack runs through explicit configuration with no mutable global
-  registry.
-- A disposable sentinel run produces a complete manifest and can be analyzed from a
-  clean checkout.
-
-## Gate R2 — Freeze the research protocol
-
-### R2.1 Specify questions and contrasts
-
-Write a preregistration or internal frozen protocol containing:
-
-- the neutral primary research question;
-- directional or non-directional hypotheses;
-- the primary paired contrasts;
-- primary and secondary outcomes;
-- harmful-side-effect definitions;
-- exclusion and rerun rules;
-- missing-data and infrastructure-failure handling;
-- multiplicity handling for secondary analyses;
-- the exact analysis code and report tables.
-
-At minimum assess these conditions where technically supported:
-
-1. deterministic workflow/rules baseline for suitable tasks;
-2. reasonable native-function-calling baseline;
-3. full harness;
-4. preregistered component or mechanism-group ablations.
-
-Retain prompt-only raw JSON as a minimal baseline if useful, but do not label it the
-only “naive” implementation.
-
-### R2.2 Construct independent task instances
-
-Replace dependence on 12 fixed prompts with versioned task families and independently
-generated instances. Vary names, dates, wording, policies, state, conflicts, and
-irrelevant distractors. Separate generator logic and seeds from the tested agent.
-
-Create:
-
-- development instances visible during implementation;
-- frozen validation instances for pre-run checks;
-- held-out retained instances unavailable during prompt and grader tuning;
-- adversarial instances covering unwanted side effects and ambiguous requests.
-
-Check for semantic as well as verbatim overlap with training data.
-
-### R2.3 Choose sample size and ordering
-
-Use simulation or power analysis for the paired strict-pass outcome and anticipated
-failure rates. Specify the independent unit and any repeated trials. Do not justify
-uncertainty from three seed changes on an identical task.
-
-Counterbalance or randomize model/condition/scenario-block order according to the
-analysis plan. Keep dependent episodes inside a declared multi-episode scenario in their
-required order. Record warmup, cooldown, power mode, temperature where available,
-concurrent load, and runtime state. Treat thermal drift as a measured nuisance variable,
-not something eliminated by assertion.
-
-### R2.4 Select comparable models
-
-Choose a same-family, same-generation size sweep with documented training and
-post-training comparability that fits the available hardware. Pin:
-
-- model repository, revision, and served digest;
-- quantization;
-- chat and tool template;
-- thinking mode;
-- serving runtime and options;
-- context and output limits.
-
-If comparable releases are unavailable or impractical, narrow the size claim. Report
-cross-generation or cross-family systems separately as descriptive associations. Do not
-combine Llama 3.2, Llama 3.1, and Qwen into one causal size curve.
-
-### R2.5 Define resource accounting
-
-Record per request and per attempt:
-
-- input, cached, reasoning where exposed, and output tokens;
+# Brick Replacement Plan
+
+## Status and authority
+
+This is the canonical implementation and research plan for Brick. It supersedes
+the former `S0`–`S18`, `G0`–`G1`, `R1`–`R5`, and `P0`–`P4` execution taxonomy.
+Those names may remain in released changelog entries as historical descriptions,
+but they no longer authorize or order current work.
+
+The latest released version is `v0.3.1`. Work toward `v0.4.0` is
+**unreleased**. The native-Windows Lenovo F0 gate is pending, so the repository
+must not claim that `v0.4.0` is complete, tagged, or validated.
+
+The current milestone has two outputs:
+
+1. a valid, narrowly scoped research result about a generic agent harness; and
+2. a planned replaceable, entirely synthetic Brix lead-follow-up layer that,
+   after B0 is implemented and accepted, demonstrates the architecture without
+   using Brix systems or records.
+
+The Mac is limited to source work and offline tests. All live-model feasibility,
+sentinel, development-timing, and retained measurements run on the Lenovo Yoga
+with Snapdragon X Elite, 32 GB RAM, and native Windows 11 ARM64.
+
+## Execution rules
+
+1. Work on one release stage at a time.
+2. Treat all current model scores as exploratory until S9 is sealed.
+3. Never convert a runner, store, grader, or analysis failure into a model
+   failure.
+4. Never tune from retained outcomes.
+5. Keep the generic harness free of Brix-specific imports and branches.
+6. Use only fictional records and fake providers in the synthetic Brix layer.
+7. Do not expose a general filesystem, shell, or skip-confirmation capability
+   through a supported surface.
+8. Commit evidence only through the marker-last protocol defined below.
+9. A release version records implemented behavior; it does not waive an
+   acceptance gate.
+10. Each stage ends with tests, documentation reconciliation, an exact
+    `CHANGELOG.md` entry, commit, SemVer tag, push, required green CI, and a stop
+    for review. A tag is created only after that stage's mandatory evidence
+    exists.
+
+## Release sequence
+
+| Stage | Planned release | Deliverable | Mandatory exit gate |
+|---|---:|---|---|
+| F0/Q0 | `v0.4.0` | Quarantine unsafe capabilities and add reproducible Lenovo model, runtime, resource, and Windows storage probes. | All legacy escape paths fail before side effects, offline tests pass, and the native Lenovo F0 evidence satisfies every requirement below. |
+| S4 | `v0.5.0` | Marker-last immutable attempt evidence, writer locking, exact resume, recovery, projection rebuilding, and failure taxonomy. | Crash-boundary, stale-artifact, corruption, duplicate, concurrent-writer, held-handle, and recovery tests pass on POSIX and native Windows ARM64. |
+| S1R | `v0.6.0` | Typed tool schemas, conservative parsing, fail-closed completion, explicit context outcomes, scoped untrusted memory, and correct exception classification. | Parser, schema, semantic-value, memory, completion, truncation, timeout, and executor tests fail closed. |
+| B0 | `v0.7.0` | Replaceable synthetic Brix lead-follow-up vertical slice with fake records and fake delivery. | Tenant, approval, concurrency, expiry, idempotency, ambiguous-delivery, audit, and no-network tests pass; generic packages import no Brix module. |
+| S5 | `v0.8.0` | Strict, independently versioned outcome graders. | Positive, minimally wrong, harmful, stale, missing, extra, and corrupt fixtures pass for every scenario; grader failures yield `strict_success=null`. |
+| S5W | `v0.9.0` | Harden the local Agent Lab control plane. | Token, origin, content-type, body-limit, run-bound confirmation, reset, path, stop, and orphan-process tests pass on Windows and POSIX. |
+| S6G | `v0.10.0` | Independent versioned generators and split manifests. | Development, validation, sentinel, retained, and adversarial instances replay exactly and pass structural-overlap review. |
+| S6C | `v0.11.0` | Shared native-tool transport, condition registry, opportunity ledger, standalone scheduler, telemetry, rules reference, and descriptive ablations. | Primary conditions share the exact model transport, schemas, validators, tasks, and budgets; every condition has an immutable mechanism digest. |
+| D0/S7 | `v0.12.0` | Score-masked development timing run and frozen protocol, manifests, exclusions, order, analysis, and sample size. | Only instrumentation and resource fields were visible during D0; all retained inputs hash-match the tag before retained outcomes are inspected. |
+| S8 | `v0.13.x` | Disposable sentinel across every retained condition. | There are zero instrument-invalid sentinel cells. Any instrument change creates a patch release and requires a complete sentinel rerun. |
+| S9 | `v0.14.0` | Sealed primary experiment, bounded descriptive work, immutable evidence bundle, final report, and reproduction command. | A clean checkout reproduces all reported records, tables, intervals, and conclusions from validated committed bundles. |
+
+## F0/Q0 — feasibility and quarantine
+
+### Q0 capability boundary
+
+Supported CLI, web, and configuration surfaces must reject all legacy forms of:
+
+- `--root`;
+- `--shell`;
+- `--yolo`;
+- `--with-domain`;
+- `--with-office`;
+- Agent Lab real-root, shell, and skip-confirmation options; and
+- configuration or composition paths that expose the general filesystem/shell
+  overlay.
+
+Rejection occurs before output creation, model access, network access, or
+mutation. Brick may still create attempt-owned Office artifacts through
+domain-specific tools. Those artifact writers are not a general filesystem
+capability.
+
+The runnable legacy overlay source is deleted rather than relocated to another
+importable package. Released history may describe it, but no supported module,
+launcher, API, UI, or configuration may import or activate it. Tests enumerate
+every former entry path and prove fail-before-side-effect behavior.
+
+### Lenovo model feasibility
+
+F0 runs only on the native Windows 11 ARM64 Lenovo. Record:
+
+- exact Lenovo model, CPU, RAM, storage device and free space;
+- Windows build, BIOS, Qualcomm driver, power mode, and execution backend;
+- Python and Ollama architecture, version, executable path, and SHA-256 digest;
+- the full model metadata and served digest for:
+  - `qwen3.5:2b-q4_K_M`;
+  - `qwen3.5:4b-q4_K_M`; and
+  - `qwen3.5:9b-q4_K_M`;
+- effective chat template, tool transport, loaded context, exact requested
+  sampling-option payloads, process memory, latency, and warm throughput.
+
+The exact ARM64 Ollama build is selected by this gate; it is not hard-coded in
+advance. Pulling a tag is insufficient: the full digest and metadata must be
+captured.
+
+For each model, run three non-business native-tool conformance cases. Verify that
+native tool calls and tool results round-trip without prompt-JSON emulation. Save
+the exact accepted request payloads, returned native tool-call objects, tool
+results, model metadata, effective chat template, loaded context, and
+`think=false` responses.
+
+The option-validation probe also sends one otherwise valid request containing the
+unknown option `brick_f0_unknown_option`. The selected Ollama build must reject it
+with a client error that identifies the unknown option. Acceptance of the exact
+candidate option map plus explicit rejection of that sentinel establishes that
+the backend validates option names rather than silently accepting an arbitrary
+map. This black-box gate does **not** prove the numerical behavioral effect of
+each accepted sampling parameter; Brick makes no stronger claim. If a candidate
+option is rejected, or thinking cannot be disabled, revise and version the
+candidate protocol and rerun all of F0 before D0.
+
+F0 requires:
+
+- a Lenovo-manufacturer host whose processor identifies as Snapdragon X Elite,
+  running on AC power;
+- the Windows AC overlay set to Best Performance, or an active High/Ultimate
+  Performance scheme, with its GUID retained in the environment record;
+- native ARM64 Python and Ollama processes;
+- an unchanged, hash-matched Ollama listener plus at least one measured Ollama
+  model-runner descendant during inference;
+- a fixed local NTFS output volume outside OneDrive, with Microsoft Defender
+  real-time protection and the Windows Search service running;
+- at least 30 GiB free after model pulls;
+- no out-of-memory failure, server crash, or request longer than ten minutes;
+- peak committed memory no greater than 28 GiB;
+- median warm throughput of at least 5 output tokens/second for 4B;
+- median warm throughput of at least 3 output tokens/second for 9B; and
+- a recorded backend classification rather than an assumption of GPU or NPU
+  acceleration.
+
+Failure of the 4B model stops the research design. Failure of 2B or 9B removes
+only that descriptive system replication; no substitute model is introduced.
+The three releases are not described as a controlled parameter-size series.
+
+### Windows storage feasibility
+
+F0 includes a disposable standalone implementation of the marker-last primitive.
+It validates Windows behavior before the production S4 store is built; it is not
+itself retained evidence or an S4 implementation.
+
+Run the probe on a short local NTFS path such as `C:\BrickRuns`, outside OneDrive,
+with Defender and indexing left enabled. It must complete:
+
+- 200 prepare/commit/validate cycles using real `.pptx` and `.xlsx` fixtures;
+- 50 injected process exits distributed across write boundaries;
+- 10 held-handle cycles, alternating real `.pptx` and `.xlsx` files and exercising
+  bounded Windows sharing/access retry; and
+- zero invalid committed bundles.
+
+The 50 exit cycles and 10 held-handle cycles are included in the 200-cycle total.
+Q0 offline tests separately cover every disposable-probe write boundary,
+prepared-bundle adoption, incomplete-bundle preservation, physical-directory
+collision, tampering, unexpected members, and simulated retryable access errors.
+The production-only concurrent-writer, duplicate-valid-candidate,
+logical-collision, projection-rebuild, and full corruption matrix belongs to S4;
+F0 does not claim to implement or validate that production store.
+
+Hosted `windows-11-arm` CI is advisory because the runner is a preview service.
+Required automation is Linux and Windows x64 CI plus the locally generated,
+hash-pinned Lenovo ARM64 evidence bundle. The Windows x64 job must exercise the
+live Win32 memory/filesystem signatures, current-process tree sampling, and one
+real Office held-handle publication; it is supporting portability evidence, not
+a substitute for the Lenovo gate.
+
+### Lenovo command and `v0.4.0` attestation
+
+Run F0 from a clean, pushed candidate commit `C`. Use native ARM64 Python, start
+the native ARM64 Ollama server, connect AC power, select the recorded performance
+power mode, and leave Defender and indexing enabled. From an ARM64 PowerShell in
+the repository root:
+
+```powershell
+git switch --detach <C>
+git status --short
+python -m pip install -r requirements-test.txt
+python -m pytest -q
+python -m bench.f0_probe fingerprint
+python -m bench.f0_probe run --outdir C:\BrickRuns\f0 --pull
+```
+
+`git status --short` must print nothing. The final command must exit zero and
+print `F0 PASS run=<RUN_DIR>`. Copy that exact printed path and independently
+verify the committed bundle:
+
+```powershell
+python -m bench.f0_probe verify "<RUN_DIR>"
+```
+
+Verification must exit zero and print a summary whose `overall_status` is
+`pass`. A failed 2B or 9B descriptive model remains explicitly `ineligible` in
+that passing summary; it is not silently omitted or substituted. Do not rename,
+edit, or reuse `<RUN_DIR>`. Verification re-hashes every manifested member and
+recomputes pass eligibility from the protocol, repository, environment, storage,
+pull, model, runtime, and memory records; it does not trust the summary status
+alone.
+
+Retain two copies of the exact bundle: the original short-path NTFS directory and
+a release archive. Record the archive SHA-256, committed manifest SHA-256,
+protocol SHA-256, run ID, candidate commit, model digests, and summary status in
+`evidence/f0/v0.4.0.json`. Extract the archive into a fresh directory and run the
+same `verify` command against the extracted run before release. Attach the
+hash-matched archive to the `v0.4.0` GitHub release; do not commit the bulky raw
+bundle into Git.
+
+Use this PowerShell sequence without changing the committed run directory:
+
+```powershell
+$runDir = "<RUN_DIR>"
+$archive = "$runDir.zip"
+$extractRoot = "$runDir-extracted"
+Compress-Archive -LiteralPath $runDir -DestinationPath $archive -CompressionLevel Optimal
+Get-FileHash -Algorithm SHA256 $archive
+Get-FileHash -Algorithm SHA256 (Join-Path $runDir "PREPARED.json")
+Get-FileHash -Algorithm SHA256 (Join-Path $runDir "summary.json")
+Expand-Archive -LiteralPath $archive -DestinationPath $extractRoot
+$extractedRun = Join-Path $extractRoot (Split-Path $runDir -Leaf)
+python -m bench.f0_probe verify $extractedRun
+```
+
+The archive path must not already exist, and `$extractRoot` must be a new empty
+path. Retain the exact `Get-FileHash` output in the release preparation record.
+
+The release tag may point to a metadata-only direct descendant `R` of tested
+commit `C`, under this exact rule:
+
+1. Run `python -m bench.f0_probe fingerprint` at `C` and record its commit and
+   `behavior_tree_sha256`; the F0 bundle independently records the same values.
+2. Between `C` and `R`, permit only:
+   - creation of `evidence/f0/v0.4.0.json`;
+   - promotion of the pending changelog entry and status-only release wording in
+     `CHANGELOG.md`, `README.md`, `PROJECT_GUIDE.md`, `PROJECT_SETUP.md`,
+     `ARCHITECTURE.md`, `SECURITY.md`, `FIXES.md`, `bench/README.md`,
+     `agents/README.md`, `agents/*/README.md`, `webui/README.md`, and
+     `training_scripts/README.md`; and
+   - changing only the `[project].version` scalar in `pyproject.toml`.
+3. Run the same `fingerprint` command at `R` and require byte equality with the
+   behavior-tree digest recorded for `C`.
+4. Mechanically review the complete `C..R` diff against the allowlist. Any other
+   changed byte—including code, tests, workflow, dependency, task, prompt,
+   protocol, or probe behavior—creates a new candidate commit and requires a full
+   Lenovo F0 rerun.
+5. Run required CI on `R`, then create an annotated `v0.4.0` tag that points to
+   `R` and records `C`, the attestation-file Git blob ID, archive SHA-256, and
+   behavior-tree SHA-256. Push the commit and tag. The tracked attestation must
+   not claim to contain `R`'s commit hash: embedding a commit's own hash in one of
+   its files is circular. The tag target supplies the authoritative `R` identity.
+
+`evidence/f0/v0.4.0.json` must contain exactly the versioned release-attestation
+schema, candidate commit `C`, candidate behavior-tree SHA-256, run ID, protocol
+SHA-256, F0 `PREPARED.json` SHA-256, `summary.json` SHA-256 and status, archive
+name/size/SHA-256, primary tag/digest/status, both descriptive tag/digest/status
+records (with a null digest and explicit reason when a descriptive pull failed),
+extracted-copy verification status, and verification timestamp. It must not
+contain a guessed release commit, mutable URL, raw transcript, or machine-local
+path. The annotated tag and GitHub release bind that tracked record to `R` and
+the external archive.
+
+The implemented canonical digest enumerates `git ls-files -z`, sorts the UTF-8
+path bytes, excludes all `.md` paths and `evidence/f0/**`, and hashes every other
+tracked path as: eight-byte big-endian path length, path bytes, eight-byte
+big-endian content length, then content bytes. A symlink contributes its UTF-8
+link target. Before hashing `pyproject.toml`, the single project-version line is
+normalized to `version = "<release-metadata>"`; any missing or duplicate version
+line fails. Because this digest deliberately excludes release prose, the separate
+`C..R` diff allowlist remains mandatory. A prose assertion that the diff is
+“documentation only” is insufficient.
+
+## S4 — marker-last evidence store
+
+### Layout
+
+```text
+runs/<run-id>/
+  run.json
+  run.lock
+  attempts/<logical-hash>/<physical-uuid>/
+    attempt.json
+    initial-state.json
+    final-state.json
+    result.json
+    grade.json
+    actions.json
+    transcript.md
+    memory-delta.jsonl
+    artifacts/
+    PREPARED.json
+    COMMITTED
+  results.json
+```
+
+`AttemptKey` includes the domain and content digest, task/generator/grader
+versions, model tag and digest, condition version and mechanism digest, instance,
+ordered-subepisode contract and repeat, sampling and opportunity budgets, prompt
+digest, and tool-schema digest. The logical hash is a canonical digest of this
+key.
+
+### Commit protocol
+
+1. Acquire the exclusive run lock before candidate creation or model access.
+2. Create a never-reused UUID directory directly in its final physical location.
+3. Execute only in that directory.
+4. Write, flush, close, and hash every required evidence file.
+5. Reject symlinks, junctions, reparse points, and unexpected files.
+6. Write and flush `PREPARED.json`, then re-read it and verify every declared
+   size and hash.
+7. Publish by exclusively creating the empty regular file `COMMITTED`.
+8. Re-open and validate the complete bundle before exposing it to readers.
+
+No directory is renamed or replaced. A committed directory is immutable.
+`results.json` is only a disposable projection rebuilt from valid committed
+bundles.
+
+### Recovery rules
+
+- No physical directory means the attempt was not started.
+- A directory without valid `PREPARED.json` is preserved as abandoned; resume
+  creates a new physical attempt.
+- A valid prepared bundle without `COMMITTED` is adopted by validation and marker
+  creation. The model is not called again.
+- A marker-present bundle with valid hashes is committed.
+- A marker-present bundle with a missing or mismatched file is
+  `instrument_invalid` and halts the run.
+- More than one valid prepared or committed candidate for one logical key is an
+  integrity violation and halts the run.
+- A logical-hash collision halts the run.
+- A missing or corrupt projection is rebuilt and never changes source evidence.
+
+Retry only idempotent reads, validation, and marker creation. Use a 30-second
+monotonic deadline with delays `0, 50, 100, 200, 400, 800, 1600` milliseconds and
+then two-second delays. Retry Windows access, sharing, and lock violations.
+Existing-file errors require state inspection, not blind overwrite. Exhaustion
+produces `publish_blocked` and never re-executes the model.
+
+The durability claim is fail-closed recovery after process termination. Brick
+does not claim lossless persistence through sudden power or storage-device
+failure.
+
+### Status model
+
+Keep instrument and model outcomes orthogonal:
+
+- `record_status`: `prepared | committed | abandoned | invalid`;
+- `execution_status`: `done | budget_exhausted | model_error | runner_error | timeout | aborted | environment_unstable`;
+- `grader_status`: `graded | grader_error | not_run`;
+- `tool_status`: `clean | had_errors`;
+- `publish_status`: `committed | publish_blocked | corrupt`;
+- `strict_success`: `true | false | null`.
+
+Only a fully committed, validated, graded record can have non-null strict
+success.
+
+## S1R and B0 — repaired runtime and replaceable layer
+
+S1R introduces executable `ToolSpec` JSON schemas from which prompt documentation
+and Ollama native schemas are derived. It validates primitive and nested types,
+formats, ranges, additional properties, dates, times, and deterministic domain
+invariants.
+
+Parsing uses the native tool-call object for primary conditions. Any legacy JSON
+extraction uses a string-aware decoder. Automatic argument repair is limited to
+an explicit versioned alias table. It may not infer or fuzzy-rename a mutation
+argument.
+
+`CompletionStatus` is `complete | incomplete | unknown`. A malformed, timed-out,
+contradictory, or budget-starved model verifier cannot establish completion.
+Authoritative state and artifact postconditions decide whether required work
+exists. Model verification may explain missing work but cannot authorize an
+effect.
+
+Memory is untrusted scoped input with provenance, tenant/subject scope, version,
+expiry, validation, and explicit write policy. A malformed record is quarantined
+rather than silently accepted or allowed to poison all loading.
+
+After S1R, B0 adds `domains/brix_followup_synthetic`. It uses fictional actors,
+tenants, leads, policies, addresses, and providers. The model may list due
+follow-ups, inspect an assigned lead, propose a follow-up, inspect its proposals,
+think, and finish. It may not approve, dispatch, choose another tenant, supply an
+arbitrary recipient, bypass policy, or use model memory as business state.
+
+Deterministic services own:
+
+- actor and tenant authorization;
+- due-date and eligibility rules;
+- proposal versions, payload hashes, expiry, and revision;
+- approval and dispatch revalidation;
+- idempotency and concurrency;
+- fake-provider delivery and reconciliation; and
+- immutable audit records.
+
+Delivery remains fake and approval-gated. An ambiguous fake-provider timeout
+enters `delivery_unknown` and must reconcile before retry. Passing this slice
+will demonstrate only the tested replaceable layering; it will not make the
+workflow Brix-approved or deployed.
+
+## S5 through S6C — valid tasks and conditions
+
+### Graders
+
+Every scenario has a fixed, versioned rubric over immutable attempt evidence.
+Strict whole-task success is primary. A harmful, unauthorized, stale, missing,
+extra, or incorrect effect makes strict success false. Grader exceptions,
+unreadable evidence, or inconsistent manifests produce `strict_success=null`.
+
+Fixtures must include a correct case and minimally wrong variants for every
+check, including exact file identity, row/column association, slide structure,
+required source reads, unintended actions, corrupted files, and stale artifacts.
+Partial checks remain diagnostics with fixed denominators.
+
+### Task generators
+
+Use 11 fixed scenario-family generator distributions, combining the dependent
+memory write/use episodes into one family. Instances vary task structure,
+policies, state, valid action sequences, wording, entities, dates, conflicts, and
+distractors. Renaming entities or changing only a seed inside one template is not
+an independent instance.
+
+One learning-family case is one logical attempt containing exactly two ordered
+subepisodes: first store a generated preference, then solve a later task that
+requires using it. The two subepisodes share one isolated memory scope and one
+14-call/4096-generated-token ledger; neither budget resets between subepisodes.
+Their prompts, state boundaries, actions, memory delta, and completion statuses
+remain separately identifiable inside the one immutable attempt bundle. Both
+subepisodes must strictly succeed for the case to succeed. A valid model failure
+or budget exhaustion in either makes the case false; an instrument failure in
+either makes the entire case null. No memory crosses case or condition
+boundaries. Consequently each learning case remains one model attempt in the
+440-primary and 662-default-maximum counts.
+
+Each instance records its generator version, structural template, policy family,
+seed, initial state, required and forbidden effects, and content digest.
+Development, validation, sentinel, retained, and adversarial manifests do not
+share entities or structural templates. Held-out retained manifests remain
+unavailable during prompt and grader tuning.
+
+### Shared native transport
+
+`native_tools` and `harness_full` use the same:
+
+- Qwen3.5 4B digest;
+- Ollama native function-call endpoint and chat template;
+- tool names, schemas, ordering, and structured tool-result transport;
+- deterministic business validators and state transitions;
+- initial state, task instance, and hidden grader; and
+- safety and authorization rules.
+
+`native_tools` receives ordinary typed validation and structured error feedback.
+`harness_full` adds only versioned planning, scoped untrusted memory,
+known-alias recovery, duplicate suppression, observation management, and
+completion guarding. Hidden grader logic is unavailable to both.
+
+The primary opportunity ledger counts all driver, planning, and completion calls.
+Both conditions receive:
+
+- context `8192`;
+- `think=false`;
+- temperature `1.0`;
+- `top_p=1.0`;
+- `top_k=20`;
+- `min_p=0`;
+- presence penalty `2.0`;
+- repeat penalty `1.0`;
+- maximum 700 generated tokens per request;
+- maximum 4096 generated tokens per attempt; and
+- maximum 14 total model calls per attempt.
+
+A deterministic base seed is derived from the frozen protocol digest and
+instance ID and reused for the paired conditions. Each physical request records
+the effective seed and sampling options.
+
+The primary interpretation is deliberately conservative: does the full harness
+pay for its own planning and verification overhead under the same end-to-end
+opportunity limits? Equal calls are not described as equal FLOPs, tokens,
+latency, or energy. Reports show the success/call/token/model-time/wall-time
+frontier.
+
+`raw_json` is a descriptive lower bound. `rules_reference` consumes structured
+instances and is reported separately as an architecture-selection reference. If
+rules are more accurate and cheaper for a family, the conclusion recommends a
+deterministic workflow for that family.
+
+## D0/S7 — frozen research protocol
+
+### Primary question and estimand
+
+> For the 11 fixed synthetic Brick task-family generator distributions, does
+> `harness_full` improve strict whole-task success over a competent
+> `native_tools` implementation on the pinned Qwen3.5 4B system under the same
+> end-to-end opportunity budget?
+
+The estimand is:
+
+```text
+Delta = (1 / 11) * sum(family_mean(harness_success - native_success))
+```
+
+The 11 families are fixed strata. Conclusions apply only to their frozen
+generator distributions. They do not establish performance over all office work,
+unseen workflow families, frontier models, production Brix operations, or a
+causal parameter-size law.
+
+### Sample-size rule
+
+D0 runs 44 development pairs on 4B with efficacy fields masked. Operators may
+inspect instrumentation validity, resource use, calls, tokens, and elapsed time,
+but not strict success, component scores, directional discordance, or
+family-level effects.
+
+Choose the retained sample using runtime only:
+
+- if `median valid attempt wall time * 440 * 1.25 <= 48 hours`, freeze 20
+  instances per family: 220 pairs and 440 model attempts;
+- otherwise freeze the preregistered fallback of 12 instances per family: 132
+  pairs and 264 model attempts.
+
+The default is designed for approximately 81.5% power for the sharp
+pairwise-exchangeability diagnostic described below, for a 20-point paired effect
+at worst-case discordance `q=1`. The fallback provides approximately 81.6% power
+for that diagnostic at a 25-point effect and `q=1`. These are not power claims for
+the weak-null equal-family estimand, the bootstrap interval, or the joint positive
+claim gate. Publish the complete sensitivity curve.
+
+No observed efficacy outcome may influence the sample-size choice.
+
+### Primary analysis
+
+- outcome: strict whole-task success;
+- contrast: 4B `harness_full` minus 4B `native_tools`;
+- diagnostic: two-sided exact paired sign-flip test at `alpha=0.05` under the
+  sharp pairwise-exchangeability null;
+- estimand interval: predeclared 95% within-family percentile bootstrap using
+  20,000 draws and seed `20260729`;
+- reporting: pooled equal-family-weight effect, all 11 family effects, and
+  leave-one-family-out sensitivity.
+
+A positive claim requires all three:
+
+1. `Delta > 0`;
+2. sharp-null diagnostic `p < 0.05`; and
+3. the bootstrap 95% lower bound is greater than zero.
+
+For the diagnostic, retain each observed nonzero paired difference and enumerate
+its independent sign reversals; the two-sided p-value is the probability of an
+absolute signed sum at least as large as observed. With complete equal family
+allocation this calculation is numerically equivalent to exact McNemar. It is
+exact only for the sharp pairwise-exchangeability null. Independence of generated
+cases and equal allocation do not make it an exact test of the weaker null
+`Delta=0` when family-specific effects differ. AB/BA execution order does not
+randomize condition identity. The diagnostic is therefore an additional
+predeclared hurdle, not the inferential justification for the equal-family
+estimand.
+
+The interval is the inferential gate for `Delta`. For every bootstrap draw,
+process families in frozen family-ID order; within each family, sample that
+family's `N` paired case differences with replacement, compute its sampled mean,
+then average the 11 sampled family means. Use
+`numpy.random.Generator(numpy.random.PCG64(20260729))`, generate indices
+draw-major then family-major from cases sorted by instance ID, and pin the NumPy
+version in the D0/S7 analysis environment. The endpoints are the 0.025 and 0.975
+Hyndman–Fan type-7 quantiles of the 20,000 `Delta` draws. A constant or otherwise
+degenerate family remains in every draw and is neither dropped, jittered, nor
+reweighted; a point-mass distribution produces equal endpoints.
+
+Golden tests must pin the sorted input fixture, first 100 generated index vectors,
+exact diagnostic p-values, all-family and leave-one-family-out point estimates,
+and final type-7 endpoints. A clean checkout must reproduce their byte-identical
+serialized values with the pinned analysis environment.
+
+### Bounded descriptive matrix
+
+Run these only after the primary is complete and sealed:
+
+| Analysis | Cases | Conditions | Model attempts |
+|---|---:|---:|---:|
+| 2B system replication | 2 per family | native/full | 44 |
+| 9B system replication | 2 per family | native/full | 44 |
+| `raw_json` lower bound | 2 per family | raw only | 22 |
+| Three harness ablations | 2 per family | one per ablation | 66 |
+| No-memory learning ablation | 2 learning-family cases | one | 2 |
+| Equal-action-opportunity sensitivity | 2 per family | native/full | 44 |
+
+The default retained maximum is 662 model attempts: 440 primary plus 222
+descriptive attempts. A failed F0 secondary model removes its 44 attempts.
+`rules_reference` is model-free and runs on applicable primary cases.
+Each no-memory ablation case still contains both ordered subepisodes in one
+logical attempt; only the scoped memory bridge is disabled, so its two listed
+cases remain two model attempts.
+
+All secondary results are descriptive. They receive no confirmatory p-values,
+Holm tests, or “mechanism does not matter” conclusion. There is one stochastic
+draw per retained cell, so this milestone makes no within-instance repeatability
+or pass-at-\(k\) claim. It reports the success distribution across independently
+generated cases under the frozen sampling policy.
+
+## S8/S9 — sentinel and retained execution
+
+A plain Python or PowerShell command owns the queue, run lock, heartbeat, health
+checks, evidence commits, logs, and resume. Execution does not depend on an
+active Codex session.
+
+The primary runs in `N` balanced waves, where D0 freezes `N` to 20 or 12. Each
+wave contains one instance from all 11 families under both conditions. Paired
+conditions run contiguously. AB/BA order is counterbalanced across families and
+waves.
+
+Reboots are allowed after a fixed warm-up only when code, configuration, tasks,
+graders, model digests, Ollama binary, OS build, driver, backend, and power-mode
+fingerprints remain identical. Any fingerprint change ends the run. Results from
+different environment strata are never pooled.
+
+Record per request and attempt:
+
+- prompt, output, and other exposed token counts;
 - model and wall time;
-- calls, retries, repairs, and approvals;
-- peak memory and energy where measurable;
-- local hardware assumptions and hosted price snapshot where applicable.
-
-No protocol may call equal call ceilings an equal inference budget. Predefine how
-accuracy, safety, latency, and resource use will be shown together.
-
-### Acceptance gate
-
-- Protocol, task-instance set, model manifests, prompts, condition configurations,
-  ablations, sample size, ordering, outcomes, and analysis code are frozen and hashed.
-- Held-out instances are access-controlled until the run.
-- A person not involved in implementation can identify exactly which outcomes support
-  each planned claim.
-- Any protocol change after unblinding creates a new version and is disclosed.
-
-## Gate R3 — Run the retained calibration experiment
-
-### Work
-
-1. Prepare the reference machine from the locked environment.
-2. Verify disk space, power settings, model digests, runtime version, clocks, and
-   telemetry with a disposable preflight.
-3. Run the frozen matrix without editing prompts, graders, tasks, or conditions.
-4. Monitor infrastructure health without inspecting partial outcome patterns to tune
-   the system.
-5. Preserve raw append-only records, logs allowed by the privacy policy, artifact
-   hashes, and the final manifest.
-6. Run the frozen analysis from a clean environment.
-7. Have another team member reproduce record counts, exclusions, primary metrics, and
-   report tables.
-
-### Acceptance gate
-
-- Every planned attempt is accounted for as valid, excluded under a prespecified rule,
-  or an explicitly reported infrastructure failure.
-- No attempt inherited mutable state or artifacts.
-- Results reproduce from immutable records and analysis code.
-- Reported uncertainty matches the experimental unit and design.
-- Claims are limited to the exact task families, model family, conditions, and
-  resource settings tested.
-- Null, negative, and adverse findings remain in the report.
-
-Failure to pass this gate means the run is diagnostic. Repair the instrument or protocol,
-version the change, and rerun; do not salvage a headline from contaminated records.
-
-## Gate R4 — External validation and generalization
-
-### R4.1 Select an external benchmark
-
-Prepare a fit memo for current versions of
-[WorkBench](https://github.com/olly-styles/WorkBench),
-[Berkeley Function Calling Leaderboard](https://github.com/ShishirPatil/gorilla),
-[τ-bench / τ²-bench](https://github.com/sierra-research/tau2-bench), and
-[AutomationBench](https://github.com/zapier/AutomationBench).
-
-For each, verify:
-
-- current version and license;
-- task and training-data overlap;
-- final-state and harmful-side-effect coverage;
-- required provider, customer simulator, browser, database, or container;
-- whether Brick's agent loop can be integrated without changing benchmark semantics;
-- compute, service, and human-review requirements measured by a small spike.
-
-Select zero or one initially. “No suitable benchmark” is acceptable if documented.
-Do not promise an integration duration before the spike.
-
-### R4.2 Generalization packs
-
-Add a second internal domain only if its tasks and ground truth can be independently
-specified. Tasks from another harness or the divergent legacy Brick repository may be
-candidates, but first pin the exact source commit, verify licenses and source evidence,
-and reconstruct the tasks without importing uncontrolled state or history.
-
-Report each pack separately. Compare within-pack condition effects; do not average
-absolute scores across packs of different difficulty.
-
-### R4.3 Execute frozen ablations
-
-Run only the ablations specified at Gate R2. Report interactions that were tested and
-avoid attributing causality from mechanism counters. If only one model size is used,
-state that limitation.
-
-### Acceptance gate
-
-- External or cross-domain semantics were preserved and version-pinned.
-- Integration tests show that scoring and state transitions match the benchmark owner’s
-  specification.
-- Generalization claims name the exact domains and do not imply universal transfer.
-- All deviations from the R2 protocol are versioned and disclosed.
-
-## Gate P0 — Discover Brix workflows and approve data handling
-
-This work may begin in parallel with R1. It must not begin by recommending a committed
-solution.
-
-### Work
-
-1. Interview the accountable Brix owner and staff who perform the six priority
-   workflows in the [Brix discovery summary](BRIX_DISCOVERY.md).
-2. For each workflow, map triggers, inputs, systems of record, normal path, exceptions,
-   approvals, outputs, volumes, delays, current errors, and failure consequences.
-3. Inventory email, calendar, SMS, document, CRM, invoicing, access-control, and room
-   systems. Confirm API availability and test environments; do not assume them.
-4. Quantify a baseline using Brix-approved records or staff estimates, clearly labeling
-   which is which.
-5. Score candidates on value, frequency, determinism, reversibility, data readiness,
-   integration effort, and harm.
-6. Review the scorecard with Brix and select one first workflow plus a fallback.
-7. Write and approve a data plan covering purpose, sources, fields, access, storage,
-   encryption, retention, deletion, logging, model/runtime network policy, incidents,
-   and responsible owners.
-
-Possible candidates include a read-only daily follow-up dashboard, approved-document
-assistance, or room conflict checking with a drafted confirmation. These remain
-hypotheses until the scorecard is approved.
-
-### Acceptance gate
-
-- Brix approves the current-state workflow map and measured or explicitly estimated
-  baseline.
-- One workflow is selected by an agreed value/risk score, not by code availability
-  alone.
-- The authoritative system, integration owner, approvers, exceptions, and success
-  threshold are documented.
-- The data plan is signed off before any real record is copied or accessed.
-- The pilot can be stopped without disrupting the authoritative workflow.
-
-## Gate P1 — Specify the product contract and threat model
-
-### Work
-
-1. Define authenticated actors, roles, permissions, tenants, and service accounts.
-2. Define typed read and action-proposal APIs. Do not expose arbitrary shell commands or
-   filesystem paths.
-3. Express every business invariant in deterministic code and database constraints.
-4. Define approval rules, proposal expiry, idempotency, transaction boundaries,
-   provider reconciliation, correction, and rollback.
-5. Threat-model cross-user disclosure, prompt injection, stale documents, malicious
-   attachments, confused deputies, replay, forged local requests, link traversal,
-   concurrency, provider failure, and compromised model output.
-6. Define audit events, redaction, monitoring, alerts, backup, recovery, and incident
-   ownership.
-7. Write product acceptance tests before implementation.
-
-If scheduling is selected, tests must cover overlap under concurrency, room identity,
-timezones, recurrence, buffers, hours, capacity, equipment, entitlements, cancellation,
-and duplicate requests as applicable to Brix policy.
-
-If approved-document assistance is selected, tests must cover access filtering before
-retrieval, version/effective date, exact citations, conflicting sources, missing
-evidence, abstention, malicious document instructions, and cross-user isolation.
-
-### Acceptance gate
-
-- Brix signs off on the product contract, approval points, and failure behavior.
-- Threat-model mitigations map to tests and accountable components.
-- No invariant depends on a prompt, model memory, or model-based verifier.
-- The design uses least-privilege, allowlisted adapters.
-
-## Gate P2 — Build a synthetic vertical slice
-
-### Work
-
-1. Implement the deterministic domain service and transactional state store.
-2. Implement provider interfaces against fakes for development and against an official
-   provider sandbox or isolated test tenant for integration testing.
-3. Let the model produce typed proposals only; reject invalid or unauthorized proposals
-   before approval.
-4. Build an authenticated approval queue showing the exact proposed side effect, actor,
-   source evidence, expiry, and rollback path.
-5. Add immutable audit records and provider reconciliation.
-6. Add authentication, authorization, origin/CSRF protection, safe secret handling,
-   input and resource limits, and process supervision to the product interface.
-7. Exercise the complete workflow with synthetic data, faults, concurrency, retries,
-   duplicate delivery, and recovery.
-
-Do not adapt the current demonstration server directly into production without these
-boundaries. Loopback binding is not sufficient access control.
-
-### Acceptance gate
-
-- Product acceptance, security, fault-injection, concurrency, and recovery tests pass.
-- No model output can bypass authorization or deterministic validation.
-- Duplicate and concurrent requests preserve the declared invariants.
-- Every external mutation is attributable and reconcilable.
-- The complete slice runs with synthetic data and provider sandboxes.
-- Create, reconcile, retry/idempotency, correction, and rollback behavior passes against
-  the actual provider sandbox or isolated test tenant. If the provider offers no safe
-  test boundary, the write workflow is blocked from pilot.
-
-## Gate P3 — Run approved-data shadow evaluation
-
-### Work
-
-1. Complete privacy/security review and provision least-privilege test credentials.
-2. Replay or observe an approved, bounded sample without external mutations.
-3. Have trained Brix staff label ground truth and review proposed actions.
-4. Measure the predeclared workflow outcomes, including missed actions, false or
-   unauthorized proposals/attempts, disclosure attempts, correction burden, latency,
-   and staff time.
-5. Test deletion, access revocation, backup restoration, incident response, and provider
-   outage behavior.
-6. Compare with the documented current process and the deterministic baseline.
-
-### Acceptance gate
-
-- The predeclared shadow threshold is met without changing it after results are viewed.
-- There are zero unauthorized proposals accepted by deterministic policy, zero
-  unauthorized mutation attempts reaching the provider adapter, and zero cross-user
-  disclosures.
-- Brix reviews failures and residual risks and explicitly decides whether to pilot.
-- Monitoring, support, stop, rollback, and data-deletion procedures are demonstrated.
-
-If the threshold is missed, return to P1 or P2. Do not compensate by silently expanding
-model authority.
-
-## Gate P4 — Conduct a controlled pilot
-
-### Work
-
-1. Limit users, data scope, workflow scope, operating hours, and duration in writing.
-2. Keep human approval for every external mutation unless a later risk review authorizes
-   a narrower deterministic action.
-3. Maintain the existing authoritative workflow and a tested rollback during the pilot.
-4. Review incidents, near misses, override burden, adoption, reliability, and time saved
-   on an agreed cadence.
-5. End, revise, or advance the pilot based on the predeclared decision rule.
-
-### Acceptance gate
-
-- Brix accepts measured benefit and residual risk.
-- An accountable product owner and operational support path exist.
-- Access reviews, monitoring, backup, recovery, retention, deletion, and incident
-  procedures operate in practice.
-- Production authorization is a separate recorded decision; a successful pilot does
-  not automatically become deployment.
-
-## Gate R5 — Consider a training experiment
-
-Training is blocked until R3 identifies a stable failure that is plausibly learnable.
-
-### Work
-
-1. State the diagnosed failure and why deterministic validation, task design, or
-   orchestration is not the better fix.
-2. Rebuild the dataset with license and source provenance, exact deduplication, semantic
-   overlap checks, and coverage of the relevant tool and state space.
-3. Split by task template, entity, policy, and phrasing family so the held-out set tests
-   transfer rather than memorization.
-4. Mask deliberately bad assistant turns in repair demonstrations unless emitting the
-   bad call is explicitly part of the objective.
-5. Reject underdetermined examples whose targets invent missing facts.
-6. Pin base model, tokenizer, template, training code, dependencies, random seeds,
-   hardware, converter, and serving runtime.
-7. Make conversion and serving failures fatal and test the produced artifact through
-   the real evaluation client.
-8. Freeze a comparison among the untrained model, trained model, deterministic or
-   orchestration fix, and an appropriate larger model.
-
-### Acceptance gate
-
-- Dataset statistics, licenses, provenance, duplicates, and leakage checks are
-  published.
-- Validation and held-out test families were not used for prompt or training tuning.
-- The served adapter artifact is hash-pinned and evaluated through the frozen R3 path.
-- Gains are reported with uncertainty, resource cost, regressions, and safety outcomes.
-
-## Gate G1 — Publication and client handoff
-
-### Research release
-
-Include:
-
-- the frozen question, protocol, and analysis;
-- exact scope of models, tasks, conditions, hardware, and versions;
-- strict success, harmful effects, uncertainty, and resource tradeoffs;
-- all exclusions, grader or infrastructure failures, null results, and regressions;
-- a reproducibility package containing synthetic data and non-sensitive artifacts;
-- a limitations section that rejects universal, parity, and unmeasured size claims.
-
-Do not write “scaffolding beats scale” unless the specified comparison supports that
-statement, and then qualify it to the tested systems. Do not state that a system keeps
-data local without a verified deployment and network boundary.
-
-### Brix handoff
-
-Include:
-
-- workflow and system-of-record documentation;
-- architecture, threat model, and data-flow diagram;
-- access, retention, deletion, audit, backup, recovery, and incident procedures;
-- provider contracts and credential-rotation instructions;
-- acceptance and pilot evidence;
-- known limitations, prohibited uses, rollback, and support ownership.
-
-The research scaffold and private Brix configuration/data remain separate artifacts.
-
-## Immediate next work
-
-S0–S3 are implemented. The dependency/CI baseline, offline characterization suite,
-explicit runtime contracts, and two-domain extraction exist and are covered by the
-offline suite. G0 and R1 are nonetheless still open, because the remaining G0 items
-(legacy-repository containment, license and branch governance, a machine-readable
-version manifest, capability defaults, and launcher labeling review) and the remaining
-R1 subsections were never completed by the S0–S3 scope.
-
-The following work is eligible for a later, explicitly authorized package:
-
-1. Finish the outstanding G0 items: archive/private/sanitize the divergent legacy
-   public repository; choose a license; protect `main` and require CI; add a
-   machine-readable version manifest covering harness, tasks, graders, domain pack,
-   analysis, dependencies, model digest, runtime, and commit; and review that every
-   real filesystem, shell, and external-message capability is disabled by default.
-2. Implement S4 attempt identity, state/artifact/memory isolation, transactional result
-   commit, safe resume, and separated failure statuses.
-3. Implement S5 strict graders with golden positive, minimally wrong, extra-action,
-   stale-artifact, missing-artifact, and corrupt-artifact fixtures, plus the tested
-   multi-letter spreadsheet column conversion.
-4. Implement S5F filesystem and process safety, replacing the installation-specific
-   write deny-list.
-5. Prepare the P0 workflow/value-risk worksheet; contact or schedule Brix only
-   after the project owner authorizes that external coordination.
-6. Draft the data-governance questionnaire without requesting or ingesting records.
-
-The following work is blocked:
-
-- a retained model matrix, until R1 and R2 pass;
-- a committed recommendation of the first Brix workflow, until P0 passes;
-- access to real Brix data, until the data plan is approved;
-- mutations against Brix authoritative or production systems, until P2 and P3
-  pass; isolated provider-sandbox/test-tenant writes require separate owner
-  authorization and are limited to P2 contract tests;
-- fine-tuning, until R3 identifies a suitable failure;
-- production deployment, until a separate post-pilot authorization.
+- calls by role, retries, repairs, approvals, and action opportunities;
+- model load/backend state and warm throughput;
+- process memory and other available resource telemetry; and
+- all environment and protocol digests.
+
+Three consecutive requests below 70% of the F0 warm-throughput baseline trigger
+a cooldown and warm-up check. Persistent degradation stops the scheduler as
+`environment_unstable`. This decision uses performance telemetry only, never
+task outcome.
+
+One logical cell receives at most one preregistered retry for an instrument
+failure. A valid task failure is never rerun. Both physical records remain
+auditable.
+
+### Incomplete-run rule
+
+- If any required primary pair remains invalid or missing, the primary is
+  `INCOMPLETE/DESCRIPTIVE`.
+- An incomplete primary reports planned/completed coverage and failure reasons,
+  but no confirmatory p-value, interval claim, or selected subset.
+- Honest publication of that status does not complete the research milestone or
+  answer the primary question.
+- A fingerprint change during an incomplete primary requires a new complete run;
+  strata are not combined.
+- A sealed complete primary remains reportable if a later descriptive phase is
+  interrupted.
+- No post-hoc subset can replace the frozen primary.
+
+## Manual boundary and future work
+
+The user must only provide Lenovo access, approve required installer/UAC
+prompts, authenticate GitHub if credentials are absent, keep the machine on AC
+power, and free disk space if required. Agents can prepare and launch the
+standalone commands, but the commands—not an interactive agent session—own long
+runs.
+
+Real Brix discovery, provider integration, approved-data shadow evaluation,
+pilot deployment, external-benchmark integration, and model fine-tuning are
+outside this milestone. They may be considered after `v0.14.0`; none is needed
+to manufacture a positive internal result. Broader claims require independently
+developed domains or a suitable pinned external benchmark.
 
 ## Stop conditions
 
-Stop the affected track and reassess if:
+Stop the affected stage if:
 
-- a benchmark attempt can inherit state or artifacts;
-- grader behavior changes without a version change;
-- private data appears in Git, model memory, logs, or research artifacts;
-- a model can bypass deterministic authorization or a business invariant;
-- the selected provider cannot supply an authoritative or testable interface;
-- task/training leakage invalidates held-out evaluation;
-- resource accounting is incomplete for a planned efficiency claim;
-- a protocol change is proposed after outcome inspection without a new version;
-- Brix cannot assign an accountable owner or accept the residual risk.
+- the 4B model fails F0;
+- a supported path can activate general filesystem, shell, or skip-confirmation
+  behavior;
+- a committed bundle fails manifest or hash validation;
+- more than one valid candidate exists for a logical attempt;
+- an attempt can inherit state, memory, or artifacts;
+- a grader failure can become a model score;
+- primary conditions differ in native transport, schemas, validators, hidden
+  information, or opportunity budgets;
+- generator splits share a retained structural template;
+- a sentinel produces any instrument-invalid cell;
+- environment identity changes during a retained run;
+- a protocol or instrument change is proposed after retained outcome inspection
+  without a new version and complete rerun; or
+- a partial primary is proposed as confirmatory evidence.
 
-Stopping at a failed gate is correct project control, not project failure.
+A null result, a rules-dominant result, or omission of an incompatible secondary
+model still completes the research honestly. Manufacturing a positive result
+does not.

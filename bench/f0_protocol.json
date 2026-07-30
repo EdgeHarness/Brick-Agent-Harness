@@ -1,0 +1,43 @@
+{
+  "schema_version": "brick.f0.protocol/1",
+  "primary_model": "qwen3.5:4b-q4_K_M",
+  "models": [
+    {
+      "tag": "qwen3.5:4b-q4_K_M",
+      "role": "primary",
+      "min_eval_tps": 5.0
+    },
+    {
+      "tag": "qwen3.5:2b-q4_K_M",
+      "role": "descriptive",
+      "min_eval_tps": null
+    },
+    {
+      "tag": "qwen3.5:9b-q4_K_M",
+      "role": "descriptive",
+      "min_eval_tps": 3.0
+    }
+  ],
+  "sampling": {
+    "think": false,
+    "temperature": 1.0,
+    "top_p": 1.0,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 2.0,
+    "repeat_penalty": 1.0,
+    "num_ctx": 8192
+  },
+  "request_timeout_seconds": 600,
+  "max_tree_private_commit_bytes": 30064771072,
+  "minimum_free_disk_bytes_after_pulls": 32212254720,
+  "minimum_physical_memory_bytes": 32212254720,
+  "runtime_warmups": 1,
+  "runtime_samples": 5,
+  "runtime_num_predict": 320,
+  "minimum_valid_runtime_samples": 3,
+  "storage_cycles": 200,
+  "storage_process_exits": 50,
+  "storage_held_handle_cycles": 10,
+  "conformance_suite": "native-tools-v1"
+}

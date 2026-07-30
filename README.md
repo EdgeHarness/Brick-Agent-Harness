@@ -17,12 +17,16 @@ benchmark results, training corpora, adapters, or model weights are shipped.
 surfaces; it is not evidence of generalization or performance. The proposition
 that orchestration improves model tool use remains an untested hypothesis.
 
+The latest release is `v0.3.1`. F0/Q0 work toward `v0.4.0` is
+**unreleased**, and the required native-Windows Lenovo F0 evidence is pending.
+The Mac is a source-development and offline-test host only.
+
 ## Read first
 
 - [`PROJECT_GUIDE.md`](PROJECT_GUIDE.md) defines the canonical evidence,
   research, product, and governance rules.
-- [`PROJECT_SETUP.md`](PROJECT_SETUP.md) is the canonical gated
-  implementation plan and gate taxonomy.
+- [`PROJECT_SETUP.md`](PROJECT_SETUP.md) is the canonical staged
+  implementation and research plan.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) describes what is implemented, what is
   simulated, and the current trust boundaries.
 - [`bench/README.md`](bench/README.md) describes the benchmark and why current
@@ -38,7 +42,7 @@ that orchestration improves model tool use remains an untested hypothesis.
 ## Layout
 
 ```text
-harness/            runtime contracts, agent loops, registry and file overlay
+harness/            runtime contracts, agent loops and tool registry
 domains/            versioned office and counter domain packs
 bench/              domain-aware tasks, graders, runner and report
 agents/             per-model configs and one shared CLI runner
@@ -59,15 +63,21 @@ Python imports, and a domain version is a label rather than a content digest.
 
 ## Experimental conditions
 
-`raw` is a minimal prompt-only JSON loop. `harness` adds examples, constrained
-JSON output, parser/argument repair, validation feedback, normalization,
-planning, duplicate suppression, a model verifier and memory injection.
+The released `raw` condition is a minimal prompt-only JSON loop. The released
+`harness` condition adds examples, constrained JSON output, parser/argument
+repair, validation feedback, normalization, planning, duplicate suppression, a
+model verifier and memory injection.
 
 The benchmark defaults both conditions to the same 14-successful-call ceiling,
 measured relative to each attempt's starting LLM-call count. This does **not**
 make inference cost equal: prompts, output limits, tokens, latency and the
 purposes of calls differ. `raw` is a minimal lower-bound baseline, not a
 representative native function-calling implementation.
+
+These are legacy exploratory conditions, not the retained comparison. The
+planned primary compares `native_tools` with `harness_full` through the same
+Ollama native function-call transport, chat template, model digest, tool schemas,
+validators and opportunity limits.
 
 ## Install and verify
 
@@ -82,10 +92,18 @@ python -m pip install -r requirements-test.txt
 python -m pytest
 ```
 
-The test suite is designed to run without Ollama. Passing tests characterize
-the implemented cases; they do not pass the G0 or R1 acceptance gates.
+The test suite is designed to run without Ollama. Passing it characterizes the
+implemented cases; it does not complete the pending Lenovo F0 gate or validate a
+retained result.
 
-## Running the current benchmark
+The Lenovo gate is a separate, live-model operation. Its exact clean-commit run
+and verification commands are in
+[`bench/README.md`](bench/README.md#running-the-lenovo-f0-gate). A passing bundle
+must be retained externally and bound to the eventual `v0.4.0` tag through the
+candidate/release attestation in [`PROJECT_SETUP.md`](PROJECT_SETUP.md); running
+the offline suite on this Mac is not a substitute.
+
+## Running the legacy benchmark for development
 
 From this directory, with the required Python packages, Ollama and the selected
 model tags already available:
@@ -113,6 +131,11 @@ The listed models also do not form a clean parameter-size experiment: the 8B
 model is from a different Llama generation, and proposed larger models use
 another family.
 
+They are excluded from the retained matrix. The confirmatory candidate is
+`qwen3.5:4b-q4_K_M`, resolved by immutable digest only after Lenovo F0 passes.
+The 2B and 9B Qwen3.5 candidates are descriptive system replications, never a
+causal size curve.
+
 ## Agent Lab
 
 Agent Lab can be launched with:
@@ -132,11 +155,16 @@ the repository as a whole should not be described as offline.
 
 ## Safety
 
-Do not use `--root`, `--shell` or `--yolo` on valuable files. The real-file
-tools rely on lexical path checks, can follow symlinks outside the chosen root,
-accept overly broad roots, and expose arbitrary PowerShell when enabled.
-`ActionPolicy` and confirmation are classification/callback seams, not an
-operating-system sandbox or authorization system.
+Unreleased Q0 removes the legacy `--root`, `--shell`, `--yolo`,
+`--with-domain`, and `--with-office` capabilities from supported CLI, web and
+configuration surfaces. Legacy spellings are rejected before output creation,
+model access, network access or mutation. Brick retains domain-scoped synthetic
+tools and attempt-owned Office artifact writers; it does not expose a supported
+general filesystem or shell.
+
+`ActionPolicy` remains a classification/callback seam, not an operating-system
+sandbox or authorization system. In Q0, absence of a callback denies, and Agent
+Lab exposes no browser/stdin confirmation channel.
 
 Do not place real Brix member, payment, email or document data in this
 repository. Authentication, authorization, tenant isolation, privacy controls,
@@ -147,17 +175,15 @@ directory.
 
 ## Current boundary and next milestone
 
-The S0–S3 implementation packages in [`PROJECT_SETUP.md`](PROJECT_SETUP.md)
-have code and offline tests, but package completion is not gate acceptance:
-G0 and R1 are still partial and unpassed. S4 is the next planned implementation
-package and requires a separate scope decision. The segmented plan in
-`PROJECT_SETUP.md` is canonical; do not start a retained matrix before R1 and
-R2 pass. Brix discovery remains a separate P0 track. Fine-tuning remains
-blocked at R5 until a validated evaluation identifies a stable,
-model-addressable failure.
+F0/Q0 is the authorized active stage. Source, tests and probes can be prepared
+on development hosts, but `v0.4.0` cannot be released until the native Lenovo
+model, runtime, resource and Windows storage gates pass. S4 follows F0/Q0; S1R
+follows S4; the entirely synthetic Brix vertical slice follows S1R.
+
+No retained matrix begins before the marker-last store, repaired runtime, strict
+graders, independent generators, shared native transport, score-masked
+development run and zero-invalid sentinel pass. Fine-tuning, external benchmark
+integration and real Brix product work are outside this milestone.
 
 The canonical public repository is
 [`EdgeHarness/Brick-Agent-Harness`](https://github.com/EdgeHarness/Brick-Agent-Harness).
-It currently has no owner-selected license, so no reuse license should be
-inferred. Branch protection and cleanup of divergent legacy public copies are
-also unresolved G0 owner actions.

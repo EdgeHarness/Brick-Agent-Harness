@@ -1,158 +1,129 @@
-# Agent Lab — unauthenticated loopback research console
+# Agent Lab — local research console
 
-Agent Lab is a local browser interface for observing the experimental agents in
-[`../agents/`](../agents/). It is a development console, not a production
-service, security boundary, multi-user application, or Brix deployment.
+Agent Lab is a loopback browser interface for observing Brick's synthetic
+development agents. It is not a production service, security boundary,
+multi-user application, Brix deployment, or retained benchmark scheduler.
 
-The server binds to `127.0.0.1` and normally chooses the first available port
-from 8765 through 8784. Loopback binding reduces network exposure, but it does
-not provide authentication or protect against other local processes, hostile
-browser origins, DNS-rebinding-style access, or a user who exposes the port
-through a proxy, tunnel, container mapping, or remote desktop environment.
+The latest release is `v0.3.1`. Q0 changes are **unreleased** and Lenovo F0 is
+pending.
 
-Never expose this server to a LAN or the internet. Do not use it with real
-member, employee, agreement, payment, email, access-control, or other sensitive
-Brix data.
+The server binds to `127.0.0.1` and normally selects a port from 8765 through
+8784. Loopback reduces network exposure but does not authenticate a user or
+protect against another local process, hostile browser origin, proxy, tunnel,
+container mapping or remote-desktop environment.
 
-## What it actually shows
+Never expose Agent Lab to a LAN or the internet. Use synthetic data only.
 
-The console starts one `webui.runner` subprocess at a time and displays:
+## What it shows
 
-- streamed chunks from local Ollama calls;
-- harness notes, tool calls, arguments, and observations;
-- the selected agent's local workspace, fixture inbox/calendar, memory, and
-  generated files;
-- PowerPoint and spreadsheet previews;
-- local run metadata and saved transcript files.
+Agent Lab starts one `webui.runner` subprocess and displays:
 
-The default office is simulated. “Sent” email and chat, calendar events, and
-reminders are local JSON records. No email is delivered, no reminder fires, and
-no external room or calendar is reserved. PowerPoint and Excel outputs are real
-files under the selected agent's `workspace/files/`.
+- streamed local Ollama output;
+- harness notes, tool calls, arguments and observations;
+- fixture workspace, inbox/calendar, memory and generated files;
+- PowerPoint and spreadsheet previews; and
+- local run metadata and saved development logs.
 
-The UI displays neutral parameter-tier hints for model cards and tells the user
-to measure fit, quality and latency locally. Those hints are not measurements.
-No committed repeated benchmark establishes a model ranking.
+Email, chat, calendar and reminder effects are simulated. PowerPoint and Excel
+outputs are real files inside the selected synthetic workspace. Model-card tier
+hints are not measurements, and no retained model ranking exists.
 
 ## Start
 
-From the project root:
+From the repository root:
 
 ```bash
 python -m webui.server
 ```
 
-Then open the printed loopback URL. It is usually:
+Open the printed loopback URL, normally:
 
 ```text
 http://127.0.0.1:8765
 ```
 
-`Agent Lab.command` on macOS and `Agent Lab.bat` on Windows are convenience
-launchers. Both may install the checked-in `requirements-lock.txt` into the
-selected Python environment, potentially outside an isolated virtual
-environment. The lock has exact versions but no hashes, so this is not a
-cryptographic supply-chain boundary. The macOS launcher also attempts to start
-Ollama if its health check fails; the Windows launcher does not start Ollama.
-Neither launcher creates a virtual environment.
+The macOS and Windows convenience launchers may install checked-in dependencies.
+Model pulls initiated through the interface may download weights. Brick as a
+repository is therefore not inherently offline or air-gapped.
 
-Model downloads initiated by **Get it** call Ollama's pull endpoint and may cause
-network downloads. `--shell` can also execute network-capable commands. Therefore
-“nothing leaves the machine” is not a valid general security guarantee.
+## Q0 capability quarantine
 
-## No authentication, origin check, or CSRF defense
+Unreleased Q0 removes real-root, general filesystem, PowerShell and
+skip-confirmation choices from Agent Lab. `/api/run`, its request schema, runner
+arguments and static UI must reject or omit every equivalent of:
 
-The HTTP API has:
+- `--root`;
+- `--shell`;
+- `--yolo`;
+- `--with-domain`; and
+- `--with-office`.
 
-- no user authentication or authorization;
-- no session or per-run ownership;
-- no CSRF token;
-- no `Origin`, `Referer`, or trusted-`Host` validation;
-- no meaningful request-size or rate limits.
+Rejection occurs before output creation, model construction, network access or
+mutation. Domain-specific synthetic Office tools may still create declared
+artifacts inside the agent workspace. That is not general host access.
 
-A malicious web page or another local process may be able to trigger state
-changes against the loopback server. Responses being blocked by browser CORS
-does not prevent all cross-origin requests from being sent.
+## Remaining control-plane defects
 
-Sensitive and destructive endpoints include:
+Q0 does not harden the rest of Agent Lab. Both released `v0.3.1` and the
+unreleased Q0 tree lack production authentication or authorization, session
+ownership, a CSRF token, trusted Origin/Host policy, and comprehensive request
+limits. Q0 additionally has no browser/stdin action-confirmation channel: that
+old unbound mechanism and its skip-confirmation mode were removed together.
 
-- `POST /api/run` — can start an agent with real-root, shell, and
-  skip-confirmation options;
-- `POST /api/confirm` — answers the current run's destructive-action prompt
-  without tying the answer to an authenticated browser session;
-- `POST /api/reset` — deletes selected state, memory, generated files, or logs
-  without an independent server-side confirmation;
-- `POST /api/reveal` — asks the operating system to reveal a path under the
-  selected runtime state; child-component resolution beneath a trusted
-  canonical root rejects direct, same-prefix, and child-symlink escapes
-  observed at lookup time, but does not establish root integrity or race-free
-  containment, and any caller can still reveal allowed paths because the API
-  is unauthenticated;
-- `GET /api/pull` — performs a state-changing, potentially large model download;
-- workspace, log, preview, download, status, and event endpoints — expose local
-  agent data to any caller that can reach the server.
+Sensitive state-changing or data-exposing operations include:
 
-Close the server when not actively testing it. Browser confirmation buttons are
-not a substitute for API authentication.
+- starting a synthetic run;
+- resetting selected synthetic state, memory, files or logs;
+- revealing an allowlisted runtime path;
+- pulling a model; and
+- reading workspace, log, preview, status or event data.
 
-## Real-file and shell warnings
+Loopback and browser CORS behavior do not make these safe against all local or
+browser-driven requests. Close the server when not testing it.
 
-The options drawer exposes the same unsafe research flags as the CLI:
+S5W must add a high-entropy startup capability, trusted Host/Origin handling,
+JSON-only state-changing POSTs, typed and bounded request bodies, reset
+serialization, bounded/redacted logs and verified process-tree termination. S5W
+also introduces a new operator-confirmation capability bound to a specific
+`(run_id, confirmation_id, nonce)`; it must not restore the removed generic stdin
+protocol.
 
-- real-root containment is a lexical in-process path check, not an OS sandbox;
-- symlinks and Windows junctions can escape that check;
-- the configured root itself can be selected for deletion;
-- the write deny-list is tied to one Windows installation;
-- shell commands receive the root only as their working directory and can access
-  other paths or networks;
-- skip-confirmations removes the interactive protection around destructive file
-  and shell operations.
+## Process and stop behavior
 
-Use only a disposable test directory with independent backups. Keeping the
-server on loopback does not make filesystem or shell execution safe.
+Only one runner subprocess is accepted at a time. The process boundary gives
+limited lifecycle and crash containment; Ollama controls model residency.
 
-## Process and Stop behavior
+The released Stop path terminates the runner wrapper but does not prove that
+every descendant or in-flight Ollama operation has stopped. Already performed
+synthetic effects are not rolled back. A terminated run may lack a final state
+snapshot or saved log. S5W owns the process-group and teardown remediation.
 
-Only one runner subprocess is accepted at a time. Runtime configuration,
-registries and hooks are already attempt-scoped; the process boundary provides
-lifecycle/crash containment for the active run. It does **not** guarantee one
-model in RAM: Ollama controls model residency, uses keep-alive settings, and
-tier mode may use more than one tag.
+The retained research matrix does not run through Agent Lab. A standalone Python
+or PowerShell scheduler owns its queue, evidence commits, heartbeat and resume.
 
-**Stop** calls `terminate()` on the runner process. It does not manage an OS
-process group, so shell-created child processes may survive. Real-file side
-effects already performed are not rolled back. A terminated runner may not
-write its final state snapshot or saved transcript, so the absence of a final log
-does not imply that nothing changed.
+## Logging and privacy
 
-Run events and captured stderr are retained in server memory without a durable
-bounded audit design. A long or noisy run can consume increasing memory.
+The live stream can expose model tokens, tool arguments, observations, state and
+memory without redaction. Released saved logs are incomplete: planner and
+verifier source output may be reduced or absent, and a crash can occur before
+final log creation.
 
-## Logging and privacy limits
+Logs and state are plaintext and have no production access control, encryption,
+retention policy or automatic PII removal. Never place real Brix or other private
+data in Agent Lab.
 
-The live stream exposes model tokens, tool arguments, results, workspace state,
-and memory without redaction. Saved `run_NNN.json` files contain the harness
-episode transcript, but they are not complete raw model transcripts:
+## Harness limitations
 
-- the original planner reply is reduced to a filtered plan;
-- the original verifier reply or verifier exception is not retained;
-- stopping or crashing before log creation can leave no saved run record.
+Agent Lab invokes the same released development harness as the CLI. It does not
+add correctness:
 
-Logs and state are plaintext and have no application-level access controls,
-encryption, retention policy, or automatic secret/PII removal. A tool can also
-copy content read under a real root into logs and agent state outside that root.
+- validation does not yet enforce every advertised type and semantic value;
+- fuzzy repair can change or drop arguments;
+- completion verification can fail open;
+- accepted `done` does not prove success;
+- the router's `deep` role is not dispatched; and
+- adapter metadata is not applied by Ollama.
 
-## Harness limitations remain
-
-The UI invokes the same harness as the CLI; it does not add correctness:
-
-- tool validation checks keys, not all documented types or semantic values;
-- fuzzy repair can silently change or drop arguments;
-- the completion verifier fails open and does not inspect generated artifacts;
-- an accepted `done` means the loop stopped, not that the task succeeded;
-- the router's `deep` role is not dispatched;
-- adapter fields are recorded but not applied by Ollama.
-
-Use the console to inspect and debug these behaviors. Do not use its visual
-presentation as evidence that an action was correct, safe, delivered, or
+These defects are addressed by S1R and later benchmark stages. Visual
+presentation is never evidence that an action was correct, safe, delivered or
 production-ready.

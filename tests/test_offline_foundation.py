@@ -136,6 +136,11 @@ def test_sensitive_and_runtime_artifacts_are_not_tracked():
     content_offenders = []
     for relative in tracked:
         candidate = PROJECT_ROOT / relative
+        # A deletion in the working tree is absent from the next commit even
+        # though it remains in the index until staging. Do not make the
+        # publication scan itself prevent removal of an unsafe tracked file.
+        if not candidate.exists() and not candidate.is_symlink():
+            continue
         blob = (
             str(candidate.readlink()).encode("utf-8")
             if candidate.is_symlink()

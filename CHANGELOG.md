@@ -8,10 +8,85 @@ While the major version is `0`, a minor bump may contain breaking changes to
 internal Python interfaces. Nothing in this repository is a stable public API.
 
 **A released version is not gate acceptance.** Versions record repository
-changes only. The canonical acceptance gates in
-[`PROJECT_SETUP.md`](PROJECT_SETUP.md) are evaluated separately, and `G0` and
-`R1` remain partial and unpassed. No entry below should be read as evidence that
-the research instrument is valid or that any measured effect exists.
+changes only. The active gates and current status live in
+[`PROJECT_SETUP.md`](PROJECT_SETUP.md). No entry below should be read as evidence
+that the research instrument is valid or that any measured effect exists.
+
+## [Unreleased]
+
+Work toward `v0.4.0` is not a release. The required native Windows 11 ARM64
+Lenovo F0 evidence is pending.
+
+### Changed
+
+- Replaced the superseded S0–S18/G0–P4 execution taxonomy with the audited
+  F0/Q0-through-S9 release plan.
+- Defined the 4B native-tools versus full-harness confirmatory contract, bounded
+  descriptive matrix, runtime-only sample-size fallback, standalone scheduler,
+  incomplete-run rule, fixed-family claim boundary, ordered two-subepisode
+  learning case, and exact attempt accounting.
+- Defined marker-last publication using never-reused physical directories,
+  `PREPARED.json`, and exclusive `COMMITTED` marker creation. Only the disposable
+  F0 primitive is implemented in this worktree; the production S4 store remains
+  pending.
+- Reframed the exact sign-flip/McNemar result as a sharp
+  pairwise-exchangeability diagnostic and made the fully specified within-family
+  percentile bootstrap the inferential gate for the equal-family estimand.
+- Reordered the synthetic Brix layer after the repaired typed runtime and
+  clarified that it is a fictional architecture fixture, not a selected or
+  approved Brix production workflow.
+- Changed missing `ActionPolicy` confirmation callbacks from historical
+  permissive compatibility to fail-closed denial.
+- Made every disposable F0 candidate—including normal and recovered
+  replacements—publish through the same bounded retry path. F0 report
+  publication now re-reads its prepared manifest before and after exclusive
+  marker creation, and `verify` recomputes pass eligibility from the committed
+  protocol, host, storage, pull, model, runtime, and memory records instead of
+  trusting `summary.json`.
+
+### Added
+
+- `bench/f0_protocol.json`, `bench/f0_probe.py`, `bench/f0_windows.py`, and
+  `bench/f0_storage.py` for the reproducible native-Windows ARM64 environment,
+  model, native-tool, option-validation, memory, throughput, and disposable
+  marker-last storage gate.
+- Offline F0 tests covering protocol validation, environment/report fail-closed
+  behavior, native-tool and option-validation records, every disposable storage
+  write boundary, process-exit recovery, collision, tamper, unexpected-member,
+  deadline/non-retryable handling, semantic report verification, and retry
+  behavior. Windows x64 additionally runs live ctypes/current-process and real
+  Office held-handle smoke tests. Full Lenovo held-handle evidence remains
+  pending.
+- Native host gates for fixed local NTFS storage, Lenovo/Snapdragon X Elite
+  identity, AC power, Defender and indexing state, stable ARM64 listener
+  identity, measured Ollama runner descendants, post-pull free space, model
+  family/size/tool metadata, raw runtime responses, and processor placement.
+- Required Windows x64 CI alongside the Linux matrix. The hosted
+  `windows-11-arm` job is manual and advisory; local Lenovo evidence is
+  authoritative.
+- A clean candidate-commit to metadata-only release-descendant attestation
+  contract, reproducible behavior-tree fingerprint command, and exact Lenovo
+  run/verify handoff. No Lenovo evidence is claimed yet.
+
+### Security
+
+- Removed `harness/fs_tools.py` and every supported general-filesystem,
+  PowerShell, broad-root, skip-confirmation, and overlay-composition activation
+  path from the CLI, Agent Lab, and configuration surfaces.
+- Legacy `--root`, `--shell`, `--yolo`, `--with-domain`, and `--with-office`
+  forms now fail before output creation, model access, network access, or
+  mutation.
+- Removed Agent Lab's unbound browser/stdin confirmation channel. Its replacement
+  is the new run/nonce-bound protocol scheduled for S5W.
+
+### Pending before `v0.4.0`
+
+- Run and retain the full F0 evidence bundle on the native Windows 11 ARM64
+  Lenovo.
+- Reconcile any accepted-option, template, context, thinking, or backend
+  difference found by that gate.
+- Tag and release only after the offline suite, required CI, and Lenovo gates
+  all pass.
 
 ## [0.3.1] — 2026-07-29
 

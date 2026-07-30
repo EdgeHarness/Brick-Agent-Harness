@@ -17,6 +17,9 @@ Brick currently provides:
 - experimental LoRA generators and training scripts, but no shipped corpus,
   adapter or model.
 
+The latest release is `v0.3.1`. F0/Q0 work toward `v0.4.0` is
+**unreleased**, and the required native Lenovo F0 evidence is pending.
+
 Brick is not a production assistant, a secure filesystem/shell sandbox, a
 transactional room-booking service, an access-controlled retrieval system, or
 a validated statistical instrument. It has no Brix provider integrations. No
@@ -36,7 +39,6 @@ harness/
   storage.py          legacy and namespaced runtime-path selection
   builtin_tools.py    think/done tools shared by domain packs
   tools.py            ToolRegistry validation, execution and descriptions
-  fs_tools.py         composable filesystem/PowerShell overlay
   llm.py              per-instance Ollama client, counters and stream hook
   model_router.py     optional role routing; adapters remain metadata
   agent.py            raw and harness loops
@@ -68,7 +70,7 @@ tests/                offline characterization and architecture tests
 | Surface | Entry point | State and boundary |
 |---|---|---|
 | Benchmark | `python -m bench.run_bench` | New domain world per task, but reused task paths and shared memory per model/condition; exploratory only |
-| Per-model CLI | `agents/<size>/run_agent.py` or `run.ps1` | Persistent domain state; optional filesystem/shell overlay is unsafe for valuable data |
+| Per-model CLI | `agents/<size>/run_agent.py` or `run.ps1` | Persistent synthetic domain state; legacy filesystem/shell options are rejected |
 | Agent Lab | `python -m webui.server` | One child run over selected domain state; unauthenticated loopback demo |
 | Training | scripts under `training_scripts/` | Local/HPC artifacts; may use the network unless assets are staged |
 
@@ -102,9 +104,9 @@ audit-completeness guarantee.
 requires exactly one explicit classification for every registered tool, so a
 pack cannot silently omit a mutating tool. `AttemptContext` also requires a
 classification for every tool active in that attempt while allowing unused
-pack classifications. A missing confirmation callback still preserves
-permissive compatibility behavior. The policy is not identity, authorization,
-an OS sandbox, rollback, or a security boundary.
+pack classifications. In the unreleased Q0 working tree, a missing confirmation
+callback denies instead of manufacturing consent. The policy is still not
+identity, authorization, an OS sandbox, rollback, or a security boundary.
 
 `ToolRegistry` deep-freezes stored public specifications and returns defensive
 copies from public accessors. It checks tool names and required/unknown argument
@@ -128,10 +130,15 @@ colliding with the office compatibility paths.
 ## Ollama client and routing
 
 `harness.llm.LLM` calls Ollama `/api/chat`; launch surfaces restrict the
-configured endpoint to `localhost` or `127.0.0.1`. Temperature `0.0`, seed `42`
-and a configured context improve repeatability but cannot guarantee identical
-output across model digests, quantizations, Ollama versions, hardware or
-drivers.
+configured endpoint to `localhost` or `127.0.0.1`. The released exploratory
+client uses temperature `0.0`, seed `42`, and a configured context. Those
+settings neither guarantee identical output across model digests, runtimes and
+hardware nor define the retained protocol.
+
+The planned S6C primary uses Ollama native function calls for both
+`native_tools` and `harness_full`, the same chat template and schemas, and the
+sampling and opportunity ledger frozen in `PROJECT_SETUP.md`. F0 must verify
+that the selected Lenovo Ollama build accepts the candidate settings.
 
 The client records call count, prompt/output tokens and model-reported duration.
 Equal successful-call ceilings do not equalize tokens, FLOPs, latency, energy
@@ -209,35 +216,32 @@ malformed row can stop loading. Runtime memory is ignored by source control and
 no agent memory file is shipped, but local files can still contain private or
 poisoned text. Memory is not an authoritative knowledge base.
 
-## Optional filesystem and shell overlay
+## Filesystem and shell quarantine
 
-`build_overlay()` creates a registry/policy/rule bundle and composes it
-atomically with built-ins or, under `--with-domain` (legacy alias
-`--with-office`), the selected pack. `--root` alone does not retain domain
-tools.
+Unreleased Q0 removes the general filesystem/PowerShell overlay from supported
+runtime composition. CLI, web and configuration surfaces reject legacy
+`--root`, `--shell`, `--yolo`, `--with-domain`, and `--with-office` forms before
+output creation, model access, network access or mutation.
 
-Containment converts paths with `abspath` and checks them lexically. It does not
-resolve symlinks or junctions. Further hazards include:
-
-- `/` or another overly broad root is accepted;
-- the selected root can itself be targeted, including for deletion;
-- the deny-list is hard-coded for one Windows installation;
-- a missing confirmer approves for compatibility;
-- `--yolo` removes confirmation;
-- append does not confirm before changing an existing file;
-- checks and writes have filesystem races; and
-- `run_command` invokes unrestricted, Windows-specific `powershell.exe`; its
-  working directory is not a sandbox.
-
-Use only disposable roots. Product integrations need narrow service adapters,
-deterministic business invariants and explicit approval for external mutations.
+Domain-owned Office tools may create real `.pptx` and `.xlsx` files inside the
+attempt workspace. That narrow artifact contract is distinct from arbitrary host
+filesystem access. Product integrations require typed, allowlisted service
+adapters and deterministic business invariants.
 
 ## Agent Lab
 
 Agent Lab serves static assets, starts one `webui.runner` child, streams JSONL
 events over SSE, renders the selected domain's generic state sections, previews
-Office files and relays confirmations over stdin. The subprocess supplies
-lifecycle and crash/stop containment, not a security sandbox.
+Office files, and records development logs. Q0 removes the old browser endpoint
+and child-stdin confirmation channel together with its skip-confirmation mode.
+The subprocess supplies lifecycle and crash/stop containment, not a security
+sandbox.
+
+Q0 removes real-root, shell and skip-confirmation choices from Agent Lab. The
+remaining authentication, origin, request-validation, reset and process-tree
+defects stay open until S5W. Action confirmation returns at S5W only as a new
+run/nonce-bound protocol; the removed unbound channel is not a supported
+capability.
 
 The server has no authentication, session-bound capability, CSRF defense or
 Origin/Host allowlist. State-changing endpoints do not consistently enforce
@@ -309,17 +313,18 @@ allocation, rollback or complete provenance.
 
 ## Locality, privacy and release boundary
 
-Loopback inference can be local, but installation, model/source downloads,
-Agent Lab pulls and arbitrary shell commands can use the network. The repository
+Loopback inference can be local, but installation, model/source downloads and
+Agent Lab pulls can use the network. The repository
 has no production identity, authorization, encryption, retention/deletion,
 tenant isolation, audit policy, backup or incident-response layer. Do not load
 real Brix data.
 
-S0–S3 implementation is present and covered by the offline suite, but review
-and acceptance evidence remain open. Package status is not gate status: G0 and
-R1 are partial and unpassed. S4 is the next planned package and requires a
-separate scope decision under the canonical segmented plan,
-[`PROJECT_SETUP.md`](PROJECT_SETUP.md).
+The released S0–S3-era implementation is present and covered by the offline
+suite. The old package taxonomy is historical. F0/Q0 is now the authorized
+active stage; it remains unreleased until the native Lenovo evidence passes.
+The canonical sequence then proceeds through S4, S1R, synthetic B0, graders,
+generators, shared native conditions, protocol freeze, sentinel and retained
+execution as specified in [`PROJECT_SETUP.md`](PROJECT_SETUP.md).
 
 ## Safe extension principles
 

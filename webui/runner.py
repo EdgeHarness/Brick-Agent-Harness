@@ -1,6 +1,5 @@
 """Run one configured agent and emit a JSONL event stream."""
 import argparse
-import datetime
 import json
 import os
 import re
@@ -14,10 +13,9 @@ PROJECT = os.path.dirname(HERE)
 if PROJECT not in sys.path:
     sys.path.insert(0, PROJECT)
 
+from agents._shared.run_agent import validate_config  # noqa: E402
 from harness.agent import run_harness  # noqa: E402
-from harness.builtin_tools import BUILTIN_EFFECTS, builtin_specs  # noqa: E402
-from harness.domain import GENERIC_PROMPT_PROFILE, load_domain  # noqa: E402
-from harness.fs_tools import build_overlay  # noqa: E402
+from harness.domain import load_domain  # noqa: E402
 from harness.llm import LLM, OLLAMA_URL  # noqa: E402
 from harness.memory import MemoryStore  # noqa: E402
 from harness.model_router import (  # noqa: E402
@@ -26,17 +24,14 @@ from harness.model_router import (  # noqa: E402
     default_roles,
 )
 from harness.runtime import (  # noqa: E402
-    ActionPolicy,
     AttemptContext,
     RunConfig,
     RunHooks,
 )
 from harness.storage import agent_runtime_paths  # noqa: E402
-from harness.tools import ToolRegistry  # noqa: E402
 
 
 AGENTS_DIR = os.path.join(PROJECT, "agents")
-MAX_TREE_ENTRIES = 400
 _AGENT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 
 
@@ -61,70 +56,8 @@ def resolve_agent_folder(agent):
     return folder
 
 
-def list_tree(root):
-    """Return a shallow best-effort display of a selected filesystem root."""
-    out = []
-    root = os.path.abspath(root)
-    for dirpath, dirnames, filenames in os.walk(root):
-        depth = dirpath[len(root):].count(os.sep)
-        dirnames[:] = sorted(
-            name
-            for name in dirnames
-            if not name.startswith(".") and name != "__pycache__"
-        )
-        if depth >= 3:
-            dirnames[:] = []
-        for name in dirnames:
-            relative = os.path.relpath(os.path.join(dirpath, name), root)
-            out.append({"name": relative, "dir": True})
-        for name in sorted(filenames):
-            if name.startswith("."):
-                continue
-            full = os.path.join(dirpath, name)
-            try:
-                size = os.path.getsize(full)
-            except OSError:
-                size = 0
-            out.append(
-                {"name": os.path.relpath(full, root), "size": size}
-            )
-        if len(out) >= MAX_TREE_ENTRIES:
-            return out[:MAX_TREE_ENTRIES]
-    return out
-
-
-def world_snapshot(domain, attempt, root=None):
-    snapshot = domain.present(attempt)
-    if root:
-        snapshot["tree"] = list_tree(root)
-    return snapshot
-
-
-class Confirmer:
-    """Obtain destructive-action decisions from the parent web server."""
-
-    def __init__(self):
-        self.n = 0
-
-    def __call__(self, action, detail):
-        self.n += 1
-        confirmation_id = self.n
-        emit(
-            "confirm",
-            id=confirmation_id,
-            action=action,
-            detail=detail,
-        )
-        while True:
-            line = sys.stdin.readline()
-            if not line:
-                return False
-            try:
-                answer = json.loads(line)
-            except ValueError:
-                continue
-            if answer.get("id") == confirmation_id:
-                return bool(answer.get("allow"))
+def world_snapshot(domain, attempt):
+    return domain.present(attempt)
 
 
 def build_llm(config, args, log_dir, stream_hook):
@@ -154,56 +87,15 @@ def build_llm(config, args, log_dir, stream_hook):
     return router, router
 
 
-def _surface(domain, root, include_domain, allow_shell, confirmer):
-    if not root:
-        return (
-            domain.registry,
-            domain.default_policy,
-            domain.prompt_profile,
-            domain.prompt_rules,
-            None,
-        )
-    overlay = build_overlay(
-        root, allow_shell=allow_shell, confirmer=confirmer
-    )
-    if include_domain:
-        registry = domain.registry
-        policy = domain.default_policy
-        profile = domain.prompt_profile
-        rules = domain.prompt_rules
-    else:
-        registry = ToolRegistry(builtin_specs())
-        policy = ActionPolicy(BUILTIN_EFFECTS)
-        profile = GENERIC_PROMPT_PROFILE
-        rules = ""
-    composed = overlay.compose(registry, policy, prompt_rules=rules)
-    return (
-        composed.registry,
-        composed.policy,
-        profile,
-        composed.prompt_rules,
-        overlay.root,
-    )
-
-
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--agent", required=True)
     parser.add_argument("--domain", default=None)
     parser.add_argument("--task", required=True)
-    parser.add_argument("--root", default=None)
-    parser.add_argument("--shell", action="store_true")
-    parser.add_argument("--yolo", action="store_true")
     parser.add_argument("--max-calls", type=int, default=None)
     parser.add_argument("--tiers", action="store_true")
     parser.add_argument("--small", default=None)
     parser.add_argument("--deep", default=None)
-    parser.add_argument(
-        "--with-domain",
-        "--with-office",
-        dest="with_domain",
-        action="store_true",
-    )
     args = parser.parse_args(argv)
 
     try:
@@ -214,6 +106,7 @@ def main(argv=None):
         os.path.join(folder, "config.json"), encoding="utf-8-sig"
     ) as handle:
         config_data = json.load(handle)
+    validate_config(config_data)
     assert (
         "127.0.0.1" in OLLAMA_URL or "localhost" in OLLAMA_URL
     ), "refusing non-local endpoint"
@@ -222,23 +115,15 @@ def main(argv=None):
         args.domain or config_data.get("domain") or "office_demo"
     )
     paths = agent_runtime_paths(folder, domain)
-    allow_shell = args.shell or bool(config_data.get("allow_shell"))
-    confirmer = None if args.yolo else Confirmer()
-    tools, policy, profile, prompt_rules, root = _surface(
-        domain,
-        args.root or config_data.get("root"),
-        args.with_domain,
-        allow_shell,
-        confirmer,
-    )
     max_calls = args.max_calls
     if max_calls is None:
         max_calls = config_data.get("max_calls")
     if max_calls is None:
-        max_calls = 40 if root else 14
-    today = datetime.date.today() if root else domain.default_today
+        max_calls = 14
     run_config = RunConfig(
-        condition="harness", max_calls=max_calls, today=today
+        condition="harness",
+        max_calls=max_calls,
+        today=domain.default_today,
     )
 
     state = {"call": 0}
@@ -283,21 +168,21 @@ def main(argv=None):
         )
         emit(
             "world",
-            **world_snapshot(domain, attempt_holder["attempt"], root),
+            **world_snapshot(domain, attempt_holder["attempt"]),
         )
 
     attempt = AttemptContext(
         attempt_id=f"web:{domain.name}:{args.agent}:{time.time_ns()}",
         config=run_config,
         domain=domain,
-        tools=tools,
-        policy=policy,
+        tools=domain.registry,
+        policy=domain.default_policy,
         world=world,
         memory=memory,
         workdir=workdir,
         artifact_dir=paths.artifacts,
-        prompt_profile=profile,
-        prompt_rules=prompt_rules,
+        prompt_profile=domain.prompt_profile,
+        prompt_rules=domain.prompt_rules,
         hooks=RunHooks(on_note=on_note, on_tool=on_tool),
     )
     attempt_holder["attempt"] = attempt
@@ -327,21 +212,12 @@ def main(argv=None):
         budget=run_config.max_calls,
         task=args.task,
         endpoint=OLLAMA_URL,
-        root=root,
-        shell=allow_shell,
-        yolo=bool(args.yolo),
-        toolset=(
-            "files only"
-            if root and not args.with_domain
-            else f"files + {domain.name}"
-            if root
-            else domain.name
-        ),
+        toolset=domain.name,
         tiers=tiers,
         today=run_config.today_human,
-        tools=list(tools.names()),
+        tools=list(domain.registry.names()),
     )
-    emit("world", **world_snapshot(domain, attempt, root))
+    emit("world", **world_snapshot(domain, attempt))
 
     try:
         episode = run_harness(llm, args.task, attempt)
@@ -361,7 +237,6 @@ def main(argv=None):
         json.dump(
             {
                 "task": args.task,
-                "root": root,
                 "agent": args.agent,
                 "model": config_data["model"],
                 "domain": domain.name,
@@ -376,7 +251,7 @@ def main(argv=None):
             ensure_ascii=False,
         )
 
-    emit("world", **world_snapshot(domain, attempt, root))
+    emit("world", **world_snapshot(domain, attempt))
     emit(
         "end",
         finished=episode.finished,

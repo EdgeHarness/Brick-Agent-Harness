@@ -35,8 +35,20 @@ AGENTS_DIR = os.path.join(PROJECT, "agents")
 OLLAMA_URL = "http://127.0.0.1:11434"
 DEFAULT_PORT = 8765
 
+from agents._shared.run_agent import validate_config  # noqa: E402
 from harness.domain import load_domain  # noqa: E402
 from harness.storage import agent_runtime_paths  # noqa: E402
+
+
+REMOVED_RUN_FIELDS = frozenset(
+    {
+        "root",
+        "shell",
+        "yolo",
+        "with_domain",
+        "with_office",
+    }
+)
 
 # Rough per-size guidance for the picker; the machine, not the harness, decides.
 SPEED_HINT = {
@@ -80,7 +92,20 @@ def agent_folders():
 
 def read_config(agent):
     with open(os.path.join(AGENTS_DIR, agent, "config.json"), encoding="utf-8-sig") as f:
-        return json.load(f)
+        config = json.load(f)
+    validate_config(config)
+    return config
+
+
+def reject_removed_run_fields(body):
+    """Fail before process creation when a retired capability is requested."""
+    if not isinstance(body, dict):
+        raise ValueError("request body must be a JSON object")
+    removed = sorted(REMOVED_RUN_FIELDS & set(body))
+    if removed:
+        raise ValueError(
+            "unsupported Agent Lab fields: " + ", ".join(removed)
+        )
 
 
 def agent_dir(agent):
@@ -323,14 +348,6 @@ class Run:
             if q in self.subs:
                 self.subs.remove(q)
 
-    def answer(self, cid, allow):
-        try:
-            self.proc.stdin.write(json.dumps({"id": cid, "allow": bool(allow)}) + "\n")
-            self.proc.stdin.flush()
-            return True
-        except (OSError, ValueError):
-            return False
-
     def stop(self):
         if self.proc.poll() is None:
             self.proc.terminate()
@@ -352,14 +369,6 @@ class Runs:
                    "--agent", agent, "--task", task]
             if options.get("domain"):
                 cmd += ["--domain", options["domain"]]
-            if options.get("root"):
-                cmd += ["--root", options["root"]]
-            if options.get("shell"):
-                cmd.append("--shell")
-            if options.get("yolo"):
-                cmd.append("--yolo")
-            if options.get("with_domain"):
-                cmd.append("--with-domain")
             if options.get("tiers"):
                 cmd.append("--tiers")
             if options.get("small"):
@@ -371,7 +380,7 @@ class Runs:
             env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
             proc = subprocess.Popen(cmd, cwd=PROJECT, env=env, text=True,
                                     encoding="utf-8", errors="replace", bufsize=1,
-                                    stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                    stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE)
             run = Run(self.next_id, agent, task, proc, options)
             self.next_id += 1
@@ -510,19 +519,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
         try:
             body = self.body_json()
             if path == "/api/run":
+                reject_removed_run_fields(body)
                 agent = body.get("agent", "")
                 task = (body.get("task") or "").strip()
                 agent_dir(agent)  # validates
                 if not task:
                     raise ValueError("give the agent a task first")
-                root = (body.get("root") or "").strip()
-                if root and not os.path.isdir(os.path.expanduser(root)):
-                    raise ValueError(f"working folder {root} does not exist")
-                options = {"root": os.path.expanduser(root) if root else None,
-                           "domain": body.get("domain"),
-                           "shell": body.get("shell"), "yolo": body.get("yolo"),
-                           "with_domain": body.get("with_domain")
-                                          or body.get("with_office"),
+                options = {"domain": body.get("domain"),
                            "tiers": body.get("tiers"), "small": body.get("small"),
                            "deep": body.get("deep"), "max_calls": body.get("max_calls")}
                 run = RUNS.start(agent, task, options)
@@ -532,10 +535,6 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if run:
                     run.stop()
                 return self.send_json({"ok": True})
-            if path == "/api/confirm":
-                run = RUNS.current
-                ok = bool(run) and run.answer(int(body.get("id", 0)), body.get("allow"))
-                return self.send_json({"ok": ok})
             if path == "/api/reset":
                 what = set(body.get("what") or [])
                 return self.send_json({

@@ -1,6 +1,5 @@
 """Shared on-device runner used by every configured agent folder."""
 import argparse
-import datetime
 import json
 import os
 from pathlib import Path
@@ -13,9 +12,7 @@ if PROJECT not in sys.path:
     sys.path.insert(0, PROJECT)
 
 from harness.agent import run_harness  # noqa: E402
-from harness.builtin_tools import BUILTIN_EFFECTS, builtin_specs  # noqa: E402
-from harness.domain import GENERIC_PROMPT_PROFILE, load_domain  # noqa: E402
-from harness.fs_tools import build_overlay  # noqa: E402
+from harness.domain import load_domain  # noqa: E402
 from harness.llm import LLM, OLLAMA_URL  # noqa: E402
 from harness.memory import MemoryStore  # noqa: E402
 from harness.model_router import (  # noqa: E402
@@ -24,12 +21,32 @@ from harness.model_router import (  # noqa: E402
     default_roles,
 )
 from harness.runtime import (  # noqa: E402
-    ActionPolicy,
     AttemptContext,
     RunConfig,
 )
 from harness.storage import agent_runtime_paths  # noqa: E402
-from harness.tools import ToolRegistry  # noqa: E402
+
+
+ALLOWED_CONFIG_KEYS = frozenset(
+    {
+        "domain",
+        "max_calls",
+        "model",
+        "name",
+        "note",
+        "num_ctx",
+        "router",
+    }
+)
+REMOVED_CAPABILITY_FLAGS = frozenset(
+    {
+        "--root",
+        "--shell",
+        "--yolo",
+        "--with-domain",
+        "--with-office",
+    }
+)
 
 
 def _positive_int(value):
@@ -45,42 +62,42 @@ def _positive_int(value):
 def parse_flags(argv):
     """Parse the shared CLI without treating misspelled flags as model tasks."""
     parser = argparse.ArgumentParser(
-        description=(
-            "Run one configured local research agent. Real-file and shell "
-            "options are unsafe for valuable data."
-        ),
+        description="Run one configured synthetic-domain research agent.",
         allow_abbrev=False,
     )
-    parser.add_argument("--root")
-    parser.add_argument("--shell", action="store_true")
-    parser.add_argument("--yolo", action="store_true")
     parser.add_argument("--max-calls", type=_positive_int)
     parser.add_argument("--tiers", action="store_true")
     parser.add_argument("--small")
     parser.add_argument("--deep")
     parser.add_argument("--domain", dest="domain_name")
-    parser.add_argument(
-        "--with-domain",
-        "--with-office",
-        dest="include_domain",
-        action="store_true",
-    )
     parser.add_argument("task", nargs="*")
     # Preserve the historical ability to put flags between unquoted task
     # words while retaining argparse's strict option validation.
     parsed = parser.parse_intermixed_args(argv)
     options = {
-        "root": parsed.root,
-        "shell": parsed.shell,
-        "yolo": parsed.yolo,
         "max_calls": parsed.max_calls,
         "tiers": parsed.tiers or bool(parsed.small) or bool(parsed.deep),
         "small": parsed.small,
         "deep": parsed.deep,
         "domain_name": parsed.domain_name,
-        "include_domain": parsed.include_domain,
     }
     return options, " ".join(parsed.task).strip()
+
+
+def validate_config(config):
+    """Reject undeclared configuration before model or runtime access."""
+    if not isinstance(config, dict):
+        raise TypeError("configured-agent JSON must contain an object")
+    unknown = sorted(set(config) - ALLOWED_CONFIG_KEYS)
+    if unknown:
+        raise ValueError(
+            "unsupported configured-agent fields: " + ", ".join(unknown)
+        )
+    for required in ("name", "model"):
+        if not isinstance(config.get(required), str) or not config[required]:
+            raise ValueError(
+                f"configured-agent field {required!r} must be nonempty"
+            )
 
 
 def build_llm(config, options, log_dir, stream_hook=None):
@@ -113,66 +130,22 @@ def build_llm(config, options, log_dir, stream_hook=None):
     return router, router
 
 
-def confirm(action, detail):
-    print(f"\n  the agent wants to {action}:\n    {detail}")
-    try:
-        return input("  allow? [y/N] ").strip().lower() in ("y", "yes")
-    except EOFError:
-        return False
-
-
-def _surface(domain, root, include_domain, allow_shell, confirmer):
-    if not root:
-        return (
-            domain.registry,
-            domain.default_policy,
-            domain.prompt_profile,
-            domain.prompt_rules,
-            None,
-        )
-    overlay = build_overlay(
-        root,
-        allow_shell=allow_shell,
-        confirmer=confirmer,
-    )
-    if include_domain:
-        base_registry = domain.registry
-        base_policy = domain.default_policy
-        profile = domain.prompt_profile
-        prompt_rules = domain.prompt_rules
-    else:
-        base_registry = ToolRegistry(builtin_specs())
-        base_policy = ActionPolicy(BUILTIN_EFFECTS)
-        profile = GENERIC_PROMPT_PROFILE
-        prompt_rules = ""
-    surface = overlay.compose(
-        base_registry, base_policy, prompt_rules=prompt_rules
-    )
-    return (
-        surface.registry,
-        surface.policy,
-        profile,
-        surface.prompt_rules,
-        overlay.root,
-    )
-
-
 def main(agent_dir=None, argv=None):
     if agent_dir is None:
         raise ValueError("agent_dir is required; invoke an agents/<size> shim")
+    options, task = parse_flags(
+        list(sys.argv[1:] if argv is None else argv)
+    )
     agent_dir = os.path.abspath(agent_dir)
     with open(
         os.path.join(agent_dir, "config.json"), encoding="utf-8-sig"
     ) as handle:
         config_data = json.load(handle)
+    validate_config(config_data)
     assert (
         "127.0.0.1" in OLLAMA_URL or "localhost" in OLLAMA_URL
     ), "refusing non-local endpoint"
 
-    options, task = parse_flags(
-        list(sys.argv[1:] if argv is None else argv)
-    )
-    root_option = options["root"] or config_data.get("root")
     if not task:
         task = input("Task for the agent: ").strip()
     if not task:
@@ -185,24 +158,15 @@ def main(agent_dir=None, argv=None):
         or "office_demo"
     )
     paths = agent_runtime_paths(agent_dir, domain)
-    allow_shell = options["shell"] or bool(config_data.get("allow_shell"))
-    tools, policy, profile, prompt_rules, root = _surface(
-        domain,
-        root_option,
-        options["include_domain"],
-        allow_shell,
-        None if options["yolo"] else confirm,
-    )
-    today = datetime.date.today() if root else domain.default_today
     max_calls = options["max_calls"]
     if max_calls is None:
         max_calls = config_data.get("max_calls")
     if max_calls is None:
-        max_calls = 40 if root else 14
+        max_calls = 14
     run_config = RunConfig(
         condition="harness",
         max_calls=max_calls,
-        today=today,
+        today=domain.default_today,
     )
 
     workdir = paths.workspace
@@ -214,14 +178,14 @@ def main(agent_dir=None, argv=None):
         attempt_id=f"{domain.name}:{Path(agent_dir).name}",
         config=run_config,
         domain=domain,
-        tools=tools,
-        policy=policy,
+        tools=domain.registry,
+        policy=domain.default_policy,
         world=world,
         memory=memory,
         workdir=workdir,
         artifact_dir=paths.artifacts,
-        prompt_profile=profile,
-        prompt_rules=prompt_rules,
+        prompt_profile=domain.prompt_profile,
+        prompt_rules=domain.prompt_rules,
     )
     llm, router = build_llm(
         config_data, options, str(paths.logs)
@@ -248,22 +212,6 @@ def main(agent_dir=None, argv=None):
         print(f"  {adapters_note()}")
     else:
         print(f"  model: {config_data['model']}")
-    if root:
-        mode = "read/write" + (" + shell" if allow_shell else "")
-        toolset = (
-            f"files + {domain.name}"
-            if options["include_domain"]
-            else "files only (domain tools dropped)"
-        )
-        print(
-            f"  real files: {mode}; lexical root {root}"
-            + (
-                "   [--yolo: confirmations off]"
-                if options["yolo"]
-                else ""
-            )
-        )
-        print(f"  toolset: {toolset}")
     print(f"  budget: {run_config.max_calls} LLM calls")
     episode = run_harness(llm, task, attempt)
 
@@ -303,7 +251,6 @@ def main(agent_dir=None, argv=None):
         json.dump(
             {
                 "task": task,
-                "root": root,
                 "domain": domain.name,
                 "domain_version": domain.version,
                 "transcript": episode.transcript,

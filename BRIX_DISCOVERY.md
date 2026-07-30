@@ -7,9 +7,10 @@ correspondence remains outside the public repository because it contains identif
 client communication. This summary is not an implementation specification, a data-use
 authorization, or evidence that any workflow has been selected.
 
-Before implementation, Brix must validate the current workflow, authoritative systems,
-roles, data boundary, approval requirements, failure consequences, baseline, and
-success threshold.
+Before any real Brix product implementation, Brix must validate the current
+workflow, authoritative systems, roles, data boundary, approval requirements,
+failure consequences, baseline, and success threshold. This requirement does not
+block an explicitly fictional, no-network architecture fixture.
 
 ## Reported opportunity areas
 
@@ -33,8 +34,16 @@ The source expresses a preference to start with one or two reliable functions,
 keep sensitive business/member information internal, and avoid unnecessary
 external services. That is stakeholder input, not evidence that the current
 repository is offline, secure, or approved to receive Brix data. It also does
-not select a first workflow. Selection requires the P0 discovery and
-data-governance evidence in [`PROJECT_SETUP.md`](PROJECT_SETUP.md).
+not select a first workflow. Selection requires the future discovery and
+data-governance evidence described below.
+
+The current Brick milestone plans an entirely fictional lead-follow-up domain
+pack at B0. If implemented and accepted, that architecture fixture will test
+replaceable layering, typed proposals, deterministic approval boundaries, fake
+delivery and audit behavior. It will not select a live Brix workflow, use Brix
+records, connect to a provider, or provide stakeholder validation. The pack does
+not exist in the current F0/Q0 tree. Real Brix discovery and product work are
+outside the `v0.14.0` research milestone.
 
 ## Required discovery outputs
 

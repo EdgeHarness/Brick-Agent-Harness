@@ -310,12 +310,6 @@ button.ghost:hover, a.ghost:hover { border-color: var(--ink-faint); color: var(-
 .stat b { display: block; font-size: 15px; font-variant-numeric: tabular-nums; }
 .stat span { font-size: 10px; color: var(--ink-faint); }
 
-/* confirmation */
-.card.confirm { border-color: var(--warn); background: var(--warn-soft); }
-.confirm-actions { display: flex; gap: 8px; margin-top: 10px; }
-.confirm-actions button { padding: 7px 16px; font-size: 12px; border-radius: 8px; cursor: pointer; border: 1px solid var(--line); }
-.confirm-actions .allow { background: var(--good); color: #06231a; border-color: transparent; font-weight: 650; }
-.confirm-actions .deny { background: transparent; color: var(--ink-dim); }
 .answered { opacity: .55; }
 
 pre.raw {
