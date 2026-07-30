@@ -96,8 +96,9 @@ The test suite is designed to run without Ollama. Passing it characterizes the
 implemented cases; it does not complete the pending Lenovo F0 gate or validate a
 retained result.
 
-The Lenovo gate is a separate, live-model operation. Its exact clean-commit run
-and verification commands are in
+The Lenovo gate is a separate, live-model operation. First-time host setup is in
+[`bench/README.md`](bench/README.md#preparing-the-lenovo-host), and the exact
+clean-commit run and verification commands follow it in
 [`bench/README.md`](bench/README.md#running-the-lenovo-f0-gate). A passing bundle
 must be retained externally and bound to the eventual `v0.4.0` tag through the
 candidate/release attestation in [`PROJECT_SETUP.md`](PROJECT_SETUP.md); running

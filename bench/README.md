@@ -207,6 +207,135 @@ and requires explicit rejection of the unknown
 behavioral effect of every black-box sampling option. The exact Ollama binary and
 model digests come from F0 rather than a hard-coded version.
 
+## Preparing the Lenovo host
+
+For an operator or coding agent setting up the benchmark host for the first time.
+[`../PROJECT_SETUP.md`](../PROJECT_SETUP.md) states these same conditions as
+acceptance criteria; the steps below are how you satisfy them. The probe
+fail-closes on every one, so a missed step appears as a gate failure rather than
+a quietly wrong result.
+
+**Do not modify the repository.** The gate requires `git status --short` to print
+nothing, so editing any tracked file, documentation included, voids the run.
+Install tools and change Windows settings freely; leave the worktree alone.
+
+### 1. Confirm a native ARM64 host and shell
+
+```powershell
+$env:PROCESSOR_ARCHITECTURE
+[System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+```
+
+The first must print `ARM64`. `AMD64` means an emulated x64 shell: open Windows
+PowerShell (ARM64) instead. This is the most common setup mistake and it later
+surfaces as a confusing probe error rather than an obvious environment problem.
+
+### 2. Install native ARM64 Python and Ollama
+
+Install the **ARM64** builds, not the x64 installers: CPython for Windows ARM64
+from python.org, and Ollama for Windows ARM64 from <https://ollama.com/download>.
+Then verify:
+
+```powershell
+python -c "import platform; print(platform.machine())"
+ollama --version
+```
+
+`platform.machine()` must print `ARM64`. The probe rejects the host if either
+process runs as x64 under emulation. Both installers need UAC approval, so an
+agent cannot complete this step unattended.
+
+### 3. Start the Ollama server
+
+```powershell
+ollama serve
+```
+
+Leave it running in its own window. If it reports that the address is already in
+use, the installed Ollama app is already serving and no action is needed; confirm
+with `ollama list`. The probe measures an Ollama model-runner descendant process,
+not only the listener, so the server must actually be serving.
+
+### 4. Set power and performance
+
+Connect AC power, then select **Settings > System > Power & battery > Power mode
+> Best Performance**, or activate a High/Ultimate Performance scheme:
+
+```powershell
+powercfg /setactive SCHEME_MIN
+```
+
+Disable sleep for the duration. The probe records the active scheme GUID.
+
+### 5. Leave Defender and Windows Search enabled
+
+```powershell
+Get-MpComputerStatus | Select-Object RealTimeProtectionEnabled
+Get-Service WSearch
+```
+
+Both must be enabled and running. This is deliberate: the storage probe tests
+publication while a real-time scanner and indexer can hold file handles. Do not
+disable them to produce a "clean" benchmark.
+
+### 6. Check free space before pulling
+
+```powershell
+[math]::Round((Get-Volume C).SizeRemaining / 1GB, 1)
+```
+
+The gate requires 30 GiB free **after** pulling roughly 12 GB of models, so start
+with about **42 GiB free**. Free space first; running out mid-pull wastes the
+download.
+
+### 7. Choose the output path
+
+A short local NTFS path outside OneDrive, such as `C:\BrickRuns`. Not a network
+drive, synced folder, substituted drive, or removable volume.
+
+### 8. Resolve the candidate commit
+
+Use the commit you were given; it must already be pushed.
+
+```powershell
+git fetch origin
+git switch --detach <C>
+git status --short
+python -m bench.f0_probe fingerprint
+```
+
+`git status --short` must print nothing. If you were given no commit, use
+`origin/main` and record `git rev-parse HEAD` so the evidence traces to an exact
+tree.
+
+### Expected duration
+
+Roughly 45 to 90 minutes: about 12 GB of model downloads, native tool-calling and
+throughput probes across three models, and 200 storage publication cycles
+including injected process exits and held file handles. Do not run other heavy
+workloads on the machine while it executes.
+
+### If the gate fails
+
+Send the full console output and **do not fix it**. A failure is the result: it
+reports that something the design assumed is untrue, and patching around it
+produces evidence for a tree nobody reviewed.
+
+| Symptom | Likely cause |
+|---|---|
+| Host or process rejected | x64 shell, Python, or Ollama under emulation |
+| Model pull or metadata failure | a `qwen3.5:*-q4_K_M` tag does not exist as assumed |
+| Native tool conformance failure | this model or Ollama build lacks the function-call transport |
+| Option validation failure | this Ollama build accepts or rejects the wrong sampling options |
+| Throughput below floor | CPU-only inference too slow for 4B (5 tok/s) or 9B (3 tok/s) |
+| Free-space failure after pulls | started with less than about 42 GiB |
+| Storage or held-handle failure | marker-last publication does not hold on this Windows configuration |
+| Dirty worktree | a tracked file was edited; reset and rerun |
+
+A 4B failure stops the research design. A 2B or 9B failure removes only that
+descriptive replication. A storage failure means the S4 evidence store needs
+redesign before it is built.
+
 ## Running the Lenovo F0 gate
 
 Use only the native Windows 11 ARM64 Lenovo, native ARM64 Python and Ollama, a

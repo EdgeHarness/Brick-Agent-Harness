@@ -46,6 +46,14 @@ Lenovo F0 evidence is pending.
 
 ### Added
 
+- A first-time Lenovo host setup section in `bench/README.md` covering native
+  ARM64 shell/Python/Ollama verification, server start, power mode, required
+  Defender and Windows Search state, pre-pull free space, output-path rules,
+  candidate-commit resolution, expected duration, and a failure-triage table
+  mapping each fail-closed check to its likely cause. `PROJECT_SETUP.md` and
+  `README.md` link to it. The plan previously stated these conditions only as
+  acceptance criteria, so an operator could not satisfy them from the documents
+  alone.
 - `bench/f0_protocol.json`, `bench/f0_probe.py`, `bench/f0_windows.py`, and
   `bench/f0_storage.py` for the reproducible native-Windows ARM64 environment,
   model, native-tool, option-validation, memory, throughput, and disposable

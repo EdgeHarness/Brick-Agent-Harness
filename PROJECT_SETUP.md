@@ -173,8 +173,10 @@ a substitute for the Lenovo gate.
 
 Run F0 from a clean, pushed candidate commit `C`. Use native ARM64 Python, start
 the native ARM64 Ollama server, connect AC power, select the recorded performance
-power mode, and leave Defender and indexing enabled. From an ARM64 PowerShell in
-the repository root:
+power mode, and leave Defender and indexing enabled. First-time host setup steps
+that satisfy these conditions, plus a failure-triage table, are in
+[`bench/README.md`](bench/README.md#preparing-the-lenovo-host). From an ARM64
+PowerShell in the repository root:
 
 ```powershell
 git switch --detach <C>
