@@ -279,12 +279,9 @@ commit `C`, under this exact rule:
 1. Run `python -m bench.f0_probe fingerprint` at `C` and record its commit and
    `behavior_tree_sha256`; the F0 bundle independently records the same values.
 2. Between `C` and `R`, permit only:
-   - creation of `evidence/f0/v0.4.0.json`;
+   - creation of the release attestation under `evidence/<stage>/`;
    - promotion of the pending changelog entry and status-only release wording in
-     `CHANGELOG.md`, `README.md`, `PROJECT_GUIDE.md`, `PROJECT_SETUP.md`,
-     `ARCHITECTURE.md`, `SECURITY.md`, `FIXES.md`, `bench/README.md`,
-     `agents/README.md`, `agents/*/README.md`, `webui/README.md`, and
-     `training_scripts/README.md`; and
+     **any tracked `*.md` file**; and
    - changing only the `[project].version` scalar in `pyproject.toml`.
 3. Run the same `fingerprint` command at `R` and require byte equality with the
    behavior-tree digest recorded for `C`.
@@ -292,6 +289,23 @@ commit `C`, under this exact rule:
    changed byte—including code, tests, workflow, dependency, task, prompt,
    protocol, or probe behavior—creates a new candidate commit and requires a full
    Lenovo F0 rerun.
+
+5. Run required CI on `R`, then create an annotated `v0.4.0` tag that points to
+   `R` and records `C`, the attestation-file Git blob ID, archive SHA-256, and
+   behavior-tree SHA-256. Push the commit and tag. The tracked attestation must
+   not claim to contain `R`'s commit hash: embedding a commit's own hash in one of
+   its files is circular. The tag target supplies the authoritative `R` identity.
+
+**The allowlist is stated structurally, never as a list of filenames.** An
+enumerated file list rots: files added after it was written are silently outside
+it, so a routine status update becomes an allowlist violation that demands a full
+gate rerun. Two such gaps were found while executing `v0.4.0`. Because the
+canonical digest excludes every `.md` path, no Markdown change can alter tested
+behavior, so "any tracked `*.md` file" is safe by construction and cannot drift.
+This does not relax the review: step 4 still requires confirming that the `.md`
+changes are status-only prose, and that nothing outside `*.md`,
+`evidence/<stage>/`, and the single `pyproject.toml` version scalar moved. A prose
+assertion that the diff is "documentation only" remains insufficient.
 
 **No test may pin the project version to a literal.** The allowlist permits
 bumping the `[project].version` scalar between `C` and `R`, and the canonical
@@ -303,11 +317,6 @@ version is therefore asserted as well-formed `MAJOR.MINOR.PATCH` only. Release
 identity is governed by the annotated tag, `CHANGELOG.md`, and this diff review —
 never by a literal in a test. The same rule applies to any future assertion over
 an allowlisted file: assert its *shape*, not the released value.
-5. Run required CI on `R`, then create an annotated `v0.4.0` tag that points to
-   `R` and records `C`, the attestation-file Git blob ID, archive SHA-256, and
-   behavior-tree SHA-256. Push the commit and tag. The tracked attestation must
-   not claim to contain `R`'s commit hash: embedding a commit's own hash in one of
-   its files is circular. The tag target supplies the authoritative `R` identity.
 
 `evidence/f0/v0.4.0.json` must contain exactly the versioned release-attestation
 schema, candidate commit `C`, candidate behavior-tree SHA-256, run ID, protocol

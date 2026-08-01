@@ -32,6 +32,15 @@ corrected and versioned instead of repaired or waived.
 
 ### Fixed (release procedure)
 
+- The `C`-to-`R` release allowlist enumerated permitted files by name, and that
+  list had rotted: `CLAUDE.md` and `EXECUTION.md` were added to the repository
+  after it was written, so promoting their release status — the first two files an
+  agent reads — was an allowlist violation requiring a full gate rerun. An audit of
+  all 19 tracked Markdown files confirmed those were the only two gaps
+  (`BRIX_DISCOVERY.md` carries no status claims). The rule is now structural:
+  status-only prose in **any** tracked `*.md` file, which cannot drift as files are
+  added and is safe by construction because the canonical digest excludes every
+  `.md` path. The mandatory diff review is unchanged.
 - The `C`-to-`R` release allowlist was internally inconsistent and made the
   documented `v0.4.0` procedure impossible to execute. It permits bumping the
   `[project].version` scalar, and the canonical digest normalizes that line so the
