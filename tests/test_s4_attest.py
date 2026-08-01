@@ -2,8 +2,10 @@ import copy
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import shutil
 import struct
 import sys
+import tempfile
 from types import SimpleNamespace
 import xml.etree.ElementTree as ET
 
@@ -690,15 +692,21 @@ def test_pe_architecture_parser_is_independent_of_executable_path(tmp_path):
 
 def test_release_runner_owns_exact_pytest_command_and_sanitized_environment(
     monkeypatch,
+    request,
     tmp_path,
 ):
     project = tmp_path / "project"
     evidence_dir = project / "evidence"
-    report_parent = tmp_path / "native-reports"
+    report_parent = Path(tempfile.mkdtemp(prefix="brick-s4-attest-"))
+    request.addfinalizer(
+        lambda: shutil.rmtree(report_parent, ignore_errors=True)
+    )
     project.mkdir()
     evidence_dir.mkdir()
-    report_parent.mkdir()
-    report_dir = report_parent / ("s4-" + COMMIT[:12] + "-run0001")
+    report_dir = (
+        report_parent / ("s4-" + COMMIT[:12] + "-run0001")
+    ).resolve()
+    assert len(str(report_dir)) <= 120
     output = evidence_dir / "s4" / "v0.5.0.json"
     fixture_report = tmp_path / "fixture.xml"
     _write_junit(fixture_report)
