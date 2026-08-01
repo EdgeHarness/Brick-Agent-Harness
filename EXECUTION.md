@@ -18,14 +18,21 @@ of `CHANGELOG.md`, those win.
 
 ## 2. State as of 1 August 2026
 
-**Released:** `v0.4.0`. **Offline suite:** 242 passed, 2 skipped on native
-Windows ARM64; Linux totals differ by platform-conditional skips. Linux and
-Windows x64 CI green.
+This section records pre-attestation candidate `C`. It intentionally remains
+unchanged in attestation-only tagged descendant `R`; the annotated tag and bound
+evidence are authoritative, and immediate docs-only descendant `D` promotes
+current status without becoming part of `v0.5.0`.
 
-**Done:** F0/Q0. Q0 removed the general filesystem and PowerShell overlay, every
-legacy escape flag fails before side effects, and confirmation callbacks fail
-closed. `bench/f0_probe.py`, `f0_windows.py`, `f0_storage.py` and
-`f0_protocol.json` implement the gate, now at protocol v2.
+**Preceding published release at `C`:** `v0.4.0`. **F0 verifier correction:**
+commit `f12dd71` is pushed to `main` and required CI is green. **Candidate
+source version:** `0.5.0`. The final clean-candidate test count is not claimed
+by this pre-attestation snapshot.
+
+**Done:** F0/Q0 and the independent F0 verifier correction. Q0 removed the
+general filesystem and PowerShell overlay, every legacy escape flag fails before
+side effects, and confirmation callbacks fail closed. `bench/f0_probe.py`,
+`f0_windows.py`, `f0_storage.py` and `f0_protocol.json` implement the gate, now
+at protocol v2.
 
 **F0 PASSED** from candidate `6402bf5`, run `f0-20260801T164210Z-07054bec`,
 archive SHA-256
@@ -79,13 +86,18 @@ different commit's bundle usable, and the attestation asserts both.
 A subsequent strict audit found weaker-than-documented verifier predicates, not
 a failed measurement: generic non-2xx option errors could count as recognition,
 runner replacement across PIDs was not rejected, and some failed-run codes were
-shape-checked rather than recomputed. The unreleased correction now derives
-those results from raw responses and memory samples. Both the original and
-extracted release bundles pass the stronger verifier with their recorded hashes
-unchanged. This correction must be reviewed before S4 starts.
+shape-checked rather than recomputed. Commit `f12dd71` now derives those results
+from raw responses and memory samples. Both the original and extracted release
+bundles pass the stronger verifier with their recorded hashes unchanged; the
+commit is pushed and required CI is green.
 
-**Not done:** everything from S4 onward. Nine of eleven stages remain. `v0.4.0`
-records feasibility, not any measured effect.
+**S4 candidate implemented, gate open at `C`:** `harness/evidence.py`
+implements the production marker-last store and `bench/s4_attest.py` implements
+its native attestor. Runnable local Windows cases pass. Three required S4
+symlink cases are blocked solely because Windows Developer Mode is disabled.
+Candidate CI, a clean native Windows ARM64 run, and candidate-bound attestation
+remain release requirements rather than claimed results. S1R has not started.
+`v0.4.0` and the S4 candidate record no benchmark effect.
 
 **Benchmark host, verified eligible:**
 
@@ -106,20 +118,30 @@ because verifying it is F0's job.
 
 ## 3. Immediate next action
 
-Review and integrate the unreleased F0 verifier correction described above.
-Do not rerun F0 solely to regenerate evidence: the immutable original and
-extracted `v0.4.0` bundles both satisfy the stronger verifier from their raw
-records. A future behavioral change to the F0 probe still requires a new
-versioned candidate and a complete rerun; no prior subresult may be reused.
+Finish S4 without broadening the stage:
 
-After that corrective commit has green required CI, begin S4 and only S4. Build
-the production marker-last store defined in `PROJECT_SETUP.md`: immutable
-physical UUID candidates, exclusive run locking, exact `AttemptKey` hashing,
-prepared-manifest validation, exclusive `COMMITTED` publication, fail-closed
-recovery, and rebuildable `results.json`. The S4 exit gate is the full
-crash-boundary, stale-artifact, corruption, duplicate, collision,
-concurrent-writer, held-handle, and recovery matrix on POSIX and native Windows
-ARM64. Stop for review before starting S1R.
+1. Complete review, tests, documentation, and release metadata in candidate
+   commit `C`; make the worktree clean, push `C`, and require the Linux/Python
+   matrix and remote CI to pass.
+2. On the native Windows ARM64 Lenovo, enable the symlink capability through
+   Windows Developer Mode only with explicit operator approval. Run the
+   canonical S4 runner from clean pushed `C`; all platform-applicable S4 tests,
+   including the three symlink cases, must run with zero required S4 skips.
+3. Verify and retain the native record, then add
+   regular file `evidence/s4/v0.5.0.json` as the only change in release
+   descendant `R`.
+4. Require green CI for `R`, verify the candidate/release binding, then tag and
+   release `v0.5.0`. Stop for review before starting S1R.
+5. Immediately create docs-only descendant `D` from tagged `R`; promote the
+   staged changelog with the actual release date and update current-status
+   prose. Review `R..D` as modifications only to already-tracked Markdown,
+   push `D`, and do not move the `v0.5.0` tag from `R`.
+
+Do not substitute the earlier local run for the clean candidate run, describe a
+skipped required symlink case as a pass, or add implementation changes to `R`.
+Any behavioral change after native execution requires a new candidate and a
+complete S4 rerun. `D` may change no code, tests, workflow, dependency,
+protocol, task, prompt, or evidence byte.
 
 Do not import or synchronize the moving `SMalshe/Brick` product tree into S4,
 S1R, B0, or a retained condition. `PROJECT_GUIDE.md` defines the convergence
@@ -200,13 +222,16 @@ Cut from the top. Everything below the line invalidates the result.
    stakeholder-visible artifact, so know what you are giving up
 5. Validation and adversarial manifests, keeping development / sentinel /
    retained
-6. S4 concurrent-writer locking — assert single writer instead
-7. S1R breadth — keep string-safe parsing, removal of fuzzy repair on mutation
+6. S1R breadth — keep string-safe parsing, removal of fuzzy repair on mutation
    arguments, fail-closed completion, scoped memory, exception classification
 
 **Never cut:** evidence integrity, strict graders, shared native transport,
 independent instances, freeze-before-looking, the reproducibility bundle. Those
 six are what make the number mean anything.
+
+S4 run locking and its concurrent-writer test are evidence integrity and are not
+cuttable. An operator promise that only one process will write is not equivalent
+to the canonical gate.
 
 **Never cut by choosing the smaller primary to save time.** D0's preregistered
 runtime rule decides between 20 and 12 instances per family. A deadline is not
@@ -281,12 +306,18 @@ credibility.
 
 Accurate framing now:
 
-> `v0.4.0` records a passing Q0 quarantine and native Windows ARM64 F0
+> At candidate `C`, `v0.4.0` is the preceding release and records a passing Q0
+> quarantine and native Windows ARM64 F0
 > feasibility gate on the Lenovo Snapdragon X Elite. The retained evidence
 > establishes the tested model transport, option recognition, throughput,
 > process memory, native runner identity, storage behavior, and host
-> prerequisites. It is not a benchmark result. S4, the production marker-last
-> evidence store, is the next release stage.
+> prerequisites. Commit `f12dd71` contains the pushed, CI-green independent
+> verifier correction. Candidate `C` contains the `v0.5.0` S4 store and
+> attestor; native zero-skip acceptance, candidate-bound attestation, and CI are
+> requirements, not claims made by this pre-attestation prose. Tagged
+> attestation-only `R` and its bound evidence authoritatively record the result;
+> docs-only `D` later promotes status. This is not a benchmark result, and S1R
+> has not started.
 
 Never say "the research passed" when only feasibility passed. Never say a
 benchmark result exists before S9 is sealed. Never round a conditional result

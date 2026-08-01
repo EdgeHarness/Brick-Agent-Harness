@@ -4,16 +4,23 @@ This file maps known implementation defects to the active release sequence in
 [`PROJECT_SETUP.md`](PROJECT_SETUP.md). It does not define a second gate
 taxonomy.
 
-The latest release is `v0.4.0`. The native Lenovo evidence required for `v0.4.0`
-exists and the F0 gate passed. “Targeted” below means planned or in progress; it
-does not mean an exit gate passed.
+This ledger records pre-attestation candidate `C`; its preceding published
+release is `v0.4.0`. The native Lenovo evidence required for `v0.4.0` exists and
+the F0 gate passed. Its independent verifier correction is pushed as CI-green
+commit `f12dd71`. `C` implements the `v0.5.0` S4 candidate without claiming
+native acceptance. “Targeted” below means planned, implemented in a candidate,
+or in progress; it does not mean an exit gate passed.
+
+The annotated tag and bound evidence are release-authoritative. Attestation-only
+`R` intentionally retains this candidate-scoped ledger; immediate docs-only
+descendant `D` promotes status after the tag and is not part of `v0.5.0`.
 
 ## Status ledger
 
 | Area | Released `v0.3.1` state | Active remediation |
 |---|---|---|
 | General filesystem/shell | Unsafe lexical overlay exposed by CLI and Agent Lab | Q0 removes all supported activation paths instead of attempting to harden arbitrary host access |
-| Attempt isolation/evidence | Reused task directories and non-atomic `results.json` | S4 marker-last immutable physical bundles and rebuildable projections |
+| Attempt isolation/evidence | Reused task directories and non-atomic `results.json` | S4 candidate implements marker-last immutable physical bundles and rebuildable projections; native acceptance remains pending |
 | Runtime schemas/parser | Key-only validation, unsafe fuzzy repair, fail-open completion | S1R executable schemas, known-alias-only recovery and authoritative completion |
 | Memory | Shared append-only untrusted JSONL | S1R scoped, versioned, expiring untrusted input |
 | Synthetic Brix layer | Not implemented | B0 fictional lead follow-up after S1R |
@@ -207,6 +214,22 @@ handles, sharing violations, denied reads, concurrent writers, prepared adoption
 duplicates, collisions, tampering, projection recovery and the ordered learning
 scenario. Only fully committed, validated and graded records receive non-null
 strict outcomes.
+
+### Candidate status
+
+`harness/evidence.py` and `bench/s4_attest.py` implement the required store,
+recovery, projection, locking, and native-attestation surfaces in candidate
+`C`. At the pre-attestation state recorded here, runnable local Windows cases
+pass while three required S4 symlink cases are blocked solely because Windows
+Developer Mode is disabled; they may not be skipped in the native gate. Clean
+candidate CI, a zero-S4-skip native Windows ARM64 run, and a candidate-bound
+attestation remain release requirements rather than claimed results.
+
+Release descendant `R` may add only the regular
+`evidence/s4/v0.5.0.json` attestation. Its annotated tag authoritatively records
+whether S4 passed despite retaining this candidate text. Docs-only `D` then
+promotes status without moving the tag. S1R has not started and no benchmark
+effect has been measured.
 
 ## S1R — typed and fail-closed runtime
 

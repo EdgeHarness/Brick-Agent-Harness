@@ -7,9 +7,20 @@ the former `S0`–`S18`, `G0`–`G1`, `R1`–`R5`, and `P0`–`P4` execution tax
 Those names may remain in released changelog entries as historical descriptions,
 but they no longer authorize or order current work.
 
-The latest released version is `v0.4.0`. The native-Windows Lenovo F0 gate
-passed, so `v0.4.0` records feasibility. It is not a benchmark result: S4 through
-S9 are unstarted and no measured effect exists.
+At the pre-attestation candidate state described by this source, the preceding
+published release is `v0.4.0`. The native-Windows Lenovo F0 gate passed, so
+`v0.4.0` records feasibility. S4 is implemented as a `v0.5.0` candidate but its
+native gate remains open; S1R through S9 are unstarted and no measured effect
+exists.
+
+Release identity is authoritative in annotated Git tags and their bound
+evidence, not in mutable current-status prose. S4 uses three commits/states:
+tested candidate `C`; direct attestation-only release descendant `R`, tagged
+`v0.5.0`; and an immediate docs-only descendant `D` that promotes changelog and
+current-status wording after the tag exists. `D` is not part of `v0.5.0` and
+does not alter its code or evidence. Consequently the tagged `R` intentionally
+retains `C`'s explicitly pre-attestation wording; the tag and
+`evidence/s4/v0.5.0.json` determine whether S4 actually passed.
 
 The current milestone has two outputs:
 
@@ -39,7 +50,9 @@ with Snapdragon X Elite, 32 GB RAM, and native Windows 11 ARM64.
 10. Each stage ends with tests, documentation reconciliation, an exact
     `CHANGELOG.md` entry, commit, SemVer tag, push, required green CI, and a stop
     for review. A tag is created only after that stage's mandatory evidence
-    exists.
+    exists. For S4, substantive documentation and the pending changelog entry
+    are frozen in `C`; `R` adds only the attestation; the tag makes the release
+    authoritative; and docs-only `D` immediately promotes the pending prose.
 
 ## Release sequence
 
@@ -369,16 +382,140 @@ runs/<run-id>/
   results.json
 ```
 
-`AttemptKey` includes the domain and content digest, task/generator/grader
-versions, model tag and digest, condition version and mechanism digest, instance,
-ordered-subepisode contract and repeat, sampling and opportunity budgets, prompt
-digest, and tool-schema digest. The logical hash is a canonical digest of this
-key.
+The production implementation lives in `harness/evidence.py`. The disposable F0
+storage probe remains separate and is not imported as the production store.
+The benchmark-facing operation encapsulates lock acquisition, recovery
+classification, physical-candidate creation, producer invocation, publication,
+and projection rebuilding; it never returns a "call the model" decision that a
+caller could execute outside the lock.
+
+`run.json` is an immutable `brick.evidence-run/1` document with exactly
+`schema_version`, `run_id`, and `metadata`. `metadata` is a canonical JSON
+object owned by the versioned run protocol. The file is created exclusively,
+never rewritten, and its SHA-256 is recorded in every `attempt.json`.
+`run.lock` is a persistent regular lock file: Brick never deletes or replaces
+it. `run_id` is a portable ASCII path component: traversal, separators, control
+characters, Windows device names, and trailing dots are rejected.
+
+### Attempt identity and canonical JSON
+
+`AttemptKey` is the strict `brick.attempt-key/1` object with exactly these keys
+and nested keys:
+
+```text
+schema_version: "brick.attempt-key/1"
+domain:
+  name: string
+  version: string
+  content_sha256: lowercase 64-hex string
+task:
+  family: string
+  version: string
+generator_version: string
+grader_version: string
+model:
+  tag: string
+  digest: "sha256:" followed by lowercase 64-hex
+condition:
+  name: string
+  version: string
+  mechanism_sha256: lowercase 64-hex string
+instance:
+  id: string
+  content_sha256: lowercase 64-hex string
+ordered_subepisodes: list[string]
+repeat: integer
+sampling: object
+opportunity_budget: object
+prompt_sha256: lowercase 64-hex string
+tool_schema_sha256: lowercase 64-hex string
+```
+
+Every string is nonempty, contains no U+0000–U+001F control character, and is
+normalized to Unicode NFC before serialization. Object keys are normalized too,
+and a collision after normalization is rejected.
+`ordered_subepisodes` contains unique nonempty IDs in execution order and is
+empty for an atomic attempt. `repeat` is a nonnegative integer; a boolean is not
+an integer. `sampling` is a nonempty object and contains no JSON float at any
+depth. `opportunity_budget` is a nonempty object whose values are nonnegative
+integers; booleans are not integers. S4 preserves both maps exactly after NFC
+normalization and never inserts defaults. The later versioned benchmark
+protocol owns their exact key sets, ranges, and canonical decimal-string
+grammar and must validate those before constructing the key. Fractional
+sampling values are therefore stored as protocol-validated decimal strings,
+not binary floats. Unsupported, missing, or additional fixed envelope keys,
+duplicate or normalization-colliding JSON object keys, non-finite numbers, and
+wrong structural types fail closed.
+
+Canonical JSON bytes are UTF-8 with NFC strings, keys sorted lexicographically
+after normalization, compact `,` and `:` separators, `ensure_ascii=false`, and
+no trailing newline. The logical hash is the lowercase SHA-256 of those exact
+`AttemptKey` bytes. Golden tests pin both bytes and digest across supported
+Python versions and operating systems.
+
+### Evidence envelopes
+
+Every S4 JSON evidence file is decoded with duplicate-key rejection, must use
+the same canonical encoding followed by exactly one LF byte, and has an exact
+versioned envelope:
+
+- `attempt.json` is `brick.evidence-attempt/1` with exactly
+  `schema_version`, `run_id`, `run_sha256`, `logical_hash`, `physical_uuid`, and
+  `attempt_key`;
+- both state files are `brick.evidence-state/1` with exactly
+  `schema_version`, `state_kind` (`initial | final`), and `payload`;
+- `result.json` is `brick.evidence-result/1` with exactly `schema_version`,
+  `execution_status`, `tool_status`, `failure_origin`, `failure`, `metrics`, and
+  `diagnostics`;
+- `grade.json` is `brick.evidence-grade/1` with exactly `schema_version`,
+  `grader_status`, `candidate_decision`, and `diagnostics`; and
+- `actions.json` is `brick.evidence-actions/1` with exactly `schema_version` and
+  `actions`.
+
+State payloads, action entries, failure details, and diagnostics remain opaque
+canonical JSON at S4; `metrics` is an opaque canonical JSON object. Later
+domain/runtime stages own their semantic schemas. `failure_origin` is `none |
+model | runner | environment | operator`.
+It disambiguates, in particular, a model-request timeout from a runner timeout
+and an operator abort from a runner abort. `candidate_decision` is boolean only
+when `grader_status=graded` and is otherwise null. It is deliberately not named
+`strict_success`: strict success is derived only after committed-bundle
+validation.
+
+Status/origin compatibility is exact: `done` uses `none`;
+`budget_exhausted` and `model_error` use `model`; `runner_error` uses `runner`;
+`environment_unstable` uses `environment`; `timeout` uses `model` or `runner`
+according to the timed operation; and `aborted` uses `operator` or `runner`
+according to who terminated it. `failure` is null exactly when the origin is
+`none` and is otherwise an object. A graded model-origin failure must have
+`candidate_decision=false`.
+
+An empty `memory-delta.jsonl` is allowed; otherwise every record is canonical
+JSON terminated by one LF byte. CR, CRLF, a missing final LF, and blank records
+are rejected, while Unicode line-separator characters inside a JSON string
+remain string data. `transcript.md` is UTF-8. Artifact paths are normalized to
+NFC before creation and use relative forward-slash form; validation rejects a
+non-NFC member already present on disk. Absolute paths, empty or dot components,
+`..`, backslashes, duplicate or case-insensitively colliding paths, and Windows
+reserved device components are rejected. Every recursive artifact file is
+declared in the prepared manifest.
+
+`PREPARED.json` is `brick.evidence-prepared/1` with exactly `schema_version`,
+`run_id`, `run_sha256`, `logical_hash`, `physical_uuid`, and `files`. `files` is
+sorted by normalized path and every entry has exactly `path`, nonnegative
+integer `size`, and lowercase 64-hex `sha256`. It declares every regular
+candidate file except itself and `COMMITTED`.
 
 ### Commit protocol
 
-1. Acquire the exclusive run lock before candidate creation or model access.
+1. Open the persistent `run.lock` and acquire its exclusive OS lock before
+   recovery scanning, candidate creation, or model access. Use `flock` on POSIX
+   and `LockFileEx` on Windows. Hold the same lock through producer execution,
+   publication, and projection rebuilding. Process termination releases the OS
+   lock; the lock file remains and is never deleted.
 2. Create a never-reused UUID directory directly in its final physical location.
+   An impossible-in-normal-operation UUID collision aborts fail closed; it never
+   reuses or overwrites the existing candidate.
 3. Execute only in that directory.
 4. Write, flush, close, and hash every required evidence file.
 5. Reject symlinks, junctions, reparse points, and unexpected files.
@@ -395,7 +532,9 @@ bundles.
 
 - No physical directory means the attempt was not started.
 - A directory without valid `PREPARED.json` is preserved as abandoned; resume
-  creates a new physical attempt.
+  creates a new physical attempt. Consequently, the no-rerun guarantee begins
+  only at a complete, valid `PREPARED.json`; a process exit or write failure
+  before that boundary may execute the producer again in a new UUID directory.
 - A valid prepared bundle without `COMMITTED` is adopted by validation and marker
   creation. The model is not called again.
 - A marker-present bundle with valid hashes is committed.
@@ -406,15 +545,26 @@ bundles.
 - A logical-hash collision halts the run.
 - A missing or corrupt projection is rebuilt and never changes source evidence.
 
-Retry only idempotent reads, validation, and marker creation. Use a 30-second
-monotonic deadline with delays `0, 50, 100, 200, 400, 800, 1600` milliseconds and
-then two-second delays. Retry Windows access, sharing, and lock violations.
-Existing-file errors require state inspection, not blind overwrite. Exhaustion
-produces `publish_blocked` and never re-executes the model.
+Retry only idempotent inventory reads, validation, and marker creation. Each
+recovery/adoption operation and each commit/publication operation uses one
+30-second monotonic deadline with delays `0, 50, 100, 200, 400, 800, 1600`
+milliseconds and then two-second delays; one projection rebuild shares one
+deadline across its complete candidate scan. Model execution is not charged to
+a filesystem-publication deadline. Retry Windows access, sharing, and lock
+violations. Existing-file errors require state inspection, not blind overwrite.
+Exhaustion produces `publish_blocked` (or aborts a projection rebuild before
+replacement) and never re-executes the model.
 
 The durability claim is fail-closed recovery after process termination. Brick
 does not claim lossless persistence through sudden power or storage-device
 failure.
+
+The S4 threat model coordinates cooperative Brick writer processes on one local
+host. Brick never mutates a committed candidate and every reader revalidates its
+manifest, sizes, hashes, file types, and identities. S4 does not provide digital
+signatures, defend against an administrator or hostile local process rewriting
+an entire internally consistent bundle, or claim protection against a
+hard-link adversary.
 
 ### Status model
 
@@ -427,8 +577,111 @@ Keep instrument and model outcomes orthogonal:
 - `publish_status`: `committed | publish_blocked | corrupt`;
 - `strict_success`: `true | false | null`.
 
-Only a fully committed, validated, graded record can have non-null strict
-success.
+These are reader-derived statuses, not fields that are mutated after
+`PREPARED.json` is written. When no physical directory exists, there is no
+record. An incomplete or invalid uncommitted candidate is `abandoned` with null
+publication status; a valid marker-free candidate is `prepared`, with null
+publication status until a current publication attempt exhausts its deadline
+and derives `publish_blocked`; a valid marker-present candidate is
+`committed/committed`; and a marker-present invalid candidate is
+`invalid/corrupt` and halts the run. Status fields are nullable when no
+enumerated state applies. Execution, grader, and tool status are available only
+when their strict envelope validates.
+
+`failure_origin=model` is an instrument-valid model/task failure and may be
+graded false. `runner`, `environment`, and `operator` origins are
+instrument-invalid and force derived strict success to null. A grader error or
+not-run grader also forces null. `tool_status=had_errors` remains orthogonal
+because a later recovery may still produce a correct final state. Only a fully
+committed, currently validated, instrument-valid, graded record can have
+non-null strict success.
+
+### Projection
+
+`results.json` is the canonical JSON `brick.evidence-results/1` object with
+exactly `schema_version`, `run_id`, `run_sha256`, and `records`. Each record has
+exactly `logical_hash`, `physical_uuid`, `attempt_key`, `record_status`,
+`execution_status`, `grader_status`, `tool_status`, `publish_status`,
+`failure_origin`, `strict_success`, `result`, and `grade`.
+
+The projection contains only currently valid committed candidates, so its record
+and publication statuses are always `committed`. Rows sort by logical hash and
+then physical UUID. It contains no rebuild timestamp or other nondeterministic
+field. A rebuild validates the complete candidate set first and halts without
+publishing a partial projection on a corrupt committed candidate, duplicate
+valid candidate, or logical collision. Missing, malformed, or stale projections
+are replaced atomically from source evidence while the run lock is held.
+`RunSession.inspect(key)` reports the aggregate `not_started`, `abandoned`,
+`prepared`, `committed`, or `publish_blocked` recovery classification without
+adopting a prepared candidate. Abandoned physical directories remain unchanged
+on disk for forensic inspection. Invalid committed evidence raises and halts
+instead of being returned as an ordinary record. None of these uncommitted or
+invalid candidates enters `results.json`; the projection is never consulted to
+decide resume.
+
+### Native Windows ARM64 attestation
+
+S4 cannot be released from hosted CI alone. From a clean, pushed candidate commit
+on the native Windows ARM64 Lenovo, use a new short NTFS directory outside
+OneDrive, leave Defender real-time protection and Windows Search enabled, and
+run `bench/s4_attest.py run`. This is the only release-producing path: after a
+passing preflight, the tool creates a previously absent
+`s4-<candidate-prefix>-<unique-token>` report directory, owns the exact
+complete-suite pytest invocation, removes `PYTEST_ADDOPTS`,
+`PYTEST_PLUGINS`, and `PYTHONPATH`, disables third-party pytest-plugin autoload,
+sets `BRICK_S4_NATIVE_REQUIRED=1`, and places both `pytest-tmp` and the JUnit
+report under that short directory. It requires a clean candidate contained by a
+remote-tracking ref before and after pytest, and exact-matches the JUnit
+inventory to a second clean-environment collection from that candidate. Native
+host, interpreter, volume, Defender, Search, and Developer Mode facts are
+sampled before and after pytest and must remain identical and passing.
+Symlink, junction/reparse, real Office held-handle, cross-process lock,
+hard-process-exit recovery, duplicate/collision, corruption, stale-artifact, and
+projection-rebuild cases must execute without a platform skip. Windows
+Developer Mode must be enabled so the symlink fixtures execute.
+
+Retain the raw JUnit report outside Git and commit
+`evidence/s4/v0.5.0.json` as a strict `brick.s4-attestation/1` object with
+exactly `schema_version`, `candidate_commit`, `command`, `report`, `host`,
+`python`, `volume`, `services`, `tests`, `overall_status`, and
+`verification_timestamp_utc`. Its nested objects have exactly:
+
+- `report`: `name`, nonnegative integer `size`, and lowercase 64-hex `sha256`;
+- `host`: `manufacturer`, `model`, `processor`, `os_build`, and
+  `os_architecture`;
+- `python`: `version`, `architecture`, and `executable_sha256`;
+- `volume`: `root`, `filesystem`, `volume_id`, and boolean
+  `outside_onedrive`;
+- `services`: boolean `defender_realtime_enabled`,
+  `windows_search_running`, and `developer_mode_enabled`; and
+- `tests`: sorted `inventory`, nonnegative integer `passed`, `failed`, `skipped`,
+  and `s4_skipped`.
+
+`command` is the exact frozen ten-argument list emitted and executed by the
+attestor, `candidate_commit` is lowercase 40-hex, and `overall_status=pass`
+requires zero failed tests and `s4_skipped=0`. The attestor exclusively writes
+only `evidence/s4/v0.5.0.json`; that write is the first intended worktree change
+after the candidate run. Attach the hash-matched JUnit report to the `v0.5.0`
+GitHub release. The annotated tag binds the tracked attestation to the release
+commit. `bench/s4_attest.py verify` re-hashes the report and exact-matches its
+inventory against the checked-out candidate. For S4, all version and protocol
+metadata, staged changelog content, and candidate-scoped status prose must
+already be present at candidate `C`; release commit `R` must be a pushed, clean
+direct child whose complete `C..R` name-status diff is exactly the addition of
+the regular file `evidence/s4/v0.5.0.json`. The verifier enforces that release
+binding. It also requires annotated tag `v0.5.0` to point to `R` and to contain
+exact `candidate_commit=`, `attestation_blob=`, and
+`junit_sha256=` binding lines. Any other change after the tested candidate
+requires a new native S4 run; an S4 platform skip leaves the gate pending.
+
+Immediately after the annotated tag and GitHub release are verified, create
+docs-only descendant `D` from `R`. `D` promotes the staged changelog entry to
+`[0.5.0]` with the actual release date and updates current-status prose to
+record the tag-authoritative result. Its complete `R..D` diff may modify only
+already-tracked `*.md` files and must be reviewed as status-only prose. Do not
+move the tag to `D`: `v0.5.0` remains bound to attestation-only `R`. Any code,
+test, workflow, dependency, protocol, task, prompt, or evidence change belongs
+to a later candidate rather than `D`.
 
 ## S1R and B0 — repaired runtime and replaceable layer
 

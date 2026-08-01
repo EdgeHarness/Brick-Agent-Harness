@@ -4,7 +4,10 @@ Agent Lab is a loopback browser interface for observing Brick's synthetic
 development agents. It is not a production service, security boundary,
 multi-user application, Brix deployment, or retained benchmark scheduler.
 
-The latest release is `v0.4.0`. The Lenovo F0 feasibility gate passed.
+This text records the pre-attestation `v0.5.0` candidate state; its preceding
+published release is `v0.4.0`, whose Lenovo F0 feasibility gate passed.
+Annotated tags and bound evidence are release-authoritative; see the
+`C`/`R`/`D` lifecycle in [`../PROJECT_SETUP.md`](../PROJECT_SETUP.md).
 
 The server binds to `127.0.0.1` and normally selects a port from 8765 through
 8784. Loopback reduces network exposure but does not authenticate a user or
@@ -47,9 +50,9 @@ repository is therefore not inherently offline or air-gapped.
 
 ## Q0 capability quarantine
 
-Unreleased Q0 removes real-root, general filesystem, PowerShell and
+Q0, released in `v0.4.0`, removes real-root, general filesystem, PowerShell and
 skip-confirmation choices from Agent Lab. `/api/run`, its request schema, runner
-arguments and static UI must reject or omit every equivalent of:
+arguments and static UI reject or omit every equivalent of:
 
 - `--root`;
 - `--shell`;
@@ -63,11 +66,11 @@ artifacts inside the agent workspace. That is not general host access.
 
 ## Remaining control-plane defects
 
-Q0 does not harden the rest of Agent Lab. Both released `v0.3.1` and the
-unreleased Q0 tree lack production authentication or authorization, session
-ownership, a CSRF token, trusted Origin/Host policy, and comprehensive request
-limits. Q0 additionally has no browser/stdin action-confirmation channel: that
-old unbound mechanism and its skip-confirmation mode were removed together.
+Q0 does not harden the rest of Agent Lab. The released Q0 implementation lacks
+production authentication or authorization, session ownership, a CSRF token,
+trusted Origin/Host policy, and comprehensive request limits. Q0 additionally
+has no browser/stdin action-confirmation channel: that old unbound mechanism and
+its skip-confirmation mode were removed together.
 
 Sensitive state-changing or data-exposing operations include:
 

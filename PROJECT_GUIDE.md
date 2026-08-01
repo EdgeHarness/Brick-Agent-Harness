@@ -6,10 +6,11 @@ The canonical execution plan is [`PROJECT_SETUP.md`](PROJECT_SETUP.md). This
 guide defines the durable evidence, architecture, and claim rules. Released
 history is recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
-## 1. Current status
+## 1. Candidate status and release authority
 
-The latest release is `v0.4.0`. Brick is an experimental local agent-harness
-research scaffold with:
+This section records the pre-attestation `v0.5.0` candidate state. At that
+point the preceding published release is `v0.4.0`. Brick is an experimental
+local agent-harness research scaffold with:
 
 - explicit runtime, registry, policy, hook, and domain-pack contracts;
 - `office_demo@0.1.0`, a synthetic office fixture;
@@ -17,11 +18,20 @@ research scaffold with:
 - legacy prompt-JSON raw and harness loops;
 - simulated email, calendar, messaging, and reminder effects;
 - local PowerPoint and spreadsheet generation;
+- a production marker-last evidence-store candidate and S4 attestor; and
 - an exploratory benchmark, local Ollama client, Agent Lab development console,
   and blocked experimental training code.
 
 F0/Q0 is released as `v0.4.0`. The native Lenovo F0 evidence exists and the gate
-passed, which records host and model feasibility only. S4 through S9 are unstarted.
+passed, which records host and model feasibility only. S4 is implemented but
+its native gate is open; S1R through S9 are unstarted.
+
+Annotated tags and their bound evidence are authoritative. The tagged S4 release
+commit `R` adds only `evidence/s4/v0.5.0.json` to tested candidate `C`, so it
+intentionally retains this explicitly candidate-scoped prose. Immediately after
+the tag, docs-only descendant `D` promotes the changelog and current-status
+wording; `D` is not part of `v0.5.0`. See the exact lifecycle in
+[`PROJECT_SETUP.md`](PROJECT_SETUP.md#native-windows-arm64-attestation).
 
 Brick currently has no valid retained result, demonstrated harness improvement,
 production Brix workflow, real Brix integration, production identity/access
@@ -249,9 +259,38 @@ Every logical attempt has one full key and one or more auditable physical
 candidates. A candidate executes directly in a never-reused
 `attempts/<logical-hash>/<physical-uuid>/` directory.
 
+The production store is `harness/evidence.py`. Its strict
+`brick.attempt-key/1` identity includes the domain name/version/content digest,
+task family/version, generator and grader versions, model tag/digest, condition
+name/version/mechanism digest, instance ID/content digest, ordered subepisode
+IDs, repeat, sampling map, opportunity-budget map, prompt digest, and tool-schema
+digest. Atomic attempts use an empty ordered-subepisode list. S4 requires a
+nonempty sampling object without JSON floats and a nonempty opportunity-budget
+object of nonnegative integer counts. It preserves both maps without inferred
+defaults. The later versioned benchmark protocol freezes their exact keys,
+ranges, and decimal-string grammar before retained use.
+
+Attempt-key bytes are compact, key-sorted UTF-8 JSON with every string normalized
+to NFC and no trailing newline. Unknown or missing keys, duplicate object keys,
+wrong types, noncanonical digests, duplicate subepisode IDs, and normalization
+collisions fail closed. The logical hash is SHA-256 of those exact bytes.
+
+Each run has one immutable `brick.evidence-run/1` `run.json`. Its hash is bound
+into each strict `brick.evidence-attempt/1` envelope, so moving a candidate
+between runs cannot preserve validity. State, result, grade, and action files
+also use strict versioned S4 envelopes. Domain state, metrics, diagnostics, and
+action payloads remain opaque to S4 and are hashed exactly; later stages own
+their semantics.
+
 After every evidence file is closed and hashed, the writer creates and validates
 `PREPARED.json`, then publishes by exclusively creating the empty regular file
 `COMMITTED`. No attempt directory is renamed or replaced.
+
+`run.lock` is a persistent regular file and is never deleted or replaced. Every
+writer holds one exclusive OS lock—from recovery scanning before any model
+access through physical execution, publication, and projection rebuilding—using
+POSIX `flock` or Windows `LockFileEx`. Process termination releases the lock
+without changing the lock-file identity.
 
 A reader accepts only a marker-present bundle whose prepared manifest and hashes
 validate. Valid prepared evidence without the marker is adopted without another
@@ -267,11 +306,36 @@ Execution, grader, tool, publication, and strict-task statuses remain orthogonal
 Only a fully committed, validated, graded attempt may have a non-null strict
 outcome.
 
+Record status, publication status, and strict success are derived reader
+properties, never post-preparation mutations. `grade.json` stores a candidate
+grader decision rather than `strict_success`. Runner, environment, operator,
+store, and grader failures remain instrument-invalid with a null strict outcome;
+a model-origin failure remains an instrument-valid model result and, when
+graded, has a false candidate decision. Tool errors alone do not determine
+validity.
+
+`results.json` is a deterministic committed-only
+`brick.evidence-results/1` projection, sorted by logical hash and physical UUID
+and containing no rebuild timestamp. A non-adopting inspection reports the
+aggregate state of prepared or abandoned evidence; invalid committed evidence
+halts, and all uncommitted physical candidates remain on disk. Missing, corrupt,
+and stale projections rebuild under the run lock and are never used as resume
+authority.
+
+This is a cooperative-local-writer integrity model. Brick never mutates
+committed candidates and readers revalidate them, but S4 supplies no digital
+signature and does not defend against an administrator, hostile local process,
+or hard-link adversary able to rewrite an entire internally consistent bundle.
+
+S4 acceptance also requires the native Lenovo ARM64
+`brick.s4-attestation/1` record and its hash-matched JUnit release asset. Hosted
+Windows x64 coverage cannot substitute for that platform gate.
+
 F0 uses a separate disposable implementation and external evidence bundle, not
 this production S4 store. The exact Lenovo commands and candidate-commit
 `C`/metadata-only release-descendant `R` attestation are defined in
 [`PROJECT_SETUP.md`](PROJECT_SETUP.md). Any behavioral byte changed after `C`
-invalidates that attestation and requires another complete F0 run.
+invalidates that attestation and requires another complete S4 run.
 
 ## 8. Runtime and safety principles
 

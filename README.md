@@ -17,9 +17,17 @@ benchmark results, training corpora, adapters, or model weights are shipped.
 surfaces; it is not evidence of generalization or performance. The proposition
 that orchestration improves model tool use remains an untested hypothesis.
 
-The latest release is `v0.4.0`. The required native-Windows Lenovo F0 evidence
-exists and the gate passed, establishing host and model feasibility only. The Mac
-is a source-development and offline-test host only.
+This text records the pre-attestation `v0.5.0` candidate state; its preceding
+published release is `v0.4.0`. The required native-Windows Lenovo F0 evidence
+exists and the gate passed, establishing host and model feasibility only.
+Commit `f12dd71` contains the subsequent independent verifier correction and is
+pushed with required CI green. Candidate `C` implements S4 but does not claim
+native acceptance. The Mac is a source-development and offline-test host only.
+
+Annotated tags and bound evidence are release-authoritative. The tagged S4
+release commit `R` adds only `evidence/s4/v0.5.0.json` and intentionally retains
+this candidate-scoped prose. An immediate docs-only descendant `D` promotes
+changelog and current status after the tag; `D` is not part of `v0.5.0`.
 
 ## Read first
 
@@ -100,16 +108,20 @@ python -m pytest
 ```
 
 The test suite is designed to run without Ollama. Passing it characterizes the
-implemented cases; it does not complete the pending Lenovo F0 gate or validate a
-retained result.
+implemented cases; it does not complete the S4 native gate or validate a
+retained result. Three required S4 symlink cases currently remain skipped on
+this Lenovo solely because Windows Developer Mode is disabled; the native gate
+permits no such skip.
 
-The Lenovo gate is a separate, live-model operation. First-time host setup is in
+The released F0 gate was a separate live-model operation. Its passing bundle is
+retained and bound to `v0.4.0` through the candidate/release attestation defined
+in [`PROJECT_SETUP.md`](PROJECT_SETUP.md). First-time host setup remains in
 [`bench/README.md`](bench/README.md#preparing-the-lenovo-host), and the exact
-clean-commit run and verification commands follow it in
-[`bench/README.md`](bench/README.md#running-the-lenovo-f0-gate). A passing bundle
-must be retained externally and bound to the eventual `v0.4.0` tag through the
-candidate/release attestation in [`PROJECT_SETUP.md`](PROJECT_SETUP.md); running
-the offline suite on this Mac is not a substitute.
+F0 commands remain in
+[`bench/README.md`](bench/README.md#running-the-lenovo-f0-gate). The current S4
+native commands are in
+[`bench/README.md`](bench/README.md#native-windows-arm64-s4-gate); running the
+offline suite on a Mac is not a substitute.
 
 ## Running the legacy benchmark for development
 
@@ -163,7 +175,7 @@ the repository as a whole should not be described as offline.
 
 ## Safety
 
-Unreleased Q0 removes the legacy `--root`, `--shell`, `--yolo`,
+Q0, released in `v0.4.0`, removes the legacy `--root`, `--shell`, `--yolo`,
 `--with-domain`, and `--with-office` capabilities from supported CLI, web and
 configuration surfaces. Legacy spellings are rejected before output creation,
 model access, network access or mutation. Brick retains domain-scoped synthetic
@@ -184,10 +196,17 @@ directory.
 ## Current boundary and next milestone
 
 F0/Q0 passed on the native Lenovo host and is released as `v0.4.0`; this records
-feasibility, not a benchmark effect. The current unreleased correction
-strengthens independent verification of that evidence without changing the
-retained bundle. S4 is the next release stage, followed by S1R and then the
-entirely synthetic Brix vertical slice.
+feasibility, not a benchmark effect. The verifier correction in `f12dd71` is
+pushed and CI-green without changing the retained bundle. At candidate `C`,
+S4's production marker-last store and attestor are implemented, while clean
+candidate CI, a native Windows ARM64 run with zero required S4 skips, and the
+candidate-bound attestation remain required rather than claimed.
+
+Release descendant `R` may add only that regular attestation file. The annotated
+tag and bound evidence—not this candidate-scoped paragraph—authoritatively establish
+whether S4 passed and `v0.5.0` was released. Immediately after the tag,
+docs-only `D` promotes current status without moving the tag. Stop for review
+before S1R, which has not started.
 
 No retained matrix begins before the marker-last store, repaired runtime, strict
 graders, independent generators, shared native transport, score-masked

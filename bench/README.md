@@ -4,9 +4,18 @@ This directory contains the released **exploratory synthetic benchmark** and is
 being rebuilt into the instrument specified in
 [`../PROJECT_SETUP.md`](../PROJECT_SETUP.md).
 
-The latest release is `v0.4.0`. The Lenovo F0 gate passed, establishing that this
-host can run the designed experiment. No committed result establishes that the
-harness improves a model, and the benchmark instrument itself is unbuilt.
+This text records the pre-attestation `v0.5.0` candidate state; its preceding
+published release is `v0.4.0`. The Lenovo F0 gate passed, establishing that this
+host can run the designed experiment. S4's production evidence store and
+attestor are implemented as a candidate, but the native S4 gate is open and the
+rest of the benchmark instrument remains unbuilt. No committed result
+establishes that the harness improves a model.
+
+Annotated tags and bound evidence are release-authoritative. The tagged S4
+release commit `R` is attestation-only and therefore intentionally retains this
+candidate-scoped wording. An immediate docs-only descendant `D` promotes status
+after the tag and is not part of `v0.5.0`; see the canonical lifecycle in
+[`../PROJECT_SETUP.md`](../PROJECT_SETUP.md#native-windows-arm64-attestation).
 
 ## Confirmatory question
 
@@ -118,7 +127,8 @@ models and conditions are excluded from the retained matrix.
 
 ## Target evidence store
 
-S4 replaces the released layout with:
+S4 implements the production store in `harness/evidence.py` and replaces the
+released layout with:
 
 ```text
 runs/<run-id>/
@@ -139,16 +149,104 @@ runs/<run-id>/
   results.json
 ```
 
+`run.json` is an immutable `brick.evidence-run/1` document and its SHA-256 is
+bound into every attempt. `run.lock` is a persistent regular file that is never
+deleted. A writer acquires an exclusive POSIX `flock` or Windows `LockFileEx`
+lock before recovery scanning or model access and holds it through execution,
+publication, and projection rebuilding.
+
+The logical directory is the SHA-256 of the exact `brick.attempt-key/1` bytes.
+That strict key binds domain name/version/content, task family/version,
+generator/grader versions, model tag/digest, condition name/version/mechanism,
+instance ID/content, ordered subepisodes, repeat, sampling, opportunity budget,
+prompt, and tool schema. Serialization is compact sorted UTF-8 JSON with NFC
+strings and no trailing newline. Atomic attempts use an empty subepisode list;
+subepisode IDs are unique and ordered. Sampling and opportunity maps contain no
+JSON floats. S4 requires a nonempty sampling object and a nonempty
+opportunity-budget object of nonnegative integer counts; the later frozen
+benchmark protocol owns their exact keys, ranges, and decimal-string grammar.
+
 A physical UUID directory is created directly at its final location and never
-reused. The writer closes and hashes every required file, validates
+reused. The writer uses strict versioned attempt, state, result, grade, and
+action envelopes, closes and hashes every required file, validates
 `PREPARED.json`, then publishes through exclusive creation of the empty
-`COMMITTED` marker. No attempt directory is renamed or replaced.
+`COMMITTED` marker. `grade.json` records a candidate decision rather than final
+strict success. No attempt directory is renamed, replaced, or mutated after
+commit.
 
 Readers accept only marker-present bundles whose manifest and hashes validate.
 A valid prepared bundle without the marker is adopted without another model
-call. Incomplete bundles are preserved as abandoned. Duplicate candidates,
-logical collisions and invalid committed evidence halt the run. `results.json`
-is a rebuildable projection.
+call. Incomplete bundles are preserved as abandoned. Duplicate valid
+candidates, logical collisions and invalid committed evidence halt the run.
+`results.json` is a deterministic committed-only projection, not resume
+authority. Record and publication status and strict success are derived during
+validation. A non-adopting inspection reports aggregate prepared or abandoned
+state, invalid committed evidence halts, and uncommitted candidates remain on
+disk for forensic inspection.
+
+The complete schema, retry schedule, status derivation, projection shape, and
+cooperative-local-writer threat model are normative in
+[`../PROJECT_SETUP.md`](../PROJECT_SETUP.md#s4--marker-last-evidence-store).
+
+### Native Windows ARM64 S4 gate
+
+Hosted Windows x64 CI is required portability coverage but does not replace the
+native Lenovo S4 gate. Run from a clean, pushed candidate commit with native
+ARM64 Python, Developer Mode enabled, Defender and Windows Search left active,
+and a new short NTFS output directory outside OneDrive:
+
+```powershell
+git switch --detach <C>
+git status --short
+python -m pip install -r requirements-test.txt
+$candidate = git rev-parse HEAD
+$s4Root = "C:\BrickRuns\s4"
+New-Item -ItemType Directory -Path $s4Root -Force | Out-Null
+$runToken = [guid]::NewGuid().ToString("N").Substring(0, 8)
+$reportDir = Join-Path $s4Root `
+  "s4-$($candidate.Substring(0, 12))-$runToken"
+if (Test-Path -LiteralPath $reportDir) { throw "S4 report path exists" }
+python bench/s4_attest.py run `
+  --project-root C:\Brick `
+  --report-dir $reportDir `
+  --output C:\Brick\evidence\s4\v0.5.0.json
+```
+
+The first `git status --short` must print nothing. The attestor independently
+requires the pushed worktree to remain clean before and after its exact pytest
+command, sanitizes pytest selection/plugin environment variables, sets
+`BRICK_S4_NATIVE_REQUIRED=1`, recomputes the candidate's complete collected
+inventory, samples all native host/service facts before and after the suite, and
+only then exclusively creates the attestation as the intended first worktree
+change. It refuses an existing report directory or attestation.
+The suite must execute—not skip—the S4
+symlink, junction/reparse, real Office held-handle, cross-process lock,
+hard-process-exit recovery, corruption, duplicate/collision, stale-artifact, and
+projection-rebuild cases. Preserve the JUnit file unchanged and record its
+name, size, SHA-256, command, candidate commit, host/runtime/volume identity,
+Defender/Search state, exact pass/fail/skip counts, and verification timestamp in
+the strict `brick.s4-attestation/1` `evidence/s4/v0.5.0.json` described in the
+canonical plan. Attach the hash-matched JUnit file to the `v0.5.0` release. Any
+S4 platform skip or behavioral change after `<C>` leaves the gate pending.
+
+After committing only that regular attestation file as direct release descendant
+`R`, pushing `R`, and creating the annotated `v0.5.0` tag with the required
+`candidate_commit=`, `attestation_blob=`, and `junit_sha256=` lines, verify the
+tracked record and unchanged release asset with:
+
+```powershell
+python bench/s4_attest.py verify `
+  --project-root C:\Brick `
+  --attestation C:\Brick\evidence\s4\v0.5.0.json `
+  --junit (Join-Path $reportDir "pytest.xml") `
+  --native-required
+```
+
+After the tag and release asset are verified, create and push docs-only
+descendant `D` from `R`. Promote the staged changelog entry with the actual
+release date and update candidate-scoped status prose. Review `R..D` and require
+that it modifies only already-tracked Markdown. Do not move `v0.5.0` from `R`;
+`D` is post-release documentation, not part of the attested release.
 
 ## Target tasks and graders
 

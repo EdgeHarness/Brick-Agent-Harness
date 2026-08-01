@@ -39,9 +39,9 @@ shim over the shared development runner.
 effects are simulated. PowerPoint and Excel tools create real files inside this
 agent's synthetic workspace.
 
-Unreleased Q0 rejects legacy `--root`, `--shell`, `--yolo`, `--with-domain` and
-`--with-office` forms before side effects. There is no supported general
-filesystem or PowerShell capability. Use synthetic data only.
+Q0, released in `v0.4.0`, rejects legacy `--root`, `--shell`, `--yolo`,
+`--with-domain` and `--with-office` forms before side effects. There is no
+supported general filesystem or PowerShell capability. Use synthetic data only.
 
 The released verifier is fail-open, logs are incomplete, and model-authored
 memory is untrusted. `--small` changes development router roles but is prohibited

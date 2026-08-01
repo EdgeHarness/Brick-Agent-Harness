@@ -13,13 +13,22 @@ Brick currently provides:
 - `office_demo@0.1.0`, a synthetic office pack with 12 hand-authored tasks;
 - `counter_demo@0.1.0`, a one-task structural portability fixture;
 - raw and scaffolded loops over attempt-selected domain tools;
-- domain-aware CLI, benchmark, report and Agent Lab surfaces; and
+- domain-aware CLI, benchmark, report and Agent Lab surfaces;
+- a candidate production marker-last evidence store and S4 attestor; and
 - experimental LoRA generators and training scripts, but no shipped corpus,
   adapter or model.
 
-The latest release is `v0.4.0`. The required native Lenovo F0 evidence exists and
-the gate passed. That establishes host and model feasibility only; every stage
-from S4 onward is unstarted and no measured effect exists.
+This status records pre-attestation candidate `C`; its preceding published
+release is `v0.4.0`. The required native Lenovo F0 evidence exists and the gate
+passed; its verifier correction is pushed as CI-green commit `f12dd71`. That
+establishes host and model feasibility only. `C` implements the `v0.5.0` S4
+store and attestor without claiming native acceptance, and no measured effect
+exists. S1R and every later stage remain unstarted.
+
+The annotated tag and bound evidence are release-authoritative. Attestation-only
+descendant `R` intentionally retains this candidate-scoped wording; immediate
+docs-only descendant `D` promotes status after the tag and is not part of
+`v0.5.0`.
 
 Brick is not a production assistant, a secure filesystem/shell sandbox, a
 transactional room-booking service, an access-controlled retrieval system, or
@@ -37,6 +46,7 @@ workspace.
 harness/
   runtime.py          RunConfig, RunHooks, ActionPolicy and AttemptContext
   domain.py           DomainPack/TaskSpec/PromptProfile contracts and loader
+  evidence.py         candidate S4 marker-last evidence store
   storage.py          legacy and namespaced runtime-path selection
   builtin_tools.py    think/done tools shared by domain packs
   tools.py            ToolRegistry validation, execution and descriptions
@@ -51,6 +61,7 @@ domains/
 bench/
   run_bench.py        domain × model × condition × task runner
   report.py           domain/version-aware descriptive aggregation
+  s4_attest.py        candidate S4 native-run attestor and verifier
   tasks.py|grade.py   office_demo compatibility re-exports
 
 agents/
@@ -77,6 +88,22 @@ tests/                offline characterization and architecture tests
 
 Only the benchmark exposes both `raw` and `harness`; CLI and Agent Lab run the
 harness condition.
+
+`harness.evidence` is the production S4 storage primitive in the current
+candidate. It creates hash-bound run manifests, canonical attempt identities,
+never-reused physical UUID directories, persistent OS run locks, strict
+versioned evidence envelopes, validated prepared manifests, exclusive empty
+`COMMITTED` markers, fail-closed recovery, and deterministic committed-only
+projections. Status and strict outcome are reader-derived rather than trusted
+writer claims. `bench.s4_attest` binds the clean candidate and native test
+record to the required environment and source identities.
+
+This store is not yet wired into the legacy exploratory benchmark runner; that
+integration belongs to S6C after S1R, B0, S5, S5W, and S6G. At the
+pre-attestation candidate state recorded here, S4 acceptance still requires
+Developer Mode so all required symlink tests execute, clean candidate CI, and a
+candidate-bound native Windows ARM64 attestation. The tag and evidence, rather
+than this frozen candidate statement, record the eventual result.
 
 The office CLI preserves the historic `workspace/`, `memory/` and `logs/`
 layout for prompt and path compatibility. Other packs use
@@ -105,7 +132,7 @@ audit-completeness guarantee.
 requires exactly one explicit classification for every registered tool, so a
 pack cannot silently omit a mutating tool. `AttemptContext` also requires a
 classification for every tool active in that attempt while allowing unused
-pack classifications. In the unreleased Q0 working tree, a missing confirmation
+pack classifications. Since Q0, released in `v0.4.0`, a missing confirmation
 callback denies instead of manufacturing consent. The policy is still not
 identity, authorization, an OS sandbox, rollback, or a security boundary.
 
@@ -219,8 +246,8 @@ poisoned text. Memory is not an authoritative knowledge base.
 
 ## Filesystem and shell quarantine
 
-Unreleased Q0 removes the general filesystem/PowerShell overlay from supported
-runtime composition. CLI, web and configuration surfaces reject legacy
+Q0, released in `v0.4.0`, removes the general filesystem/PowerShell overlay from
+supported runtime composition. CLI, web and configuration surfaces reject legacy
 `--root`, `--shell`, `--yolo`, `--with-domain`, and `--with-office` forms before
 output creation, model access, network access or mutation.
 
@@ -322,10 +349,14 @@ real Brix data.
 
 The released S0–S3-era implementation is present and covered by the offline
 suite. The old package taxonomy is historical. F0/Q0 passed on the native Lenovo
-host and is released as `v0.4.0`; it establishes feasibility only. The canonical
-sequence now proceeds through S4, S1R, synthetic B0, graders, generators, shared
-native conditions, protocol freeze, sentinel and retained execution as specified
-in [`PROJECT_SETUP.md`](PROJECT_SETUP.md).
+host and is released as `v0.4.0`; it establishes feasibility only. Candidate
+`C` contains the S4 implementation described above and leaves its native gate
+open. Attestation-only `R` and its annotated tag authoritatively record the
+result while retaining `C`'s wording; docs-only `D` then promotes status without
+moving the tag. The canonical sequence stops for review after S4, then proceeds
+through S1R, synthetic B0, graders, generators, shared native conditions,
+protocol freeze, sentinel and retained execution as specified in
+[`PROJECT_SETUP.md`](PROJECT_SETUP.md).
 
 ## Safe extension principles
 

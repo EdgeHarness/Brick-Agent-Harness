@@ -6,13 +6,16 @@ Brick is an experimental research scaffold. It is not approved for production,
 private Brix data, authoritative business systems, or unattended external side
 effects.
 
-The latest release is `v0.4.0`. The native-Windows Lenovo F0 gate passed. No
-release is approved for real Brix data. Pre-1.0 interfaces and controls may change without
-backward compatibility.
+This text records the pre-attestation `v0.5.0` candidate state; its preceding
+published release is `v0.4.0`, whose native-Windows Lenovo F0 gate passed.
+Annotated tags and bound evidence are release-authoritative; the tagged S4
+release commit intentionally retains candidate prose until immediate docs-only
+descendant `D` promotes status. No release is approved for real Brix data.
+Pre-1.0 interfaces and controls may change without backward compatibility.
 
-Unreleased Q0 removes the legacy general-filesystem, PowerShell, broad-root, and
-skip-confirmation capability paths from supported CLI, web, and configuration
-surfaces. Legacy `--root`, `--shell`, `--yolo`, `--with-domain`, and
+Q0, released in `v0.4.0`, removes the legacy general-filesystem, PowerShell,
+broad-root, and skip-confirmation capability paths from supported CLI, web, and
+configuration surfaces. Legacy `--root`, `--shell`, `--yolo`, `--with-domain`, and
 `--with-office` forms are rejected before output creation, model access, network
 access, or mutation.
 

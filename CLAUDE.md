@@ -40,14 +40,15 @@ per-session protocol. Read it before starting work.
 
 ## Current position
 
-Latest release is `v0.4.0`. **The native-Lenovo F0 gate passed** from candidate
-`6402bf5`, run `f0-20260801T164210Z-07054bec`, with all three models eligible —
-4B at 22.26 tok/s against a 5 tok/s floor, 2B at 45.02, 9B at 12.37 against a
-3 tok/s floor — and inference attested to a native ARM64 `llama-server.exe`.
+This section records the pre-attestation `v0.5.0` candidate state. Its preceding
+published release is `v0.4.0`. **The native-Lenovo F0 gate passed** from
+candidate `6402bf5`, run `f0-20260801T164210Z-07054bec`, with all three models
+eligible — 4B at 22.26 tok/s against a 5 tok/s floor, 2B at 45.02, 9B at 12.37
+against a 3 tok/s floor — and inference attested to a native ARM64
+`llama-server.exe`.
 
 **That is feasibility only.** It establishes that this host can run the designed
-experiment. It is not a benchmark result, no measured effect exists, and **S4
-onward is unstarted: nine of eleven stages remain.**
+experiment. It is not a benchmark result and no measured effect exists.
 
 An earlier attempt failed under protocol v1, which required Ollama to reject an
 unknown option name — something Ollama never promised. That bundle
@@ -56,10 +57,24 @@ gate was corrected and versioned rather than repaired. Two further reruns came
 from defects in the release procedure itself, not the gate. See
 [`EXECUTION.md`](EXECUTION.md) §2.
 
-The current unreleased corrective audit strengthens verification without
-altering the retained evidence: option recognition and runner stability are
-recomputed from raw files, and both the original and extracted `v0.4.0` bundles
-still pass. Review `CHANGELOG.md` before beginning S4.
+The independent F0 verifier correction is commit `f12dd71`, pushed to `main`
+with required CI green. It strengthens option-recognition and runner-stability
+verification without altering the retained evidence; both the original and
+extracted `v0.4.0` bundles still pass.
+
+Candidate `C` implements the production marker-last evidence store and its
+attestor. At this pre-attestation state, runnable local Windows tests are green
+but three required S4 symlink cases remain blocked solely because Windows
+Developer Mode is disabled. Candidate freeze and CI, a zero-S4-skip native
+Windows ARM64 run, and candidate-bound attestation remain release requirements,
+not claimed results. S1R has not started.
+
+For S4, release state is authoritative in the annotated tag and bound evidence.
+Direct descendant `R` adds only the regular file
+`evidence/s4/v0.5.0.json`, so tagged `R`
+intentionally retains `C`'s candidate-scoped wording. Immediately afterward,
+docs-only descendant `D` promotes changelog/current status and is not part of
+`v0.5.0`. Never infer gate status from this frozen prose alone.
 
 Offline suite, from the repository root:
 
@@ -68,9 +83,10 @@ python -m pip install -r requirements-test.txt
 python -m pytest -q
 ```
 
-Expect 242 passed, 2 skipped on native Windows ARM64. Skips are
-platform-conditional, so Linux totals differ by a few tests. The
-suite requires no Ollama and no network; a test fails rather than reaching out.
+The suite requires no Ollama and no network; a test fails rather than reaching
+out. Do not record a final count until it is run from the clean pushed S4
+candidate. On the native Windows gate, the three required S4 symlink cases may
+not be skipped.
 
 ## The F0 feasibility gate
 

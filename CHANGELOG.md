@@ -14,6 +14,32 @@ that the research instrument is valid or that any measured effect exists.
 
 ## [Unreleased]
 
+This entry is staged in pre-attestation candidate `C` for `v0.5.0`; at that
+candidate point the preceding published release is `v0.4.0` and the S4 gate is
+open. S4 release identity is authoritative in the annotated tag and
+`evidence/s4/v0.5.0.json`. The tag points to attestation-only descendant `R`,
+which intentionally retains this candidate-scoped `[Unreleased]` entry.
+Immediately after the tag, docs-only descendant `D` promotes it to `[0.5.0]`
+with the actual release date; `D` is not part of the tagged release.
+
+### Added
+
+- `harness/evidence.py`, the production S4 marker-last evidence store:
+  canonical logical attempt identity, hash-bound immutable run metadata,
+  never-reused UUID candidates, persistent `flock`/`LockFileEx` run locking,
+  strict versioned evidence envelopes, validated `PREPARED.json`, exclusive
+  empty `COMMITTED` publication, fail-closed recovery, derived outcomes, and
+  deterministic committed-only `results.json` rebuilding.
+- `bench/s4_attest.py`, the strict native S4 runner attestor and verifier,
+  binding the clean pushed candidate, source and executable identities, native
+  Windows environment, JUnit record, required test inventory, and zero
+  platform-applicable S4 skips.
+- Offline S4 tests for canonical identity and envelopes, crash recovery at
+  every publication boundary, corruption and stale-artifact rejection,
+  duplicate and logical-collision handling, cross-process locking, Windows
+  sharing/access retry, real Office artifacts, projection recovery, and
+  attestation tampering.
+
 ### Fixed
 
 - A strict post-release audit found that `option-recognition-v2` recorded
@@ -40,8 +66,28 @@ that the research instrument is valid or that any measured effect exists.
   convergence requires a pinned product commit, versioned adapter, schema
   digests, and conformance evidence while B0 remains fictional and no-network.
 
-The next stage remains S4, the marker-last evidence store, and begins only after
-this corrective audit is reviewed.
+### Changed
+
+- Froze and documented the production S4 evidence contract:
+  `harness/evidence.py`, strict canonical `brick.attempt-key/1` identity,
+  hash-bound immutable run metadata, strict versioned evidence envelopes,
+  persistent cross-platform OS run locking, reader-derived status and strict
+  outcome, deterministic committed-only projection rebuilding, the
+  cooperative-local-writer threat boundary, and the required native Windows
+  ARM64 `v0.5.0` attestation.
+- Removed the obsolete schedule escape that allowed concurrent-writer locking to
+  be replaced by an operator assertion. Locking and the cross-process test are
+  mandatory evidence-integrity requirements of S4.
+
+At the candidate state recorded by this entry, commit `f12dd71`, the independent
+F0 verifier correction, is pushed to `main` and required CI is green. Runnable
+S4 cases pass locally on Windows, while three required symlink cases are blocked
+solely because Windows Developer Mode is disabled. Candidate freeze and CI, the
+zero-S4-skip native Windows ARM64 run, and the candidate-bound attestation remain
+release requirements rather than claimed results. The regular attestation file
+must be the only change in release descendant `R`; the tag and bound evidence
+authoritatively record whether they passed. S1R has not started and no benchmark
+result exists.
 
 ## [0.4.0] — 2026-08-01
 
