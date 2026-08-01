@@ -292,6 +292,17 @@ commit `C`, under this exact rule:
    changed byte—including code, tests, workflow, dependency, task, prompt,
    protocol, or probe behavior—creates a new candidate commit and requires a full
    Lenovo F0 rerun.
+
+**No test may pin the project version to a literal.** The allowlist permits
+bumping the `[project].version` scalar between `C` and `R`, and the canonical
+digest normalizes that line specifically so the bump is digest-neutral. A test
+asserting a literal version would make the permitted change impossible: the only
+way to satisfy it is to edit a test, tests are inside the behavior tree, and that
+edit breaks the byte-equality requirement in step 3 and voids the F0 evidence. The
+version is therefore asserted as well-formed `MAJOR.MINOR.PATCH` only. Release
+identity is governed by the annotated tag, `CHANGELOG.md`, and this diff review —
+never by a literal in a test. The same rule applies to any future assertion over
+an allowlisted file: assert its *shape*, not the released value.
 5. Run required CI on `R`, then create an annotated `v0.4.0` tag that points to
    `R` and records `C`, the attestation-file Git blob ID, archive SHA-256, and
    behavior-tree SHA-256. Push the commit and tag. The tracked attestation must

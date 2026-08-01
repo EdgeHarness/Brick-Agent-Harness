@@ -34,7 +34,15 @@ def test_pep621_metadata_matches_the_locked_direct_dependencies():
     ]
     test_dependencies = ["pytest==8.3.5"]
     assert project["name"] == "brick-agent-harness"
-    assert project["version"] == "0.3.1"
+    # The version is asserted as well-formed rather than pinned to a literal.
+    # The release procedure permits bumping this scalar between the tested
+    # candidate C and its metadata-only descendant R, and the behavior-tree
+    # digest normalizes the version line so that bump is digest-neutral. A
+    # literal pin here would make that permitted change impossible without
+    # editing a test, which would alter the digest and void the F0 evidence.
+    # Release identity is governed by the annotated tag, CHANGELOG.md and the
+    # C..R diff review, not by this assertion.
+    assert re.fullmatch(r"\d+\.\d+\.\d+", project["version"])
     assert project["requires-python"] == ">=3.9,<3.14"
     assert project["dependencies"] == runtime_dependencies
     assert project["optional-dependencies"]["test"] == test_dependencies

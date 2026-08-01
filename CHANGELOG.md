@@ -30,6 +30,19 @@ on correct server behavior rather than on any defect in the machine, the model o
 the research design. That bundle stays immutable and failed; the gate was
 corrected and versioned instead of repaired or waived.
 
+### Fixed (release procedure)
+
+- The `C`-to-`R` release allowlist was internally inconsistent and made the
+  documented `v0.4.0` procedure impossible to execute. It permits bumping the
+  `[project].version` scalar, and the canonical digest normalizes that line so the
+  bump is digest-neutral — but `tests/test_offline_foundation.py` pinned the
+  version to the literal `0.3.1`. Satisfying that pin required editing a test;
+  tests are inside the behavior tree; so the edit would change the digest and void
+  the F0 evidence the release depends on. The test now asserts a well-formed
+  `MAJOR.MINOR.PATCH` version instead of a literal, and `PROJECT_SETUP.md` records
+  the general rule: assert the *shape* of an allowlisted file, never its released
+  value. Discovered while executing the release, before any tag existed.
+
 ### Added
 
 - F0 protocol v2 (`brick.f0.protocol/2`) with an explicit `option_contract`
