@@ -362,11 +362,33 @@ def test_process_tree_sample_carries_runner_identity():
 
 
 def test_executable_identity_is_cached_by_path():
+    """Caching must hold on any platform: hashing once per path, not per sample."""
     first = f0_windows.executable_identity(sys.executable)
     second = f0_windows.executable_identity(sys.executable)
     assert first == second
-    assert first["error"] is None
-    assert len(first["sha256"]) == 64
+    assert set(first) == {"sha256", "pe_machine", "error"}
+
+
+def test_executable_identity_reports_a_non_pe_file_as_an_error(tmp_path):
+    """A non-PE file must fail closed with a recorded reason, never silently."""
+    path = Path(tmp_path) / "not-a-pe.bin"
+    path.write_bytes(b"\x7fELF not a portable executable")
+    identity = f0_windows.executable_identity(str(path))
+    assert identity["sha256"] is None
+    assert identity["pe_machine"] is None
+    assert "WindowsProbeError" in identity["error"]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="PE parsing is Windows-only")
+def test_executable_identity_hashes_a_real_pe_binary():
+    identity = f0_windows.executable_identity(sys.executable)
+    assert identity["error"] is None
+    assert len(identity["sha256"]) == 64
+    assert identity["pe_machine"]["value"] in {
+        f0_windows.ARM64_PE_MACHINE,
+        f0_windows.AMD64_PE_MACHINE,
+        f0_windows.X86_PE_MACHINE,
+    }
 
 
 # --- failure attribution --------------------------------------------------
