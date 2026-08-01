@@ -426,9 +426,16 @@ def _process_image_path(pid):
     Toolhelp32 only exposes the image *name*. F0 v2 must attest the actual
     inference runner, so the full path is resolved separately and then hashed
     once per unique path rather than once per sample.
+
+    An unresolvable path returns None rather than raising, including on
+    non-Windows hosts. Raising here would mask the platform-independent
+    invariants of ``sample_process_tree`` -- such as a live but unmeasurable
+    descendant being fatal -- behind a platform error. Fail-closed behavior is
+    preserved downstream instead: without a path there is no SHA-256 and no PE
+    machine, so runner attestation cannot pass.
     """
     if os.name != "nt":
-        raise WindowsProbeError("process sampling requires Windows")
+        return None
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     open_process = kernel32.OpenProcess
     open_process.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)

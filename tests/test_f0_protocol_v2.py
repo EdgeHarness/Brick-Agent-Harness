@@ -379,6 +379,51 @@ def test_executable_identity_reports_a_non_pe_file_as_an_error(tmp_path):
     assert "WindowsProbeError" in identity["error"]
 
 
+def test_unresolvable_image_path_returns_none_not_an_exception(monkeypatch):
+    """Runner-identity resolution must not mask platform-independent invariants.
+
+    Raising here previously hid `sample_process_tree`'s "a live but unmeasurable
+    descendant is fatal" rule behind a platform error on non-Windows hosts.
+    """
+    monkeypatch.setattr(f0_windows.os, "name", "posix")
+    assert f0_windows._process_image_path(1) is None
+
+
+def test_sampling_still_enforces_unmeasurable_descendants_without_paths(
+    monkeypatch,
+):
+    """The fatal-descendant invariant must survive unresolvable runner paths."""
+    monkeypatch.setattr(
+        f0_windows,
+        "_process_entries",
+        lambda: {
+            101: {"parent_pid": 0, "image": "ollama.exe"},
+            202: {"parent_pid": 101, "image": "ollama-runner.exe"},
+        },
+    )
+    monkeypatch.setattr(
+        f0_windows,
+        "_process_memory",
+        lambda pid: (
+            {"private_commit_bytes": 1, "working_set_bytes": 1}
+            if pid == 101
+            else None
+        ),
+    )
+    monkeypatch.setattr(f0_windows, "_process_image_path", lambda pid: None)
+    with pytest.raises(f0_windows.WindowsProbeError, match="descendants"):
+        f0_windows.sample_process_tree(101)
+
+
+def test_missing_path_fails_runner_attestation_closed(monkeypatch):
+    """No path means no hash and no architecture, so attestation must fail."""
+    samples = runner_sample(path=None, sha256=None, pe_machine=None)
+    result = f0_probe._attest_inference_runners(samples, 100)
+    assert result["passed"] is False
+    assert result["runners"][0]["hashed"] is False
+    assert result["runners"][0]["native_arm64"] is False
+
+
 @pytest.mark.skipif(os.name != "nt", reason="PE parsing is Windows-only")
 def test_executable_identity_hashes_a_real_pe_binary():
     identity = f0_windows.executable_identity(sys.executable)

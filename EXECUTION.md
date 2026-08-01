@@ -18,7 +18,8 @@ of `CHANGELOG.md`, those win.
 
 ## 2. State as of 1 August 2026
 
-**Released:** `v0.3.1`. **Offline suite:** 231 passed, 2 skipped. Linux and
+**Released:** `v0.3.1`. **Offline suite:** 234 passed, 2 skipped on native
+Windows ARM64; Linux totals differ by platform-conditional skips. Linux and
 Windows x64 CI required.
 
 **Done:** F0/Q0 source is written and audited. Q0 removed the general

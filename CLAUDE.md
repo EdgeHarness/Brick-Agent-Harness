@@ -59,7 +59,8 @@ python -m pip install -r requirements-test.txt
 python -m pytest -q
 ```
 
-Expect 231 passed, 2 skipped. The two skips are platform-conditional. The
+Expect 234 passed, 2 skipped on native Windows ARM64. Skips are
+platform-conditional, so Linux totals differ by a few tests. The
 suite requires no Ollama and no network; a test fails rather than reaching out.
 
 ## The F0 feasibility gate
