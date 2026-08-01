@@ -46,6 +46,16 @@ Lenovo F0 evidence is pending.
 
 ### Added
 
+- `EXECUTION.md`, the operational handbook that `PROJECT_SETUP.md` deliberately
+  does not cover: read order for a new session, dated repository and benchmark-host
+  state, the immediate next action, honest timeline ranges, a zero-buffer
+  two-week schedule, hard checkpoints with pre-decided consequences, the cut
+  order when behind and the six things that must never be cut, the
+  eleven-family versus preregistered-structural-subset estimand decision that
+  must be made before D0, the development-set floor and ceiling check, the
+  per-session protocol, and status wording that does not conflate a written F0
+  implementation with a passed F0 gate. It defers to `PROJECT_SETUP.md` and
+  `PROJECT_GUIDE.md`, and to `git log` and `CHANGELOG.md` for state.
 - `CLAUDE.md`, a short always-loaded orientation for coding agents and new
   contributors: the hard rules (clean worktree during an evidence gate, report a
   failing gate rather than repairing it, live-model work only on the native

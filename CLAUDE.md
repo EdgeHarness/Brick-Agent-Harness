@@ -9,6 +9,10 @@ harness core, and versioned domain packs (`domains/office_demo`,
 status. [`PROJECT_GUIDE.md`](PROJECT_GUIDE.md) is canonical for evidence
 standards. If this file disagrees with either, they win.
 
+[`EXECUTION.md`](EXECUTION.md) is the operational handbook: current machine and
+repository state, the schedule, hard checkpoints, cut order when behind, and the
+per-session protocol. Read it before starting work.
+
 ## Hard rules
 
 1. **Never modify the worktree while an evidence gate runs.** Gates require
