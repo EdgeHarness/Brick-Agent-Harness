@@ -4,9 +4,9 @@ This file maps known implementation defects to the active release sequence in
 [`PROJECT_SETUP.md`](PROJECT_SETUP.md). It does not define a second gate
 taxonomy.
 
-The latest release is `v0.3.1`. F0/Q0 work is **unreleased** and the native
-Lenovo evidence required for `v0.4.0` is pending. “Targeted” below means planned
-or in progress; it does not mean an exit gate passed.
+The latest release is `v0.4.0`. The native Lenovo evidence required for `v0.4.0`
+exists and the F0 gate passed. “Targeted” below means planned or in progress; it
+does not mean an exit gate passed.
 
 ## Status ledger
 

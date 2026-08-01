@@ -7,9 +7,9 @@ the former `S0`–`S18`, `G0`–`G1`, `R1`–`R5`, and `P0`–`P4` execution tax
 Those names may remain in released changelog entries as historical descriptions,
 but they no longer authorize or order current work.
 
-The latest released version is `v0.3.1`. Work toward `v0.4.0` is
-**unreleased**. The native-Windows Lenovo F0 gate is pending, so the repository
-must not claim that `v0.4.0` is complete, tagged, or validated.
+The latest released version is `v0.4.0`. The native-Windows Lenovo F0 gate
+passed, so `v0.4.0` records feasibility. It is not a benchmark result: S4 through
+S9 are unstarted and no measured effect exists.
 
 The current milestone has two outputs:
 

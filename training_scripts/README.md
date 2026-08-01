@@ -14,7 +14,7 @@ the resulting adapter improves the harness.
 
 This legacy training path is outside the `v0.14.0` milestone. It cannot supply a
 model, adapter, training result, or condition to the retained Qwen3.5 protocol.
-The latest release remains `v0.3.1`; F0/Q0 work is **unreleased** and does not
+The latest release is `v0.4.0`; the F0 feasibility gate passed and does not
 authorize training.
 
 ## Blocking defects

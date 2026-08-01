@@ -17,8 +17,9 @@ Brick currently provides:
 - experimental LoRA generators and training scripts, but no shipped corpus,
   adapter or model.
 
-The latest release is `v0.3.1`. F0/Q0 work toward `v0.4.0` is
-**unreleased**, and the required native Lenovo F0 evidence is pending.
+The latest release is `v0.4.0`. The required native Lenovo F0 evidence exists and
+the gate passed. That establishes host and model feasibility only; every stage
+from S4 onward is unstarted and no measured effect exists.
 
 Brick is not a production assistant, a secure filesystem/shell sandbox, a
 transactional room-booking service, an access-controlled retrieval system, or

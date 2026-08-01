@@ -18,8 +18,8 @@ None participates in the retained protocol. The confirmatory candidate is
 Qwen3.5 4B, resolved by immutable digest after Lenovo F0. Qwen3.5 2B and 9B are
 descriptive system replications only.
 
-The latest release is `v0.3.1`. Q0 changes are **unreleased**, and native Lenovo
-F0 remains pending.
+The latest release is `v0.4.0`. The native Lenovo F0 feasibility gate passed;
+that records host feasibility only and is not a benchmark result.
 
 ## What the development launchers run
 

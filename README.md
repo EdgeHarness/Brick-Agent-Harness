@@ -17,9 +17,9 @@ benchmark results, training corpora, adapters, or model weights are shipped.
 surfaces; it is not evidence of generalization or performance. The proposition
 that orchestration improves model tool use remains an untested hypothesis.
 
-The latest release is `v0.3.1`. F0/Q0 work toward `v0.4.0` is
-**unreleased**, and the required native-Windows Lenovo F0 evidence is pending.
-The Mac is a source-development and offline-test host only.
+The latest release is `v0.4.0`. The required native-Windows Lenovo F0 evidence
+exists and the gate passed, establishing host and model feasibility only. The Mac
+is a source-development and offline-test host only.
 
 ## Read first
 

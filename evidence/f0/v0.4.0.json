@@ -1,0 +1,74 @@
+{
+  "archive": {
+    "name": "f0-20260801T164210Z-07054bec.zip",
+    "sha256": "edf6f06fc06332e1e6cef4322dd583c4656f034c68c7d9f758571292dffc3220",
+    "size_bytes": 7121860
+  },
+  "candidate_behavior_tree_sha256": "abf609c0eeecbaa7776245df842021d80db496be5c573a17f4ebf5d3433b5ac2",
+  "candidate_commit": "6402bf507bfc76ff0f794924f0847dd301fe31c6",
+  "descriptive_models": [
+    {
+      "digest": "124a03c347777e8e4e5955c33610ae01d9d90d8c2a718bfba069c498d5c7f3c9",
+      "digest_absent_reason": null,
+      "median_eval_tps": 45.023396565830666,
+      "minimum_eval_tps": null,
+      "native_tools_passed": true,
+      "option_recognition_passed": true,
+      "role": "descriptive",
+      "status": "eligible",
+      "tag": "qwen3.5:2b-q4_K_M"
+    },
+    {
+      "digest": "6488c96fa5faab64bb65cbd30d4289e20e6130ef535a93ef9a49f42eda893ea7",
+      "digest_absent_reason": null,
+      "median_eval_tps": 12.368510178334075,
+      "minimum_eval_tps": 3.0,
+      "native_tools_passed": true,
+      "option_recognition_passed": true,
+      "role": "descriptive",
+      "status": "eligible",
+      "tag": "qwen3.5:9b-q4_K_M"
+    }
+  ],
+  "environment_status": "pass",
+  "extracted_copy_verification_status": "pass",
+  "notes": "The tested candidate commit is recorded here; the annotated v0.4.0 tag supplies the authoritative release-commit identity, because a commit cannot contain its own hash. The raw F0 bundle is retained externally and is not committed to Git. This release records host and model feasibility only: it is not a benchmark result and no measured effect exists.",
+  "ollama_version": "0.32.5",
+  "prepared_sha256": "0dfa0f178ca29e0013eb67ff2dddb71e3b5e6f614d429dc0e9e280949856e08f",
+  "primary_model": {
+    "digest": "2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd",
+    "digest_absent_reason": null,
+    "median_eval_tps": 22.263434312850233,
+    "minimum_eval_tps": 5.0,
+    "native_tools_passed": true,
+    "option_recognition_passed": true,
+    "role": "primary",
+    "status": "eligible",
+    "tag": "qwen3.5:4b-q4_K_M"
+  },
+  "protocol_sha256": "28c8dc04cbce9764030a3f8e4bd2f00c165b66fde4f053867677007368f31013",
+  "release": "v0.4.0",
+  "run_id": "f0-20260801T164210Z-07054bec",
+  "schema_version": "brick.f0.release-attestation/1",
+  "storage_status": "pass",
+  "summary_sha256": "c236d0d1256607e94606e4dfa3f8ee450f46e9ef9f9b3cafe72fc00a0565770a",
+  "summary_status": "pass",
+  "superseded_runs": [
+    {
+      "reason": "protocol v1 required the server to reject an unknown option name, which Ollama never promised; retained unchanged as failed diagnostic evidence",
+      "run_id": "f0-20260801T020325Z-5f948e97",
+      "status": "fail"
+    },
+    {
+      "reason": "valid for behavior tree 557b5ad8 ; superseded because the version-pin test fix changed the tested tree",
+      "run_id": "f0-20260801T034453Z-94b29703",
+      "status": "pass"
+    },
+    {
+      "reason": "valid for behavior tree abf609c0 at commit 1beb3da ; superseded because the structural allowlist fix changed the candidate commit, and a shared tree does not make a different commit's bundle usable",
+      "run_id": "f0-20260801T162806Z-e6ca4f26",
+      "status": "pass"
+    }
+  ],
+  "verified_at_utc": "2026-08-01T16:51:42Z"
+}

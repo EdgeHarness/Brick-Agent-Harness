@@ -4,8 +4,7 @@ Agent Lab is a loopback browser interface for observing Brick's synthetic
 development agents. It is not a production service, security boundary,
 multi-user application, Brix deployment, or retained benchmark scheduler.
 
-The latest release is `v0.3.1`. Q0 changes are **unreleased** and Lenovo F0 is
-pending.
+The latest release is `v0.4.0`. The Lenovo F0 feasibility gate passed.
 
 The server binds to `127.0.0.1` and normally selects a port from 8765 through
 8784. Loopback reduces network exposure but does not authenticate a user or

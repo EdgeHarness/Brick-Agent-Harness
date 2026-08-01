@@ -6,9 +6,8 @@ Brick is an experimental research scaffold. It is not approved for production,
 private Brix data, authoritative business systems, or unattended external side
 effects.
 
-The latest release is `v0.3.1`. F0/Q0 work toward `v0.4.0` is
-**unreleased**, and the native-Windows Lenovo F0 gate is pending. No release is
-approved for real Brix data. Pre-1.0 interfaces and controls may change without
+The latest release is `v0.4.0`. The native-Windows Lenovo F0 gate passed. No
+release is approved for real Brix data. Pre-1.0 interfaces and controls may change without
 backward compatibility.
 
 Unreleased Q0 removes the legacy general-filesystem, PowerShell, broad-root, and

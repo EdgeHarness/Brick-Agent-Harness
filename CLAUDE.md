@@ -40,17 +40,21 @@ per-session protocol. Read it before starting work.
 
 ## Current position
 
-Latest release is `v0.3.1`. F0/Q0 work toward `v0.4.0` is **unreleased and
-blocked** on retained native-Lenovo F0 evidence. Do not describe `v0.4.0` as
-complete, tagged, or validated.
+Latest release is `v0.4.0`. **The native-Lenovo F0 gate passed** from candidate
+`6402bf5`, run `f0-20260801T164210Z-07054bec`, with all three models eligible —
+4B at 22.26 tok/s against a 5 tok/s floor, 2B at 45.02, 9B at 12.37 against a
+3 tok/s floor — and inference attested to a native ARM64 `llama-server.exe`.
 
-**F0 ran once on the native Lenovo and failed** (candidate `e4dd167`, run
-`f0-20260801T020325Z-5f948e97`). Only one check failed: protocol v1 required
-Ollama to reject an unknown option name, which Ollama never promised. The
-machine, the model and the design were fine — native tool calls passed 3/3 and
-warm throughput was 23.00 tok/s against a 5 tok/s floor. That bundle is immutable
-failed evidence. The correction is protocol v2, which is a new candidate needing
-a complete F0 rerun. See [`EXECUTION.md`](EXECUTION.md) §2.
+**That is feasibility only.** It establishes that this host can run the designed
+experiment. It is not a benchmark result, no measured effect exists, and **S4
+onward is unstarted: nine of eleven stages remain.**
+
+An earlier attempt failed under protocol v1, which required Ollama to reject an
+unknown option name — something Ollama never promised. That bundle
+(`f0-20260801T020325Z-5f948e97`) is retained unchanged as failed evidence; the
+gate was corrected and versioned rather than repaired. Two further reruns came
+from defects in the release procedure itself, not the gate. See
+[`EXECUTION.md`](EXECUTION.md) §2.
 
 Offline suite, from the repository root:
 

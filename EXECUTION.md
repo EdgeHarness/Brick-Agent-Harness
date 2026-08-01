@@ -18,46 +18,66 @@ of `CHANGELOG.md`, those win.
 
 ## 2. State as of 1 August 2026
 
-**Released:** `v0.3.1`. **Offline suite:** 234 passed, 2 skipped on native
+**Released:** `v0.4.0`. **Offline suite:** 234 passed, 2 skipped on native
 Windows ARM64; Linux totals differ by platform-conditional skips. Linux and
-Windows x64 CI required.
+Windows x64 CI green.
 
-**Done:** F0/Q0 source is written and audited. Q0 removed the general
-filesystem and PowerShell overlay, every legacy escape flag now fails before
-side effects, and confirmation callbacks fail closed. `bench/f0_probe.py`,
-`f0_windows.py`, `f0_storage.py` and `f0_protocol.json` implement the gate.
+**Done:** F0/Q0. Q0 removed the general filesystem and PowerShell overlay, every
+legacy escape flag fails before side effects, and confirmation callbacks fail
+closed. `bench/f0_probe.py`, `f0_windows.py`, `f0_storage.py` and
+`f0_protocol.json` implement the gate, now at protocol v2.
 
-**F0 has been executed once, on the native Lenovo, and it FAILED.** Candidate
-`e4dd167`, run `f0-20260801T020325Z-5f948e97`, archive SHA-256
-`9FEDF657AF259578E5C03B45610D4E3188D009F1CE194B8591C3A60E8BE6D7F5`. That bundle
-is immutable failed diagnostic evidence and is never repaired or reused.
-
-Everything except one check passed, and several passed decisively:
+**F0 PASSED** from candidate `6402bf5`, run `f0-20260801T164210Z-07054bec`,
+archive SHA-256
+`edf6f06fc06332e1e6cef4322dd583c4656f034c68c7d9f758571292dffc3220`.
 
 | Component | Result |
 |---|---|
 | Environment (Lenovo, ARM64, AC, Defender, WSearch, NTFS) | pass, zero failures |
-| Marker-last storage: 200 cycles, 50 injected exits, 10 held handles | pass, 0 invalid, 0 renames |
+| Marker-last storage: 200 cycles, 50 injected exits, 10 held handles | pass, 200/200 committed, 0 invalid, 0 renames |
 | All three model pulls | pass |
-| 4B metadata, digest stability, `tools` capability | pass |
-| 4B native tool conformance | pass, 3/3 cases |
-| 4B warm throughput | pass, median 23.00 tok/s against a 5 tok/s floor |
-| 4B process memory | pass, peak 6.45 GiB against a 28 GiB ceiling |
-| 4B loaded context / backend | 8192, classified `cpu` from measurement |
-| 4B option validation | **FAIL** |
-| 2B / 9B | not run — short-circuited by the primary failure, not failed |
+| Metadata, digest stability, `tools` capability | pass, all three models |
+| Native tool conformance | pass, 3/3 cases per model |
+| Per-key option recognition | pass, 9/9 frozen option names per model |
+| 4B warm throughput | pass, median 22.26 tok/s against a 5 tok/s floor |
+| 2B warm throughput | pass, median 45.02 tok/s, no floor |
+| 9B warm throughput | pass, median 12.37 tok/s against a 3 tok/s floor |
+| Peak process memory | pass, 6.50 / 3.99 / 9.61 GiB against a 28 GiB ceiling |
+| Inference runner | native ARM64 `llama-server.exe`, hashed, identity stable |
+| Loaded context / backend | 8192, classified `cpu` from measurement |
 
-The single failure was protocol v1 requiring Ollama to reject the unknown option
-`brick_f0_unknown_option` with a 4xx naming it. Ollama never promised that;
-0.32.5 ignores unknown option names and returned 200. **The machine, the model
-and the research design did not fail — the gate asserted a runtime contract that
-did not exist.** The correction is protocol v2 (per-key option recognition,
-Brick-owned request validation, inference-runner attestation, domain-attributed
-failures), which is a new candidate requiring a complete F0 rerun.
+All three models are `eligible`, so the descriptive matrix is feasible rather than
+conditional. At 22.26 tok/s the 4096-token attempt ceiling implies roughly 184 s of
+generation per attempt, so 440 attempts with the 1.25 factor land near 28 hours
+against the 48-hour threshold. That is generation time only and is **not** the D0
+measurement, which must use observed median wall time.
 
-**Not done:** F0 has never passed. `v0.4.0` is unreleased and blocked on retained
-native-Lenovo evidence from a protocol v2 candidate. Every stage from S4 onward
-is unstarted.
+**Four runs exist and only one backs the release.** Keep them distinct:
+
+| Run | Tree / commit | Status |
+|---|---|---|
+| `f0-...T020325Z-5f948e97` | protocol v1 | **FAIL**, retained unchanged |
+| `f0-...T034453Z-94b29703` | `557b5ad8` | pass, superseded by the version-pin fix |
+| `f0-...T162806Z-e6ca4f26` | `abf609c0` @ `1beb3da` | pass, superseded by the allowlist fix |
+| `f0-...T164210Z-07054bec` | `abf609c0` @ `6402bf5` | **pass — backs `v0.4.0`** |
+
+The v1 failure was a protocol-contract fault: it required Ollama to reject the
+unknown option `brick_f0_unknown_option` with a 4xx naming it. Ollama never
+promised that; 0.32.5 ignores unknown option names and returned 200. **The
+machine, the model and the research design did not fail — the gate asserted a
+runtime contract that did not exist.** Protocol v2 replaced it with per-key
+recognition, Brick-owned request validation, inference-runner attestation and
+domain-attributed failures. Unknown-name acceptance remains true of this build and
+is now recorded as a diagnostic typo hazard: not a gate, not a model result.
+
+The two later reruns came from defects in the **release procedure**, not the gate:
+a test pinned the project version to a literal while the allowlist permitted
+bumping it, and the allowlist enumerated files by name and had rotted. Note the
+third and fourth runs share a behavior tree; a shared tree does not make a
+different commit's bundle usable, and the attestation asserts both.
+
+**Not done:** everything from S4 onward. Nine of eleven stages remain. `v0.4.0`
+records feasibility, not any measured effect.
 
 **Benchmark host, verified eligible:**
 

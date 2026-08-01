@@ -8,7 +8,7 @@ history is recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## 1. Current status
 
-The latest release is `v0.3.1`. Brick is an experimental local agent-harness
+The latest release is `v0.4.0`. Brick is an experimental local agent-harness
 research scaffold with:
 
 - explicit runtime, registry, policy, hook, and domain-pack contracts;
@@ -20,8 +20,8 @@ research scaffold with:
 - an exploratory benchmark, local Ollama client, Agent Lab development console,
   and blocked experimental training code.
 
-Work toward F0/Q0 and `v0.4.0` is **unreleased**. The native Lenovo F0 evidence is
-pending, so `v0.4.0` is not complete or taggable.
+F0/Q0 is released as `v0.4.0`. The native Lenovo F0 evidence exists and the gate
+passed, which records host and model feasibility only. S4 through S9 are unstarted.
 
 Brick currently has no valid retained result, demonstrated harness improvement,
 production Brix workflow, real Brix integration, production identity/access

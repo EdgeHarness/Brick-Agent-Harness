@@ -4,9 +4,9 @@ This directory contains the released **exploratory synthetic benchmark** and is
 being rebuilt into the instrument specified in
 [`../PROJECT_SETUP.md`](../PROJECT_SETUP.md).
 
-The latest release is `v0.3.1`. F0/Q0 work is **unreleased**, and Lenovo F0 is
-pending. No committed result currently establishes that the harness improves a
-model.
+The latest release is `v0.4.0`. The Lenovo F0 gate passed, establishing that this
+host can run the designed experiment. No committed result establishes that the
+harness improves a model, and the benchmark instrument itself is unbuilt.
 
 ## Confirmatory question
 

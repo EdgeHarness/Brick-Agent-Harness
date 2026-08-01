@@ -14,11 +14,29 @@ that the research instrument is valid or that any measured effect exists.
 
 ## [Unreleased]
 
-Work toward `v0.4.0` is not a release. The required native Windows 11 ARM64
-Lenovo F0 evidence is pending.
+No unreleased changes. The next stage is S4, the marker-last evidence store,
+which begins only after a separate review decision.
 
-**F0 was executed once on the native Lenovo from candidate `e4dd167` and
-failed.** Run `f0-20260801T020325Z-5f948e97`, archive SHA-256
+## [0.4.0] — 2026-08-01
+
+F0/Q0. **The native Windows 11 ARM64 Lenovo F0 gate passed** from candidate
+`6402bf5`, run `f0-20260801T164210Z-07054bec`, archive SHA-256
+`edf6f06fc06332e1e6cef4322dd583c4656f034c68c7d9f758571292dffc3220`. All three
+models are eligible: `qwen3.5:4b-q4_K_M` at a median 22.26 output tokens/second
+against a 5 tok/s floor, `qwen3.5:2b-q4_K_M` at 45.02, and `qwen3.5:9b-q4_K_M` at
+12.37 against a 3 tok/s floor. Peak process memory reached 9.61 GiB against a
+28 GiB ceiling. Native tool calls round-tripped 3/3 for every model, all nine
+frozen sampling options were individually recognized, and each probe ran in a
+native ARM64 `llama-server.exe` with a stable hashed identity. The 200-cycle
+marker-last storage spike committed 200/200 with zero invalid bundles and zero
+directory renames under live Defender real-time protection and Windows Search.
+
+This release records feasibility only. It establishes that the benchmark host can
+run the designed experiment; it is not a benchmark result, no measured effect
+exists, and every stage from S4 onward is unstarted.
+
+Three earlier runs are superseded and retained. **The first failed** from
+candidate `e4dd167`: run `f0-20260801T020325Z-5f948e97`, archive SHA-256
 `9FEDF657AF259578E5C03B45610D4E3188D009F1CE194B8591C3A60E8BE6D7F5`. The
 environment, the 200-cycle marker-last storage spike, all three model pulls, 4B
 metadata and digest stability, 4B native tool conformance (3/3), 4B warm
@@ -29,6 +47,15 @@ error. Ollama does not promise that and 0.32.5 returned 200, so the gate failed
 on correct server behavior rather than on any defect in the machine, the model or
 the research design. That bundle stays immutable and failed; the gate was
 corrected and versioned instead of repaired or waived.
+
+The two other superseded runs passed but could not back this release: run
+`f0-20260801T034453Z-94b29703` tested behavior tree `557b5ad8`, invalidated when
+the version-pin test fix changed the tree, and run
+`f0-20260801T162806Z-e6ca4f26` tested tree `abf609c0` at commit `1beb3da`,
+invalidated when the structural allowlist fix changed the candidate commit. That
+third run shares its behavior tree with the released run; a shared tree does not
+make a different commit's bundle usable, and `evidence/f0/v0.4.0.json` asserts
+both tree and commit. Neither was reused and no subresult was carried forward.
 
 ### Fixed (release procedure)
 

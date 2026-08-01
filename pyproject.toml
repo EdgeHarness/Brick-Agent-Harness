@@ -1,6 +1,6 @@
 [project]
 name = "brick-agent-harness"
-version = "0.3.1"
+version = "0.4.0"
 description = "Experimental harness and evaluation scaffold for reliable, auditable tool-using business agents"
 requires-python = ">=3.9,<3.14"
 dependencies = [
