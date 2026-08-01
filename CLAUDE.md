@@ -59,7 +59,7 @@ python -m pip install -r requirements-test.txt
 python -m pytest -q
 ```
 
-Expect 229 passed, 2 skipped. The two skips are platform-conditional. The
+Expect 231 passed, 2 skipped. The two skips are platform-conditional. The
 suite requires no Ollama and no network; a test fails rather than reaching out.
 
 ## The F0 feasibility gate
