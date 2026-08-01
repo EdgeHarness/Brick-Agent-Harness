@@ -118,15 +118,20 @@ versioned rather than waived.
 
 Protocol v2 proves recognition positively, per key. For every option name in the
 frozen `option_contract`, the probe sends the complete valid production map with
-only that key's value replaced by a deliberately invalid type, and requires a
-non-2xx response. It then sends the same invalid value under the unknown
-sentinel and requires success. Only that contrast distinguishes a key the server
-parses from one it ignores, and unlike a generated-output differential it holds
+only that key's value replaced by a deliberately invalid type. Recognition
+requires a 4xx or 5xx response whose body names the key and states its declared
+type. The exact status and body are recorded; Ollama 0.32.5 answers 500 with the
+key and `float32` or `integer`. A complete valid request is required before and
+after the invalid probes to prove both production-map acceptance and continued
+server health.
+
+The same invalid value is also sent under the unknown sentinel. Whether the
+runtime accepts or rejects that unknown name is diagnostic only: the pinned
+0.32.5 build accepts it, while another conforming build may reject unknown keys
+globally. A key-specific, type-specific error for every real name is the
+eligibility evidence. Unlike a generated-output differential, that check holds
 at the frozen values — including the neutral `top_p=1.0`, `min_p=0` and
-`repeat_penalty=1.0`, where changing a no-op cannot change any output. Both 4xx
-and 5xx are accepted for the deliberately invalid probe and the exact status is
-recorded; Ollama 0.32.5 answers 500 with a message naming the key and its
-expected type. A valid request follows to prove the server stayed healthy.
+`repeat_penalty=1.0`, where changing a no-op cannot change any output.
 
 This establishes per-key recognition and the declared value type for the exact
 production option map. It does **not** prove the numerical behavioral semantics
@@ -134,13 +139,13 @@ of any sampler, and Brick makes no stronger claim. Output-differential
 comparisons are retained only as descriptive diagnostics and never as acceptance
 evidence.
 
-Acceptance of an unknown option name is recorded as a diagnostic typo hazard and
-does not gate the run. Brick therefore owns the request contract itself: every
-chat request is validated before it reaches the network against exact allowed
-keys, exact types (rejecting booleans masquerading as integers), finite values,
-the exact frozen sampling values, `think=false`, `stream=false`, and no missing
-or additional keys. A request Brick has not fully specified fails closed instead
-of reaching the model.
+Unknown-name behavior is recorded, and acceptance is reported as a typo hazard;
+neither outcome gates the run. Brick therefore owns the request contract itself:
+every chat request is validated before it reaches the network against exact
+allowed keys, exact types (rejecting booleans masquerading as integers), finite
+values, the exact frozen sampling values, `think=false`, `stream=false`, and no
+missing or additional keys. A request Brick has not fully specified fails closed
+instead of reaching the model.
 
 If a candidate option is rejected, thinking cannot be disabled, or a frozen
 option name is not recognized, revise and version the candidate protocol and
@@ -239,8 +244,11 @@ alone.
 
 A **failed** report is verified semantically too, not merely echoed back. Its
 identity must recompute, its component statuses must agree with the underlying
-records, every failing model must record a substantiating cause, and every
-structured failure code must be attributed to one of the domains
+records, every failing model must record a substantiating cause, and its
+structured failure-code list must be recomputed from the on-disk component
+records rather than accepted by shape. Early prerequisite failures and late
+run-level exceptions remain committed, classifiable, and independently
+verifiable. Every structured failure code is attributed to one of the domains
 `environment`, `storage`, `instrument`, `protocol_contract`, or `model_runtime`.
 Separating a protocol-contract fault from a model/runtime fault is what stops a
 runner or transport defect from being recorded as a statement about a model.

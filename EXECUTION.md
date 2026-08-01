@@ -18,7 +18,7 @@ of `CHANGELOG.md`, those win.
 
 ## 2. State as of 1 August 2026
 
-**Released:** `v0.4.0`. **Offline suite:** 234 passed, 2 skipped on native
+**Released:** `v0.4.0`. **Offline suite:** 242 passed, 2 skipped on native
 Windows ARM64; Linux totals differ by platform-conditional skips. Linux and
 Windows x64 CI green.
 
@@ -76,6 +76,14 @@ bumping it, and the allowlist enumerated files by name and had rotted. Note the
 third and fourth runs share a behavior tree; a shared tree does not make a
 different commit's bundle usable, and the attestation asserts both.
 
+A subsequent strict audit found weaker-than-documented verifier predicates, not
+a failed measurement: generic non-2xx option errors could count as recognition,
+runner replacement across PIDs was not rejected, and some failed-run codes were
+shape-checked rather than recomputed. The unreleased correction now derives
+those results from raw responses and memory samples. Both the original and
+extracted release bundles pass the stronger verifier with their recorded hashes
+unchanged. This correction must be reviewed before S4 starts.
+
 **Not done:** everything from S4 onward. Nine of eleven stages remain. `v0.4.0`
 records feasibility, not any measured effect.
 
@@ -98,24 +106,26 @@ because verifying it is F0's job.
 
 ## 3. Immediate next action
 
-Rerun F0 from a protocol v2 candidate. It is the only thing standing between the
-current state and ten buildable stages. Do not rerun the v1 probe unchanged, and
-do not reuse any passing v1 subresult: a rerun is complete or it is nothing.
+Review and integrate the unreleased F0 verifier correction described above.
+Do not rerun F0 solely to regenerate evidence: the immutable original and
+extracted `v0.4.0` bundles both satisfy the stronger verifier from their raw
+records. A future behavioral change to the F0 probe still requires a new
+versioned candidate and a complete rerun; no prior subresult may be reused.
 
-Host preparation and the exact run and verify commands are in
-[`bench/README.md`](bench/README.md#preparing-the-lenovo-host). Summary: AC
-power, a High/Ultimate Performance scheme or the Best Performance overlay, sleep
-disabled, Defender real-time protection and Windows Search left **running**,
-Ollama serving, output to a short local NTFS path such as `C:\BrickRuns`.
+After that corrective commit has green required CI, begin S4 and only S4. Build
+the production marker-last store defined in `PROJECT_SETUP.md`: immutable
+physical UUID candidates, exclusive run locking, exact `AttemptKey` hashing,
+prepared-manifest validation, exclusive `COMMITTED` publication, fail-closed
+recovery, and rebuildable `results.json`. The S4 exit gate is the full
+crash-boundary, stale-artifact, corruption, duplicate, collision,
+concurrent-writer, held-handle, and recovery matrix on POSIX and native Windows
+ARM64. Stop for review before starting S1R.
 
-Expected cost: about 10 to 30 minutes of compute plus however long roughly 12 GB
-of model downloads takes. The generation volume is fixed and small — 1,920
-tokens per model, from `runtime_warmups=1`, `runtime_samples=5`,
-`runtime_num_predict=320`. The download dominates.
-
-F0 measures throughput and backend classification rather than assuming them.
-Those measurements are inputs to the sample-size rule later, so this run is not
-only a gate but the first real data.
+Do not import or synchronize the moving `SMalshe/Brick` product tree into S4,
+S1R, B0, or a retained condition. `PROJECT_GUIDE.md` defines the convergence
+rule: future product work is identified by an immutable commit and enters
+through a versioned adapter and conformance suite. B0 remains a fictional
+no-network domain pack.
 
 ## 4. Timeline realism
 
@@ -265,19 +275,19 @@ failure, and none should be engineered away.
 
 ## 11. Talking about status without overclaiming
 
-The distinction that matters: **the F0 implementation is complete; the F0 gate
-has not passed.** Conflating them is the easiest way to lose credibility.
+The distinction that matters: **F0/Q0 feasibility has passed; no benchmark
+effect has been measured.** Conflating them is the easiest way to lose
+credibility.
 
-Accurate framing while F0 is pending:
+Accurate framing now:
 
-> The audited Q0 quarantine and F0 probe implementation are pushed. Code,
-> documentation, offline tests and the required Linux and Windows x64 CI are
-> passing. F0 itself is still pending: the next step is running the candidate on
-> the Lenovo Snapdragon X Elite under native Windows 11 ARM64. If it passes we
-> release `v0.4.0`, build the remaining benchmark infrastructure, and run the
-> paired same-model, same-task comparison between native tool use and the full
-> harness on that laptop.
+> `v0.4.0` records a passing Q0 quarantine and native Windows ARM64 F0
+> feasibility gate on the Lenovo Snapdragon X Elite. The retained evidence
+> establishes the tested model transport, option recognition, throughput,
+> process memory, native runner identity, storage behavior, and host
+> prerequisites. It is not a benchmark result. S4, the production marker-last
+> evidence store, is the next release stage.
 
-Never say "F0 is complete" when it means "F0 is written." Never say a benchmark
-result exists before S9 is sealed. Never round a conditional result into a
-general one.
+Never say "the research passed" when only feasibility passed. Never say a
+benchmark result exists before S9 is sealed. Never round a conditional result
+into a general one.

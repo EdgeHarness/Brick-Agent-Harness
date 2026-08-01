@@ -56,21 +56,25 @@ believe. The failed bundle stays immutable and failed.
 ### Remediation — protocol v2
 
 - Per-key option recognition replaces unknown-name rejection. Each frozen option
-  name given an invalid value type must be rejected while the same value under an
-  unknown name must be accepted. This discriminates at the frozen values,
-  including the neutral `top_p=1.0`, `min_p=0` and `repeat_penalty=1.0` where an
-  output differential provably cannot.
+  name given an invalid value type must return a 4xx/5xx response naming the key
+  and its declared type. The same value under an unknown name is diagnostic:
+  either acceptance or rejection is permitted and recorded. This discriminates
+  at the frozen values, including the neutral `top_p=1.0`, `min_p=0` and
+  `repeat_penalty=1.0` where an output differential provably cannot.
 - Output-differential comparisons are demoted to descriptive diagnostics. They
   cannot serve as acceptance evidence: a no-op value is indistinguishable from an
   ignored key, extreme probe values are not the frozen values, and no sampler
   defines a monotonic output-length invariant.
 - Brick owns request validation, fail-closed, before any HTTP request.
 - Inference runners are attested by path, SHA-256 and PE architecture and must be
-  native ARM64 with a stable identity, closing the emulated-x64-runner gap.
+  native ARM64 with a stable identity and stable sampled process set, closing the
+  emulated-x64 and mid-probe replacement gaps.
 - Failures carry structured domain attribution so a protocol-contract or runner
   fault is never recorded as a model failure.
-- Failed reports are verified semantically; v1 bundles remain verifiable for
-  integrity and identity only and can never establish a passing gate.
+- Failed reports are verified semantically, including recomputation of structured
+  failure codes from component records; early and late failures remain
+  independently verifiable. V1 bundles remain verifiable for integrity and
+  identity only and can never establish a passing gate.
 
 ## Q0 — quarantine unsafe capability paths
 

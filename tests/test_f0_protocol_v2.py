@@ -144,10 +144,23 @@ def test_request_validation_rejects_extra_top_level_key():
 class RecognitionClient:
     """Configurable stand-in for the measured Ollama option contract."""
 
-    def __init__(self, accepted_keys=(), baseline_ok=True, health_ok=True):
+    def __init__(
+        self,
+        accepted_keys=(),
+        baseline_ok=True,
+        health_ok=True,
+        unknown_ok=True,
+        error_names_key=True,
+        error_states_type=True,
+        error_status=500,
+    ):
         self.accepted_keys = set(accepted_keys)
         self.baseline_ok = baseline_ok
         self.health_ok = health_ok
+        self.unknown_ok = unknown_ok
+        self.error_names_key = error_names_key
+        self.error_states_type = error_states_type
+        self.error_status = error_status
         self.valid_calls = 0
 
     def rejected_post(self, path, payload):
@@ -162,16 +175,24 @@ class RecognitionClient:
         }
         rejected = {"status_code": 500, "body": {"error": "rejected"}}
         if sentinel in options:
-            return ok
+            return ok if self.unknown_ok else rejected
         for key in sorted(protocol["option_contract"]):
             if options.get(key) == invalid:
                 if key in self.accepted_keys:
                     return ok
+                expected = (
+                    "float32"
+                    if protocol["option_contract"][key] == "float"
+                    else "integer"
+                )
+                parts = ["option"]
+                if self.error_names_key:
+                    parts.append(f'"{key}"')
+                if self.error_states_type:
+                    parts.append(f"must be of type {expected}")
                 return {
-                    "status_code": 500,
-                    "body": {
-                        "error": 'option "' + key + '" must be of type float32'
-                    },
+                    "status_code": self.error_status,
+                    "body": {"error": " ".join(parts)},
                 }
         self.valid_calls += 1
         if self.valid_calls == 1:
@@ -206,6 +227,16 @@ def test_unknown_name_acceptance_is_diagnostic_not_gating(tmp_path):
     assert "typo hazard" in summary["unknown_option_note"]
 
 
+def test_unknown_name_rejection_is_also_diagnostic_not_gating(tmp_path):
+    summary = run_recognition(
+        tmp_path, RecognitionClient(unknown_ok=False)
+    )
+    assert summary["unknown_option_accepted"] is False
+    assert summary["passed"] is True
+    assert "also rejects" in summary["unknown_option_note"]
+    assert "unknown name was accepted" not in summary["interpretation"]
+
+
 def test_option_recognition_fails_when_a_real_key_is_ignored(tmp_path):
     summary = run_recognition(
         tmp_path, RecognitionClient(accepted_keys={"presence_penalty"})
@@ -213,6 +244,33 @@ def test_option_recognition_fails_when_a_real_key_is_ignored(tmp_path):
     assert summary["passed"] is False
     assert summary["unrecognized_options"] == ["presence_penalty"]
     assert "option_names_not_recognized" in summary["failure_codes"]
+
+
+def test_option_recognition_rejects_generic_non_key_error(tmp_path):
+    summary = run_recognition(
+        tmp_path, RecognitionClient(error_names_key=False)
+    )
+    assert summary["passed"] is False
+    assert summary["unrecognized_options"] == sorted(
+        f0_probe.load_protocol()["option_contract"]
+    )
+    assert "option_error_did_not_name_key" in summary["failure_codes"]
+
+
+def test_option_recognition_rejects_error_without_declared_type(tmp_path):
+    summary = run_recognition(
+        tmp_path, RecognitionClient(error_states_type=False)
+    )
+    assert summary["passed"] is False
+    assert "option_error_did_not_state_type" in summary["failure_codes"]
+
+
+def test_option_recognition_rejects_non_error_status(tmp_path):
+    summary = run_recognition(
+        tmp_path, RecognitionClient(error_status=302)
+    )
+    assert summary["passed"] is False
+    assert "option_error_status_invalid" in summary["failure_codes"]
 
 
 def test_option_recognition_fails_when_frozen_map_is_rejected(tmp_path):
@@ -324,6 +382,17 @@ def test_runner_attestation_rejects_identity_change_mid_probe():
         code.startswith("runner_identity_changed")
         for code in result["failure_codes"]
     )
+
+
+def test_runner_attestation_rejects_process_replacement_mid_probe():
+    first = runner_sample()[0]
+    second = copy.deepcopy(first)
+    second["pids"] = [100, 202]
+    second["processes"][1]["pid"] = 202
+    result = f0_probe._attest_inference_runners([first, second], 100)
+    assert result["passed"] is False
+    assert result["runner_set_stable"] is False
+    assert "runner_set_changed" in result["failure_codes"]
 
 
 def test_runner_attestation_requires_a_runner_at_all():

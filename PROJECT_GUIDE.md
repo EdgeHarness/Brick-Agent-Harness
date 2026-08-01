@@ -1,6 +1,6 @@
 # Project Guide
 
-Last reconciled with the local project tree: 29 July 2026.
+Last reconciled with the local project tree: 1 August 2026.
 
 The canonical execution plan is [`PROJECT_SETUP.md`](PROJECT_SETUP.md). This
 guide defines the durable evidence, architecture, and claim rules. Released
@@ -80,6 +80,33 @@ The synthetic pack is not a selected Brix production workflow. Actual workflow
 discovery, data authorization, integration, shadow evaluation, pilot, and
 deployment remain future work outside the `v0.14.0` milestone.
 
+### Repository roles and convergence
+
+`EdgeHarness/Brick-Agent-Harness` is the authority for the research instrument,
+stage gates, immutable evidence, frozen conditions, and retained analysis.
+`SMalshe/Brick` is a separate product-prototype lineage. A moving product branch
+is not a research condition, benchmark dependency, source of retained task
+instances, or substitute for a frozen domain pack.
+
+The two tracks converge through versioned contracts, not by synchronizing their
+working trees:
+
+1. define and test generic tool, state, attempt-evidence, and domain-pack
+   interfaces in the research repository;
+2. keep B0 fictional and no-network so it tests replaceable layering without
+   importing product code or data;
+3. identify any future product integration by an immutable repository commit,
+   adapter version, schema digest, and conformance result;
+4. evaluate that integration separately through approved synthetic or redacted
+   shadow data before any pilot; and
+5. never change the frozen retained instrument to match observed product or
+   benchmark outcomes.
+
+Mechanisms that survive the research gates may later be ported into, packaged
+for, or consumed by the product repository. That engineering transfer is not
+evidence that the product satisfies the research result, and product behavior is
+not evidence that the frozen benchmark instrument is valid.
+
 ## 4. Research question and scope
 
 The sole confirmatory question is:
@@ -146,11 +173,12 @@ The frozen candidate settings are:
 
 F0 saves the exact accepted payloads and, under protocol v2, requires the
 selected Lenovo Ollama build to *recognize* every frozen option name
-individually: each name given a deliberately invalid value type must be rejected,
-while the same invalid value under an unknown name must be accepted. Brick
-validates every request against the frozen contract before it reaches the network,
-and F0 also captures the effective template and loaded context and requires
-thinking to remain disabled.
+individually: each name given a deliberately invalid value type must return a
+4xx/5xx response naming the key and its declared type. The same invalid value
+under an unknown name is a diagnostic probe; acceptance or rejection is recorded
+but does not gate the run. Brick validates every production request against the
+frozen contract before it reaches the network, and F0 also captures the effective
+template and loaded context and requires thinking to remain disabled.
 
 Protocol v1 instead required rejection of an unknown option name. Ollama does not
 promise that, so that gate failed on correct server behavior and was corrected

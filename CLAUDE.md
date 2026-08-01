@@ -56,6 +56,11 @@ gate was corrected and versioned rather than repaired. Two further reruns came
 from defects in the release procedure itself, not the gate. See
 [`EXECUTION.md`](EXECUTION.md) §2.
 
+The current unreleased corrective audit strengthens verification without
+altering the retained evidence: option recognition and runner stability are
+recomputed from raw files, and both the original and extracted `v0.4.0` bundles
+still pass. Review `CHANGELOG.md` before beginning S4.
+
 Offline suite, from the repository root:
 
 ```bash
@@ -63,7 +68,7 @@ python -m pip install -r requirements-test.txt
 python -m pytest -q
 ```
 
-Expect 234 passed, 2 skipped on native Windows ARM64. Skips are
+Expect 242 passed, 2 skipped on native Windows ARM64. Skips are
 platform-conditional, so Linux totals differ by a few tests. The
 suite requires no Ollama and no network; a test fails rather than reaching out.
 

@@ -321,11 +321,11 @@ tenant isolation, audit policy, backup or incident-response layer. Do not load
 real Brix data.
 
 The released S0–S3-era implementation is present and covered by the offline
-suite. The old package taxonomy is historical. F0/Q0 is now the authorized
-active stage; it remains unreleased until the native Lenovo evidence passes.
-The canonical sequence then proceeds through S4, S1R, synthetic B0, graders,
-generators, shared native conditions, protocol freeze, sentinel and retained
-execution as specified in [`PROJECT_SETUP.md`](PROJECT_SETUP.md).
+suite. The old package taxonomy is historical. F0/Q0 passed on the native Lenovo
+host and is released as `v0.4.0`; it establishes feasibility only. The canonical
+sequence now proceeds through S4, S1R, synthetic B0, graders, generators, shared
+native conditions, protocol freeze, sentinel and retained execution as specified
+in [`PROJECT_SETUP.md`](PROJECT_SETUP.md).
 
 ## Safe extension principles
 

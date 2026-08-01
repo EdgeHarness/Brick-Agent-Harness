@@ -45,6 +45,29 @@ records, connect to a provider, or provide stakeholder validation. The pack does
 not exist in the current F0/Q0 tree. Real Brix discovery and product work are
 outside the `v0.14.0` research milestone.
 
+## Repository relationship
+
+As audited on 1 August 2026, the public default branch of `SMalshe/Brick` is
+`master` at commit `e753ba8b80e5bf31230077c46a26febc130f43fd`. It contains the
+earlier SAIL office-agent prototype and per-model harness profiles, has one
+published branch and no open pull request, and does not contain the planned
+`brix_followup_synthetic` domain. Newer teammate work may exist locally, but
+cannot be treated as shared project state until it is supplied as an immutable
+commit or reviewable archive.
+
+That repository is not imported by the research instrument and is not the
+primary benchmark target. The public research authority is
+`EdgeHarness/Brick-Agent-Harness`; it freezes the generic runtime, conditions,
+task distributions, evidence, and analysis needed for a defensible comparison.
+The separate product lineage may later consume mechanisms that survive those
+gates, or be evaluated through a pinned adapter and conformance suite.
+
+Do not merge a moving product branch into a retained experiment. Before any
+cross-repository integration, record the exact product commit, interface and
+schema digests, supported workflow, data authorization, adapter version, and
+conformance results. Product shadow evaluation and pilot acceptance remain
+separate evidence from the synthetic fixed-family research result.
+
 ## Required discovery outputs
 
 For every candidate workflow, document and have Brix validate:

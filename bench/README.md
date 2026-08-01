@@ -208,12 +208,13 @@ Protocol v1 required the server to *reject* the unknown option
 `brick_f0_unknown_option`. Ollama never promised that and 0.32.5 ignores unknown
 names, so v1 failed on correct server behavior; its bundle stays immutable and
 failed. Protocol v2 instead proves recognition positively: each frozen option
-name, given a deliberately invalid value type, must be rejected, while the same
-invalid value under an unknown name must be accepted. That contrast identifies a
-parsed key rather than an ignored one, and it holds at the frozen values —
-including the neutral `top_p=1.0`, `min_p=0` and `repeat_penalty=1.0` where an
-output differential cannot discriminate at all. Unknown-name acceptance is
-recorded as a diagnostic typo hazard, not a gate.
+name, given a deliberately invalid value type, must return a 4xx/5xx response
+that names the key and states its declared type. This identifies a parsed key
+rather than accepting a generic server error, and it holds at the frozen values
+— including the neutral `top_p=1.0`, `min_p=0` and `repeat_penalty=1.0` where an
+output differential cannot discriminate at all. The same invalid value under an
+unknown name is recorded separately; acceptance is a diagnostic typo hazard,
+while rejection is also permitted. Unknown-name behavior is not a gate.
 
 This proves recognition and declared type for the exact production option map,
 not the numerical behavior of any sampler. Brick additionally owns the request
@@ -340,8 +341,8 @@ produces evidence for a tree nobody reviewed.
 | Host or process rejected | x64 shell, Python, or Ollama under emulation |
 | Model pull or metadata failure | a `qwen3.5:*-q4_K_M` tag does not exist as assumed |
 | Native tool conformance failure | this model or Ollama build lacks the function-call transport |
-| Option recognition failure | this Ollama build silently ignores a frozen option name |
-| Runner attestation failure | the real inference runner is not native ARM64, or its identity changed mid-probe |
+| Option recognition failure | a frozen key did not produce a 4xx/5xx, key-specific, type-specific error |
+| Runner attestation failure | the real inference runner is not native ARM64, or its identity/process set changed mid-probe |
 | Throughput below floor | CPU-only inference too slow for 4B (5 tok/s) or 9B (3 tok/s) |
 | Free-space failure after pulls | started with less than about 42 GiB |
 | Storage or held-handle failure | marker-last publication does not hold on this Windows configuration |

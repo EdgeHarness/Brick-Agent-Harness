@@ -29,6 +29,9 @@ is a source-development and offline-test host only.
   schedule, hard checkpoints, cut order, and the per-session protocol.
 - [`PROJECT_GUIDE.md`](PROJECT_GUIDE.md) defines the canonical evidence,
   research, product, and governance rules.
+- [`BRIX_DISCOVERY.md`](BRIX_DISCOVERY.md) records the non-sensitive Brix
+  discovery boundary and the relationship between the research and product
+  repositories.
 - [`PROJECT_SETUP.md`](PROJECT_SETUP.md) is the canonical staged
   implementation and research plan.
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) describes what is implemented, what is
@@ -180,10 +183,11 @@ directory.
 
 ## Current boundary and next milestone
 
-F0/Q0 is the authorized active stage. Source, tests and probes can be prepared
-on development hosts, but `v0.4.0` cannot be released until the native Lenovo
-model, runtime, resource and Windows storage gates pass. S4 follows F0/Q0; S1R
-follows S4; the entirely synthetic Brix vertical slice follows S1R.
+F0/Q0 passed on the native Lenovo host and is released as `v0.4.0`; this records
+feasibility, not a benchmark effect. The current unreleased correction
+strengthens independent verification of that evidence without changing the
+retained bundle. S4 is the next release stage, followed by S1R and then the
+entirely synthetic Brix vertical slice.
 
 No retained matrix begins before the marker-last store, repaired runtime, strict
 graders, independent generators, shared native transport, score-masked

@@ -770,6 +770,39 @@ def test_late_probe_exception_can_never_leave_overall_pass(
         "injected final-tags failure" in failure
         for failure in summary["failures"]
     )
+    assert any(
+        code["domain"] == "instrument"
+        and code["code"] == "run_exception"
+        and "injected final-tags failure" in code["detail"]
+        for code in summary["failure_codes"]
+    )
+
+
+def test_early_environment_failure_is_committed_and_verifiable(tmp_path):
+    def failed_environment(_root, _minimum_memory, _minimum_disk):
+        return {
+            "schema_version": "brick.f0.environment/1",
+            "passed": False,
+            "failures": ["AC power is not connected"],
+        }
+
+    def should_not_run(*_args, **_kwargs):
+        raise AssertionError("later F0 stage ran after environment failure")
+
+    run_dir, summary = f0_probe.run_probe(
+        tmp_path,
+        client_factory=should_not_run,
+        environment_probe=failed_environment,
+        repository_probe=fake_repository,
+        storage_runner=should_not_run,
+        run_id="environment-failure",
+        pull=True,
+    )
+    assert summary["overall_status"] == "fail"
+    assert summary["primary"] is None
+    assert summary["descriptive_models"] == []
+    assert "environment" in summary["failure_domains"]
+    assert f0_probe.verify_report(run_dir) == summary
 
 
 def test_live_unmeasured_process_tree_member_is_fatal(monkeypatch):
@@ -930,6 +963,70 @@ def test_passing_verifier_rejects_an_unrecognized_option(tmp_path):
     path.write_text(json.dumps(record), encoding="utf-8")
     with pytest.raises(f0_probe.F0Error, match="option recognition"):
         f0_probe._verify_passing_report(run_dir, copy.deepcopy(summary))
+
+
+def test_passing_verifier_recomputes_recognition_from_raw_response(tmp_path):
+    run_dir, summary = passing_mock_run(tmp_path, "recognition-raw-tamper")
+    slug = f0_probe._safe_model_slug(summary["primary"]["tag"])
+    path = (
+        run_dir
+        / "models"
+        / slug
+        / "option-recognition"
+        / "option-top_p-response.json"
+    )
+    response = json.loads(path.read_text(encoding="utf-8"))
+    response["body"] = {"error": "generic request failure"}
+    path.write_text(json.dumps(response), encoding="utf-8")
+    with pytest.raises(
+        f0_probe.F0Error, match="raw evidence|option recognition"
+    ):
+        f0_probe._verify_passing_report(run_dir, copy.deepcopy(summary))
+
+
+def test_stronger_verifier_accepts_pre_audit_v2_derived_fields(tmp_path):
+    """Raw evidence, not newly added cached fields, is authoritative."""
+    run_dir, summary = passing_mock_run(tmp_path, "pre-audit-v2")
+    verified_summary = copy.deepcopy(summary)
+    rewritten = {}
+    for model in [summary["primary"], *summary["descriptive_models"]]:
+        slug = f0_probe._safe_model_slug(model["tag"])
+        recognition_path = (
+            run_dir / "models" / slug / "option-recognition" / "summary.json"
+        )
+        recognition = json.loads(
+            recognition_path.read_text(encoding="utf-8")
+        )
+        for field in (
+            "rejected_options",
+            "accepted_options",
+            "options_with_http_error",
+            "options_typed_in_error",
+        ):
+            recognition.pop(field)
+        for item in recognition["options"].values():
+            item.pop("http_error")
+            item.pop("recognized")
+        recognition_path.write_text(
+            json.dumps(recognition), encoding="utf-8"
+        )
+
+        model_path = run_dir / "models" / slug / "summary.json"
+        model_record = json.loads(model_path.read_text(encoding="utf-8"))
+        attestation = model_record["memory"]["runner_attestation"]
+        attestation.pop("runner_set_stable")
+        attestation.pop("runner_sample_count")
+        for runner in attestation["runners"]:
+            runner.pop("parent_pid")
+        model_path.write_text(json.dumps(model_record), encoding="utf-8")
+        rewritten[model["tag"]] = model_record
+
+    verified_summary["primary"] = rewritten[summary["primary"]["tag"]]
+    verified_summary["descriptive_models"] = [
+        rewritten[model["tag"]]
+        for model in summary["descriptive_models"]
+    ]
+    f0_probe._verify_passing_report(run_dir, verified_summary)
 
 
 def test_passing_verifier_rejects_a_missing_runner_attestation(tmp_path):

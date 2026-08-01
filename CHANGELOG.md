@@ -14,8 +14,34 @@ that the research instrument is valid or that any measured effect exists.
 
 ## [Unreleased]
 
-No unreleased changes. The next stage is S4, the marker-last evidence store,
-which begins only after a separate review decision.
+### Fixed
+
+- A strict post-release audit found that `option-recognition-v2` recorded
+  key-specific and type-specific error fields but gated only on a non-2xx
+  response. A generic error could therefore have been mislabeled as proof of
+  recognition. Eligibility now requires a 4xx/5xx response whose body names the
+  real key and states its declared type. Unknown-name acceptance or rejection is
+  diagnostic only, matching the canonical protocol.
+- `verify_report` now reconstructs every recognition request, recomputes each
+  result from the raw response, and recomputes inference-runner identity and
+  process-set stability from raw memory samples. The immutable `v0.4.0` original
+  and extracted bundles both pass these stronger checks without changing any
+  evidence byte; their recorded archive, manifest, and summary hashes remain
+  unchanged.
+- Runner attestation now fails when the sampled runner process set changes
+  during one model probe, including a PID replacement that the prior per-PID
+  identity check could miss. Parent PIDs are retained in the attestation.
+- Failed-report verification now accepts and verifies early prerequisite
+  failures, classifies late run-level exceptions, requires exact model-summary
+  equality, and recomputes the structured failure-code list from on-disk
+  components. A well-formed but invented failure domain/code is no longer enough.
+- The research/product repository boundary is now explicit. The moving
+  `SMalshe/Brick` prototype is not a retained benchmark dependency; future
+  convergence requires a pinned product commit, versioned adapter, schema
+  digests, and conformance evidence while B0 remains fictional and no-network.
+
+The next stage remains S4, the marker-last evidence store, and begins only after
+this corrective audit is reviewed.
 
 ## [0.4.0] — 2026-08-01
 

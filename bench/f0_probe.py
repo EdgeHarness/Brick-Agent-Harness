@@ -798,20 +798,56 @@ def run_conformance(client, protocol, model, digest, output_dir):
     }
 
 
-def _recognition_case(client, output_dir, name, payload):
+def _recognition_case(
+    client, output_dir, name, payload, key=None, expected_type=None
+):
     """Post one deliberately-shaped payload and record it verbatim."""
     _write_json(output_dir / f"{name}-request.json", payload)
     response = client.rejected_post("/api/chat", payload)
     _write_json(output_dir / f"{name}-response.json", response)
+    return _recognition_response(response, key, expected_type)
+
+
+def _recognition_response(response, key=None, expected_type=None):
+    """Reduce one raw recognition response without trusting summary prose."""
     status = response.get("status_code")
     serialized = json.dumps(
         response.get("body"), ensure_ascii=False, sort_keys=True
     )
-    return {
+    body = serialized[:2000]
+    result = {
         "status_code": status,
         "is_success": type(status) is int and 200 <= status < 300,
-        "body_text": serialized[:2000],
+        "is_http_error": type(status) is int and 400 <= status < 600,
+        "body_text": body,
     }
+    if key is not None and expected_type is not None:
+        folded = body.casefold()
+        result.update(
+            {
+                "body_names_key": key.casefold() in folded,
+                "body_states_expected_type": (
+                    expected_type.casefold() in folded
+                ),
+            }
+        )
+        result["recognized"] = (
+            result["is_http_error"]
+            and result["body_names_key"]
+            and result["body_states_expected_type"]
+        )
+    return result
+
+
+def _recognition_payload(protocol, model, digest, case_id):
+    return _chat_payload(
+        protocol,
+        model,
+        [{"role": "user", "content": "Reply with the word ok."}],
+        [],
+        _seed(_protocol_hash(protocol), digest, case_id),
+        num_predict=4,
+    )
 
 
 def run_option_recognition(client, protocol, model, digest, output_dir):
@@ -821,10 +857,11 @@ def run_option_recognition(client, protocol, model, digest, output_dir):
     not promise that and 0.32.5 ignores unknown names, so that check tested an
     assumption the runtime never made. Recognition is instead proven
     positively: a real option name carrying a deliberately invalid value type
-    must be rejected, while the identical invalid value under an unknown name
-    must be accepted. Only that contrast separates a parsed key from an ignored
-    one, and unlike an output differential it holds at the frozen values --
-    including the neutral ones (``top_p=1.0``, ``min_p=0``,
+    must return a 4xx/5xx response whose body names that key and its declared
+    type. The identical invalid value under an unknown name is diagnostic only:
+    runtimes may either ignore or reject unknown names. Unlike an output
+    differential, the real-key check holds at the frozen values -- including
+    the neutral ones (``top_p=1.0``, ``min_p=0``,
     ``repeat_penalty=1.0``) where changing a no-op cannot change any output.
 
     This proves per-key recognition and the declared value type. It does not
@@ -834,17 +871,8 @@ def run_option_recognition(client, protocol, model, digest, output_dir):
     contract = protocol["option_contract"]
     sentinel = protocol["unknown_option_sentinel"]
     invalid = protocol["recognition_invalid_value"]
-    messages = [{"role": "user", "content": "Reply with the word ok."}]
-
     def valid_payload(case_id):
-        return _chat_payload(
-            protocol,
-            model,
-            messages,
-            [],
-            _seed(_protocol_hash(protocol), digest, case_id),
-            num_predict=4,
-        )
+        return _recognition_payload(protocol, model, digest, case_id)
 
     baseline = _recognition_case(
         client, output_dir, "baseline", valid_payload("recognition-baseline")
@@ -855,15 +883,25 @@ def run_option_recognition(client, protocol, model, digest, output_dir):
         payload = copy.deepcopy(valid_payload(f"recognition-{key}"))
         # Deliberately invalid: bypasses validate_chat_request by construction.
         payload["options"][key] = invalid
-        case = _recognition_case(client, output_dir, f"option-{key}", payload)
-        body = case["body_text"].casefold()
+        observation = _recognition_case(
+            client,
+            output_dir,
+            f"option-{key}",
+            payload,
+            key,
+            contract[key],
+        )
         keys[key] = {
             "expected_type": contract[key],
-            "status_code": case["status_code"],
-            "rejected": not case["is_success"],
-            "body_names_key": key.casefold() in body,
-            "body_states_expected_type": contract[key].casefold() in body,
-            "body_text": case["body_text"],
+            "status_code": observation["status_code"],
+            "rejected": not observation["is_success"],
+            "http_error": observation["is_http_error"],
+            "body_names_key": observation["body_names_key"],
+            "body_states_expected_type": observation[
+                "body_states_expected_type"
+            ],
+            "recognized": observation["recognized"],
+            "body_text": observation["body_text"],
         }
 
     unknown_payload = copy.deepcopy(valid_payload("recognition-unknown"))
@@ -875,20 +913,40 @@ def run_option_recognition(client, protocol, model, digest, output_dir):
         client, output_dir, "health", valid_payload("recognition-health")
     )
 
+    recognized = sorted(
+        key for key, item in keys.items() if item["recognized"]
+    )
+    unrecognized = sorted(
+        key for key, item in keys.items() if not item["recognized"]
+    )
     rejected = sorted(key for key, item in keys.items() if item["rejected"])
     accepted = sorted(key for key, item in keys.items() if not item["rejected"])
     named = sorted(key for key, item in keys.items() if item["body_names_key"])
+    typed = sorted(
+        key
+        for key, item in keys.items()
+        if item["body_states_expected_type"]
+    )
+    error_status = sorted(
+        key for key, item in keys.items() if item["http_error"]
+    )
     passed = (
         baseline["is_success"]
         and health["is_success"]
-        and len(rejected) == len(contract)
-        and not accepted
+        and len(recognized) == len(contract)
+        and not unrecognized
     )
     failure_codes = []
     if not baseline["is_success"]:
         failure_codes.append("frozen_option_map_rejected")
-    if accepted:
+    if unrecognized:
         failure_codes.append("option_names_not_recognized")
+    if len(error_status) != len(contract):
+        failure_codes.append("option_error_status_invalid")
+    if len(named) != len(contract):
+        failure_codes.append("option_error_did_not_name_key")
+    if len(typed) != len(contract):
+        failure_codes.append("option_error_did_not_state_type")
     if not health["is_success"]:
         failure_codes.append("server_unhealthy_after_probe")
     summary = {
@@ -900,9 +958,13 @@ def run_option_recognition(client, protocol, model, digest, output_dir):
         "baseline_status_code": baseline["status_code"],
         "health_accepted": health["is_success"],
         "health_status_code": health["status_code"],
-        "recognized_options": rejected,
-        "unrecognized_options": accepted,
+        "recognized_options": recognized,
+        "unrecognized_options": unrecognized,
+        "rejected_options": rejected,
+        "accepted_options": accepted,
+        "options_with_http_error": error_status,
         "options_named_in_error": named,
+        "options_typed_in_error": typed,
         "options": keys,
         "unknown_option_status_code": unknown["status_code"],
         "unknown_option_accepted": unknown["is_success"],
@@ -910,15 +972,15 @@ def run_option_recognition(client, protocol, model, digest, output_dir):
         "passed": passed,
         "failure_codes": failure_codes,
         "interpretation": (
-            "Every frozen option name was recognized: each was rejected when "
-            "given an invalid value type, while the same invalid value under "
-            "an unknown name was accepted. Recognition and declared type are "
-            "established for the exact production option map; the numerical "
-            "behavior of each sampler is not claimed."
+            "Every frozen option name was recognized: each returned a 4xx/5xx "
+            "error naming the key and its expected type when given an invalid "
+            "value. Recognition and declared type are established for the "
+            "exact production option map; unknown-name behavior is diagnostic "
+            "only, and numerical sampler behavior is not claimed."
             if passed
             else (
                 "Option recognition failed. Unrecognized options: "
-                + (", ".join(accepted) if accepted else "none")
+                + (", ".join(unrecognized) if unrecognized else "none")
                 + ". Failure codes: "
                 + (", ".join(failure_codes) if failure_codes else "none")
                 + "."
@@ -1285,11 +1347,15 @@ def _attest_inference_runners(samples, listener_pid):
             "schema_version": "brick.f0.runner-attestation/1",
             "observed": False,
             "passed": False,
+            "runner_set_stable": False,
+            "runner_sample_count": 0,
             "runners": [],
             "failure_codes": ["no_process_samples"],
         }
     seen = {}
+    sampled_runner_sets = []
     for sample in samples:
+        current = set()
         for process in sample.get("processes", []) or []:
             pid = process.get("pid")
             if pid == listener_pid:
@@ -1298,26 +1364,37 @@ def _attest_inference_runners(samples, listener_pid):
             if not any(token in image for token in _RUNNER_IMAGE_TOKENS):
                 continue
             identity = (
+                process.get("parent_pid"),
                 process.get("path"),
                 process.get("sha256"),
                 (process.get("pe_machine") or {}).get("value"),
                 (process.get("pe_machine") or {}).get("name"),
             )
+            current.add((pid,) + identity)
             seen.setdefault(pid, {"image": image, "identities": []})
             if identity not in seen[pid]["identities"]:
                 seen[pid]["identities"].append(identity)
+        if current:
+            sampled_runner_sets.append(current)
     runners = []
     failure_codes = []
     for pid in sorted(seen):
         entry = seen[pid]
         identities = entry["identities"]
         stable = len(identities) == 1
-        path, sha256, machine_value, machine_name = identities[0]
+        (
+            parent_pid,
+            path,
+            sha256,
+            machine_value,
+            machine_name,
+        ) = identities[0]
         native = machine_value == f0_windows.ARM64_PE_MACHINE
         hashed = bool(_DIGEST.fullmatch(str(sha256 or "")))
         runners.append(
             {
                 "pid": pid,
+                "parent_pid": parent_pid,
                 "image": entry["image"],
                 "path": path,
                 "sha256": sha256,
@@ -1334,12 +1411,20 @@ def _attest_inference_runners(samples, listener_pid):
             failure_codes.append(f"runner_not_arm64:{pid}")
         if not hashed:
             failure_codes.append(f"runner_not_hashed:{pid}")
+    runner_set_stable = bool(sampled_runner_sets) and all(
+        current == sampled_runner_sets[0]
+        for current in sampled_runner_sets[1:]
+    )
+    if sampled_runner_sets and not runner_set_stable:
+        failure_codes.append("runner_set_changed")
     if not runners:
         failure_codes.append("no_inference_runner_observed")
     return {
         "schema_version": "brick.f0.runner-attestation/1",
         "observed": bool(runners),
         "passed": bool(runners) and not failure_codes,
+        "runner_set_stable": runner_set_stable,
+        "runner_sample_count": len(sampled_runner_sets),
         "runners": runners,
         "failure_codes": sorted(set(failure_codes)),
     }
@@ -1546,6 +1631,13 @@ def _report_json(run_dir, relative):
     return value
 
 
+def _optional_report_json(run_dir, relative):
+    path = Path(run_dir) / relative
+    if not path.is_file():
+        return None
+    return _report_json(run_dir, relative)
+
+
 def _require_evidence(condition, message):
     if not condition:
         raise F0Error("F0 eligibility evidence failed: " + message)
@@ -1564,14 +1656,202 @@ def _pull_log_succeeded(path):
     return isinstance(final, dict) and final.get("status") == "success"
 
 
+def _verify_option_recognition_evidence(
+    run_dir, protocol, model, digest
+):
+    """Recompute option-recognition eligibility from raw requests/responses."""
+    run_dir = Path(run_dir)
+    slug = _safe_model_slug(model)
+    base = Path("models") / slug / "option-recognition"
+    summary = _report_json(run_dir, base / "summary.json")
+    contract = protocol["option_contract"]
+
+    def raw_case(name, case_id, key=None):
+        request = _report_json(run_dir, base / f"{name}-request.json")
+        expected = _recognition_payload(protocol, model, digest, case_id)
+        if key is not None:
+            expected["options"][key] = protocol[
+                "recognition_invalid_value"
+            ]
+        elif name == "unknown-option":
+            expected["options"][protocol["unknown_option_sentinel"]] = (
+                protocol["recognition_invalid_value"]
+            )
+        _require_evidence(
+            request == expected,
+            f"option-recognition request changed for {model}/{name}",
+        )
+        response = _report_json(run_dir, base / f"{name}-response.json")
+        return _recognition_response(
+            response,
+            key,
+            contract[key] if key is not None else None,
+        )
+
+    baseline = raw_case(
+        "baseline", "recognition-baseline"
+    )
+    observations = {
+        key: raw_case(
+            f"option-{key}", f"recognition-{key}", key
+        )
+        for key in sorted(contract)
+    }
+    unknown = raw_case("unknown-option", "recognition-unknown")
+    health = raw_case("health", "recognition-health")
+
+    option_records = {
+        key: {
+            "expected_type": contract[key],
+            "status_code": observation["status_code"],
+            "rejected": not observation["is_success"],
+            "http_error": observation["is_http_error"],
+            "body_names_key": observation["body_names_key"],
+            "body_states_expected_type": observation[
+                "body_states_expected_type"
+            ],
+            "recognized": observation["recognized"],
+            "body_text": observation["body_text"],
+        }
+        for key, observation in observations.items()
+    }
+    recognized = sorted(
+        key for key, item in option_records.items() if item["recognized"]
+    )
+    unrecognized = sorted(set(contract) - set(recognized))
+    rejected = sorted(
+        key for key, item in option_records.items() if item["rejected"]
+    )
+    accepted = sorted(set(contract) - set(rejected))
+    error_status = sorted(
+        key for key, item in option_records.items() if item["http_error"]
+    )
+    named = sorted(
+        key
+        for key, item in option_records.items()
+        if item["body_names_key"]
+    )
+    typed = sorted(
+        key
+        for key, item in option_records.items()
+        if item["body_states_expected_type"]
+    )
+    passed = (
+        baseline["is_success"]
+        and health["is_success"]
+        and len(recognized) == len(contract)
+        and not unrecognized
+    )
+    failure_codes = []
+    if not baseline["is_success"]:
+        failure_codes.append("frozen_option_map_rejected")
+    if unrecognized:
+        failure_codes.append("option_names_not_recognized")
+    if len(error_status) != len(contract):
+        failure_codes.append("option_error_status_invalid")
+    if len(named) != len(contract):
+        failure_codes.append("option_error_did_not_name_key")
+    if len(typed) != len(contract):
+        failure_codes.append("option_error_did_not_state_type")
+    if not health["is_success"]:
+        failure_codes.append("server_unhealthy_after_probe")
+
+    recorded_options = summary.get("options")
+    legacy_option_fields = (
+        "expected_type",
+        "status_code",
+        "rejected",
+        "body_names_key",
+        "body_states_expected_type",
+        "body_text",
+    )
+    _require_evidence(
+        summary.get("schema_version")
+        == "brick.f0.option-recognition/2"
+        and summary.get("suite") == protocol["recognition_suite"]
+        and summary.get("sentinel_option")
+        == protocol["unknown_option_sentinel"]
+        and summary.get("invalid_value")
+        == protocol["recognition_invalid_value"]
+        and summary.get("baseline_accepted") == baseline["is_success"]
+        and summary.get("baseline_status_code") == baseline["status_code"]
+        and summary.get("health_accepted") == health["is_success"]
+        and summary.get("health_status_code") == health["status_code"]
+        and summary.get("recognized_options") == recognized
+        and summary.get("unrecognized_options") == unrecognized
+        and summary.get("options_named_in_error") == named
+        and isinstance(recorded_options, dict)
+        and sorted(recorded_options) == sorted(contract)
+        and all(
+            all(
+                recorded_options[key].get(field)
+                == option_records[key][field]
+                for field in legacy_option_fields
+            )
+            for key in sorted(contract)
+        )
+        and summary.get("unknown_option_status_code")
+        == unknown["status_code"]
+        and summary.get("unknown_option_accepted") == unknown["is_success"]
+        and summary.get("unknown_option_body") == unknown["body_text"]
+        and summary.get("passed") == passed
+        and summary.get("failure_codes") == failure_codes,
+        f"option recognition summary disagrees with raw evidence for {model}",
+    )
+    optional_derived = {
+        "rejected_options": rejected,
+        "accepted_options": accepted,
+        "options_with_http_error": error_status,
+        "options_typed_in_error": typed,
+    }
+    _require_evidence(
+        all(
+            field not in summary or summary.get(field) == expected
+            for field, expected in optional_derived.items()
+        )
+        and all(
+            all(
+                field not in recorded_options[key]
+                or recorded_options[key].get(field)
+                == option_records[key][field]
+                for field in ("http_error", "recognized")
+            )
+            for key in sorted(contract)
+        ),
+        f"derived option recognition fields disagree for {model}",
+    )
+    verified = copy.deepcopy(summary)
+    verified.update(optional_derived)
+    verified["options"] = option_records
+    return verified
+
+
+def _model_failure_substantiated(model_summary):
+    return bool(model_summary.get("error")) or any(
+        model_summary.get(field) is False
+        for field in (
+            "digest_stable",
+            "metadata_passed",
+            "option_recognition_passed",
+            "native_tools_passed",
+            "throughput_passed",
+        )
+    ) or (model_summary.get("memory", {}).get("passed") is False)
+
+
 def _verify_passing_report(run_dir, summary):
     """Recompute pass eligibility from committed evidence files."""
     run_dir = Path(run_dir)
     protocol = _verify_common_identity(run_dir, summary)
     run = _report_json(run_dir, "run.json")
+    repository = _report_json(run_dir, "repository.json")
     _require_evidence(
         run.get("pull_requested") is True,
         "run identity or pull attestation is invalid",
+    )
+    _require_evidence(
+        repository.get("clean") is True,
+        "passing F0 evidence requires a clean repository",
     )
 
     environment = _report_json(run_dir, "environment.json")
@@ -1667,8 +1947,9 @@ def _verify_passing_report(run_dir, summary):
         model_summaries.append(model_summary)
         if not model_summary.get("passed"):
             _require_evidence(
-                model_spec["role"] == "descriptive",
-                "the primary model is ineligible",
+                model_spec["role"] == "descriptive"
+                and _model_failure_substantiated(model_summary),
+                "a passing report contains an unsubstantiated ineligible model",
             )
             continue
 
@@ -1707,8 +1988,8 @@ def _verify_passing_report(run_dir, summary):
         metadata = _report_json(
             run_dir, f"models/{slug}/metadata.json"
         )
-        recognition = _report_json(
-            run_dir, f"models/{slug}/option-recognition/summary.json"
+        recognition = _verify_option_recognition_evidence(
+            run_dir, protocol, tag, digest
         )
         _require_evidence(
             metadata.get("passed") is True
@@ -1735,21 +2016,78 @@ def _verify_passing_report(run_dir, summary):
             and sorted(recognition["options"]) == contract_keys
             and all(
                 recognition["options"][key].get("rejected") is True
+                and recognition["options"][key].get("http_error") is True
+                and recognition["options"][key].get("body_names_key") is True
+                and recognition["options"][key].get(
+                    "body_states_expected_type"
+                )
+                is True
+                and recognition["options"][key].get("recognized") is True
                 and recognition["options"][key].get("expected_type")
                 == protocol["option_contract"][key]
                 for key in contract_keys
             ),
             f"option recognition evidence is incomplete for {tag}",
         )
-        attestation = (
+        recorded_attestation = (
             model_summary.get("memory", {}).get("runner_attestation") or {}
         )
+        memory_evidence = _report_json(
+            run_dir, f"models/{slug}/runtime/memory-summary.json"
+        )
+        listener_record = _report_json(
+            run_dir, f"models/{slug}/listener.json"
+        )
+        attestation = _attest_inference_runners(
+            memory_evidence.get("samples"),
+            listener_record.get("pid"),
+        )
+        recorded_runners = recorded_attestation.get("runners")
         runners = attestation.get("runners")
+        legacy_runner_fields = (
+            "pid",
+            "image",
+            "path",
+            "sha256",
+            "pe_machine",
+            "identity_stable",
+            "native_arm64",
+            "hashed",
+            "observed_identities",
+        )
         _require_evidence(
-            attestation.get("schema_version")
+            recorded_attestation.get("schema_version")
             == "brick.f0.runner-attestation/1"
+            and recorded_attestation.get("observed")
+            == attestation.get("observed")
+            and recorded_attestation.get("passed")
+            == attestation.get("passed")
+            and recorded_attestation.get("failure_codes")
+            == attestation.get("failure_codes")
+            and isinstance(recorded_runners, list)
+            and len(recorded_runners) == len(runners)
+            and all(
+                all(
+                    recorded.get(field) == recomputed.get(field)
+                    for field in legacy_runner_fields
+                )
+                for recorded, recomputed in zip(recorded_runners, runners)
+            )
+            and (
+                "runner_set_stable" not in recorded_attestation
+                or recorded_attestation.get("runner_set_stable")
+                == attestation.get("runner_set_stable")
+            )
+            and (
+                "runner_sample_count" not in recorded_attestation
+                or recorded_attestation.get("runner_sample_count")
+                == attestation.get("runner_sample_count")
+            )
             and attestation.get("observed") is True
             and attestation.get("passed") is True
+            and attestation.get("runner_set_stable") is True
+            and type(attestation.get("runner_sample_count")) is int
+            and attestation["runner_sample_count"] >= 1
             and attestation.get("failure_codes") == []
             and isinstance(runners, list)
             and bool(runners)
@@ -1757,6 +2095,8 @@ def _verify_passing_report(run_dir, summary):
                 runner.get("native_arm64") is True
                 and runner.get("identity_stable") is True
                 and runner.get("hashed") is True
+                and type(runner.get("pid")) is int
+                and type(runner.get("parent_pid")) is int
                 and bool(_DIGEST.fullmatch(str(runner.get("sha256", ""))))
                 and (runner.get("pe_machine") or {}).get("value")
                 == f0_windows.ARM64_PE_MACHINE
@@ -1804,16 +2144,13 @@ def _verify_passing_report(run_dir, summary):
                     path.is_file(),
                     f"runtime raw evidence is missing for {tag}/{stem}{suffix}",
                 )
-        memory = _report_json(
-            run_dir, f"models/{slug}/runtime/memory-summary.json"
-        )
         _require_evidence(
-            memory.get("error") is None
-            and type(memory.get("peak_private_commit_bytes")) is int
-            and memory["peak_private_commit_bytes"]
+            memory_evidence.get("error") is None
+            and type(memory_evidence.get("peak_private_commit_bytes")) is int
+            and memory_evidence["peak_private_commit_bytes"]
             <= protocol["max_tree_private_commit_bytes"]
-            and type(memory.get("peak_process_count")) is int
-            and memory["peak_process_count"] >= 2,
+            and type(memory_evidence.get("peak_process_count")) is int
+            and memory_evidence["peak_process_count"] >= 2,
             f"process-memory evidence failed for {tag}",
         )
         _require_evidence(
@@ -1822,6 +2159,23 @@ def _verify_passing_report(run_dir, summary):
             and (run_dir / "models" / slug / "ollama-ps.txt").is_file(),
             f"model metadata artifacts are missing for {tag}",
         )
+
+    expected_codes = _classify_failures(
+        environment,
+        storage,
+        disk,
+        model_summaries,
+        run.get("pull_requested"),
+        repository=repository,
+        expected_models=protocol["models"],
+        run_failures=summary.get("failures"),
+    )
+    _require_evidence(
+        summary.get("failure_codes") == expected_codes
+        and summary.get("failure_domains")
+        == sorted({code["domain"] for code in expected_codes}),
+        "structured failure codes do not match passing component evidence",
+    )
 
     primary = model_summaries[0]
     _require_evidence(
@@ -1978,7 +2332,7 @@ def _verify_common_identity(run_dir, summary, validate=True):
     repository = _report_json(run_dir, "repository.json")
     _require_evidence(
         repository.get("schema_version") == "brick.f0.repository/1"
-        and repository.get("clean") is True
+        and type(repository.get("clean")) is bool
         and isinstance(repository.get("commit"), str)
         and bool(re.fullmatch(r"[0-9a-f]{40,64}", repository["commit"]))
         and bool(
@@ -2001,87 +2355,14 @@ def _verify_failed_report(run_dir, summary):
     """
     run_dir = Path(run_dir)
     protocol = _verify_common_identity(run_dir, summary)
+    run = _report_json(run_dir, "run.json")
+    repository = _report_json(run_dir, "repository.json")
     failures = summary.get("failures")
     _require_evidence(
         isinstance(failures, list) and bool(failures),
         "a failed F0 report must record at least one failure",
     )
-    for axis in ("environment_status", "storage_status"):
-        _require_evidence(
-            summary.get(axis) in {"pass", "fail"},
-            f"{axis} is not a recognized status",
-        )
-    environment = _report_json(run_dir, "environment.json")
-    _require_evidence(
-        (environment.get("passed") is True)
-        == (summary.get("environment_status") == "pass"),
-        "environment status disagrees with the environment record",
-    )
-    if summary.get("environment_status") == "pass":
-        storage = _report_json(run_dir, "storage/summary.json")
-        _require_evidence(
-            (storage.get("passed") is True)
-            == (summary.get("storage_status") == "pass"),
-            "storage status disagrees with the storage record",
-        )
-    primary = summary.get("primary")
-    _require_evidence(
-        isinstance(primary, dict)
-        and primary.get("tag") == protocol["primary_model"]
-        and primary.get("role") == "primary",
-        "failed report does not identify the primary model",
-    )
-    recorded = [primary] + list(summary.get("descriptive_models") or [])
-    any_failure = False
-    for model_summary in recorded:
-        tag = model_summary.get("tag")
-        _require_evidence(
-            isinstance(tag, str) and bool(tag),
-            "a recorded model summary has no tag",
-        )
-        expected = "eligible" if model_summary.get("passed") else "ineligible"
-        _require_evidence(
-            model_summary.get("status") == expected,
-            f"model status disagrees with its passed flag for {tag}",
-        )
-        if not model_summary.get("passed"):
-            any_failure = True
-            # A failed model must say why: either an execution error, or at
-            # least one sub-check recorded as not passing. Silence would let a
-            # runner fault masquerade as a model result.
-            substantiated = bool(model_summary.get("error")) or any(
-                model_summary.get(field) is False
-                for field in (
-                    "digest_stable",
-                    "metadata_passed",
-                    "option_recognition_passed",
-                    "native_tools_passed",
-                    "throughput_passed",
-                )
-            ) or (model_summary.get("memory", {}).get("passed") is False)
-            _require_evidence(
-                substantiated,
-                f"failed model {tag} records no substantiating cause",
-            )
-        on_disk = _report_json(
-            run_dir, f"models/{_safe_model_slug(tag)}/summary.json"
-        )
-        _require_evidence(
-            on_disk.get("tag") == tag
-            and on_disk.get("passed") == model_summary.get("passed"),
-            f"model summary on disk disagrees with the report for {tag}",
-        )
-    # A run can legitimately fail without any failing component -- an
-    # unrequested pull, an exhausted disk, or a late instrument exception are
-    # run-level causes. The nonempty `failures` list asserted above is the
-    # authority for why; what must additionally hold is that any structured
-    # code is well-formed and attributed to a known domain, so a protocol
-    # fault is never silently filed as a model result.
     codes = summary.get("failure_codes")
-    _require_evidence(
-        isinstance(codes, list),
-        "a failed F0 report must carry a structured failure-code list",
-    )
     known_domains = {
         "environment",
         "storage",
@@ -2089,20 +2370,178 @@ def _verify_failed_report(run_dir, summary):
         "protocol_contract",
         "model_runtime",
     }
-    for code in codes:
-        _require_evidence(
+    _require_evidence(
+        isinstance(codes, list)
+        and all(
             isinstance(code, dict)
             and code.get("domain") in known_domains
             and isinstance(code.get("code"), str)
-            and bool(code["code"]),
-            "a structured failure code is malformed or misattributed",
+            and bool(code["code"])
+            for code in codes
+        ),
+        "a structured failure code is malformed or misattributed",
+    )
+    for axis in ("environment_status", "storage_status"):
+        _require_evidence(
+            summary.get(axis) in {"pass", "fail"},
+            f"{axis} is not a recognized status",
         )
+    environment = _optional_report_json(run_dir, "environment.json")
+    _require_evidence(
+        (environment is not None and environment.get("passed") is True)
+        == (summary.get("environment_status") == "pass"),
+        "environment status disagrees with the environment record",
+    )
+    storage = _optional_report_json(run_dir, "storage/summary.json")
+    _require_evidence(
+        (storage is not None and storage.get("passed") is True)
+        == (summary.get("storage_status") == "pass"),
+        "storage status disagrees with the storage record",
+    )
+    disk = _optional_report_json(
+        run_dir, "ollama/disk-after-pulls.json"
+    )
+    primary = summary.get("primary")
+    descriptive = summary.get("descriptive_models")
+    _require_evidence(
+        primary is None or isinstance(primary, dict),
+        "failed report primary model entry is malformed",
+    )
+    _require_evidence(
+        isinstance(descriptive, list),
+        "failed report descriptive model list is malformed",
+    )
+    recorded = ([] if primary is None else [primary]) + descriptive
+    by_tag = {}
+    for model_summary in recorded:
+        tag = model_summary.get("tag") if isinstance(model_summary, dict) else None
+        _require_evidence(
+            isinstance(tag, str)
+            and bool(tag)
+            and tag not in by_tag,
+            "a recorded model summary has no unique tag",
+        )
+        by_tag[tag] = model_summary
+
+    expected_tags = {spec["tag"] for spec in protocol["models"]}
+    _require_evidence(
+        set(by_tag) <= expected_tags,
+        "failed report contains an unexpected model",
+    )
+    on_disk_models = []
+    for spec in protocol["models"]:
+        tag = spec["tag"]
+        relative = (
+            Path("models") / _safe_model_slug(tag) / "summary.json"
+        )
+        on_disk = _optional_report_json(run_dir, relative)
+        model_summary = by_tag.get(tag)
+        _require_evidence(
+            (on_disk is None) == (model_summary is None),
+            f"failed report model presence disagrees for {tag}",
+        )
+        if on_disk is None:
+            continue
+        _require_evidence(
+            on_disk == model_summary
+            and on_disk.get("schema_version")
+            == "brick.f0.model-summary/2"
+            and on_disk.get("tag") == tag
+            and on_disk.get("role") == spec["role"],
+            f"model summary on disk disagrees with the report for {tag}",
+        )
+        on_disk_models.append(on_disk)
+        expected = "eligible" if model_summary.get("passed") else "ineligible"
+        _require_evidence(
+            model_summary.get("status") == expected,
+            f"model status disagrees with its passed flag for {tag}",
+        )
+        if not model_summary.get("passed"):
+            _require_evidence(
+                _model_failure_substantiated(model_summary),
+                f"failed model {tag} records no substantiating cause",
+            )
+        if model_summary.get("option_recognition_passed") in {True, False}:
+            recognition = _verify_option_recognition_evidence(
+                run_dir,
+                protocol,
+                tag,
+                model_summary.get("digest"),
+            )
+            _require_evidence(
+                recognition.get("passed")
+                == model_summary["option_recognition_passed"],
+                f"option-recognition status disagrees for {tag}",
+            )
+
+    # A late run-level failure can occur after every eligibility component
+    # passed. In that case, validate those components through the full passing
+    # verifier before attributing the final run failure.
+    primary_record = by_tag.get(protocol["primary_model"])
+    if (
+        repository.get("clean") is True
+        and environment is not None
+        and environment.get("passed") is True
+        and storage is not None
+        and storage.get("passed") is True
+        and disk is not None
+        and disk.get("passed") is True
+        and run.get("pull_requested") is True
+        and primary_record is not None
+        and primary_record.get("passed") is True
+        and (run_dir / "ollama" / "tags-after.json").is_file()
+    ):
+        component_codes = _classify_failures(
+            environment,
+            storage,
+            disk,
+            on_disk_models,
+            True,
+            repository=repository,
+            expected_models=protocol["models"],
+            run_failures=[],
+        )
+        component_summary = dict(summary)
+        component_summary.update(
+            {
+                "overall_status": "pass",
+                "failures": [],
+                "failure_codes": component_codes,
+                "failure_domains": sorted(
+                    {code["domain"] for code in component_codes}
+                ),
+            }
+        )
+        _verify_passing_report(run_dir, component_summary)
+
+    expected_codes = _classify_failures(
+        environment,
+        storage,
+        disk,
+        on_disk_models,
+        run.get("pull_requested"),
+        repository=repository,
+        expected_models=protocol["models"],
+        run_failures=failures,
+    )
+    _require_evidence(
+        bool(codes) and codes == expected_codes,
+        "structured failure codes disagree with component evidence",
+    )
+    for code in codes:
+        evidence = code.get("evidence")
+        if evidence:
+            evidence_path = run_dir / Path(evidence)
+            _require_evidence(
+                evidence_path.exists(),
+                f"failure evidence path is missing: {evidence}",
+            )
     _require_evidence(
         summary.get("failure_domains")
-        == sorted({code["domain"] for code in codes}),
+        == sorted({code["domain"] for code in expected_codes}),
         "recorded failure domains disagree with the failure codes",
     )
-    if any_failure:
+    if any(not model.get("passed") for model in on_disk_models):
         _require_evidence(
             bool(codes),
             "a failed model produced no structured failure code",
@@ -2134,7 +2573,16 @@ def _verify_legacy_report(run_dir, summary):
     )
 
 
-def _classify_failures(environment, storage, disk, models, pull):
+def _classify_failures(
+    environment,
+    storage,
+    disk,
+    models,
+    pull,
+    repository=None,
+    expected_models=None,
+    run_failures=None,
+):
     """Attribute each failure to a domain so causes are never conflated.
 
     A protocol-contract failure means the pinned runtime does not honour a
@@ -2152,6 +2600,15 @@ def _classify_failures(environment, storage, disk, models, pull):
             entry["evidence"] = evidence
         codes.append(entry)
 
+    if repository is None and expected_models is not None:
+        add("instrument", "repository_not_probed")
+    elif repository is not None and not repository.get("clean"):
+        add(
+            "instrument",
+            "repository_not_clean",
+            None,
+            "repository.json",
+        )
     if environment is None:
         add("environment", "environment_not_probed")
     elif not environment.get("passed"):
@@ -2165,7 +2622,15 @@ def _classify_failures(environment, storage, disk, models, pull):
             "storage/summary.json")
     if not pull:
         add("instrument", "model_pull_not_requested")
-    if disk is not None and not disk.get("passed"):
+    if (
+        disk is None
+        and pull
+        and expected_models is not None
+        and environment is not None
+        and environment.get("passed")
+    ):
+        add("instrument", "post_pull_disk_not_recorded")
+    elif disk is not None and not disk.get("passed"):
         add("instrument", "free_disk_below_minimum", None,
             "ollama/disk-after-pulls.json")
     for model in models or []:
@@ -2215,6 +2680,33 @@ def _classify_failures(environment, storage, disk, models, pull):
             else:
                 add("model_runtime", "process_memory_exceeded_ceiling",
                     f"peak={memory.get('peak_private_commit_bytes')}", base)
+    if expected_models is not None:
+        recorded_tags = {
+            model.get("tag")
+            for model in models or []
+            if isinstance(model, dict)
+        }
+        for spec in expected_models:
+            if spec["tag"] not in recorded_tags:
+                add(
+                    "instrument",
+                    "model_not_probed",
+                    spec["tag"],
+                )
+    known_messages = {
+        "repository worktree is not clean",
+        "environment prerequisites failed",
+        "F0Error: environment prerequisites failed",
+        "marker-last storage spike failed",
+        "model pull was not requested",
+        "free disk is below the post-pull minimum",
+        "primary 4B model feasibility failed",
+    }
+    if environment is not None:
+        known_messages.update(environment.get("failures") or [])
+    for failure in run_failures or []:
+        if failure not in known_messages:
+            add("instrument", "run_exception", str(failure))
     return codes
 
 
@@ -2474,7 +2966,14 @@ def run_probe(
         None,
     )
     failure_codes = _classify_failures(
-        environment, storage, disk_after_pulls, models, pull
+        environment,
+        storage,
+        disk_after_pulls,
+        models,
+        pull,
+        repository=repository,
+        expected_models=protocol["models"],
+        run_failures=failures,
     )
     overall = bool(
         environment
