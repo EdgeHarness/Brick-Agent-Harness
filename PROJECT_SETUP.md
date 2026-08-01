@@ -106,15 +106,45 @@ the exact accepted request payloads, returned native tool-call objects, tool
 results, model metadata, effective chat template, loaded context, and
 `think=false` responses.
 
-The option-validation probe also sends one otherwise valid request containing the
-unknown option `brick_f0_unknown_option`. The selected Ollama build must reject it
-with a client error that identifies the unknown option. Acceptance of the exact
-candidate option map plus explicit rejection of that sentinel establishes that
-the backend validates option names rather than silently accepting an arbitrary
-map. This black-box gate does **not** prove the numerical behavioral effect of
-each accepted sampling parameter; Brick makes no stronger claim. If a candidate
-option is rejected, or thinking cannot be disabled, revise and version the
-candidate protocol and rerun all of F0 before D0.
+### Option recognition (protocol v2)
+
+Protocol v1 gated eligibility on the server rejecting the unknown option
+`brick_f0_unknown_option` with a client error naming it. That tested an
+assumption Ollama never made: its chat API defines `options` as a runtime
+options object and does not promise strict unknown-key rejection. Ollama 0.32.5
+logs a warning and continues, so the v1 gate failed on correct server behavior.
+That candidate's bundle remains immutable and failed; the gate was corrected and
+versioned rather than waived.
+
+Protocol v2 proves recognition positively, per key. For every option name in the
+frozen `option_contract`, the probe sends the complete valid production map with
+only that key's value replaced by a deliberately invalid type, and requires a
+non-2xx response. It then sends the same invalid value under the unknown
+sentinel and requires success. Only that contrast distinguishes a key the server
+parses from one it ignores, and unlike a generated-output differential it holds
+at the frozen values — including the neutral `top_p=1.0`, `min_p=0` and
+`repeat_penalty=1.0`, where changing a no-op cannot change any output. Both 4xx
+and 5xx are accepted for the deliberately invalid probe and the exact status is
+recorded; Ollama 0.32.5 answers 500 with a message naming the key and its
+expected type. A valid request follows to prove the server stayed healthy.
+
+This establishes per-key recognition and the declared value type for the exact
+production option map. It does **not** prove the numerical behavioral semantics
+of any sampler, and Brick makes no stronger claim. Output-differential
+comparisons are retained only as descriptive diagnostics and never as acceptance
+evidence.
+
+Acceptance of an unknown option name is recorded as a diagnostic typo hazard and
+does not gate the run. Brick therefore owns the request contract itself: every
+chat request is validated before it reaches the network against exact allowed
+keys, exact types (rejecting booleans masquerading as integers), finite values,
+the exact frozen sampling values, `think=false`, `stream=false`, and no missing
+or additional keys. A request Brick has not fully specified fails closed instead
+of reaching the model.
+
+If a candidate option is rejected, thinking cannot be disabled, or a frozen
+option name is not recognized, revise and version the candidate protocol and
+rerun all of F0 before D0.
 
 F0 requires:
 
@@ -124,7 +154,11 @@ F0 requires:
   Performance scheme, with its GUID retained in the environment record;
 - native ARM64 Python and Ollama processes;
 - an unchanged, hash-matched Ollama listener plus at least one measured Ollama
-  model-runner descendant during inference;
+  model-runner descendant during inference, each attested by full executable
+  path, SHA-256 and PE architecture, native ARM64, and stable in identity for
+  the duration of that model's probe. Attesting the listener alone is
+  insufficient: an x64 runner under emulation beneath an ARM64 listener would
+  otherwise satisfy the gate whose purpose is to establish native inference;
 - a fixed local NTFS output volume outside OneDrive, with Microsoft Defender
   real-time protection and the Windows Search service running;
 - at least 30 GiB free after model pulls;
@@ -202,6 +236,16 @@ edit, or reuse `<RUN_DIR>`. Verification re-hashes every manifested member and
 recomputes pass eligibility from the protocol, repository, environment, storage,
 pull, model, runtime, and memory records; it does not trust the summary status
 alone.
+
+A **failed** report is verified semantically too, not merely echoed back. Its
+identity must recompute, its component statuses must agree with the underlying
+records, every failing model must record a substantiating cause, and every
+structured failure code must be attributed to one of the domains
+`environment`, `storage`, `instrument`, `protocol_contract`, or `model_runtime`.
+Separating a protocol-contract fault from a model/runtime fault is what stops a
+runner or transport defect from being recorded as a statement about a model.
+Bundles written under protocol v1 remain verifiable for hash integrity and
+identity only, and can never establish a passing gate.
 
 Retain two copies of the exact bundle: the original short-path NTFS directory and
 a release archive. Record the archive SHA-256, committed manifest SHA-256,

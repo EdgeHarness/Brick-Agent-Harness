@@ -416,6 +416,72 @@ def _process_entries():
     return values
 
 
+_IDENTITY_CACHE = {}
+_IDENTITY_CACHE_LOCK = threading.Lock()
+
+
+def _process_image_path(pid):
+    """Return the full executable path for one PID, or None if unavailable.
+
+    Toolhelp32 only exposes the image *name*. F0 v2 must attest the actual
+    inference runner, so the full path is resolved separately and then hashed
+    once per unique path rather than once per sample.
+    """
+    if os.name != "nt":
+        raise WindowsProbeError("process sampling requires Windows")
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    open_process = kernel32.OpenProcess
+    open_process.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    open_process.restype = wintypes.HANDLE
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = (wintypes.HANDLE,)
+    close_handle.restype = wintypes.BOOL
+    query_name = kernel32.QueryFullProcessImageNameW
+    query_name.argtypes = (
+        wintypes.HANDLE,
+        wintypes.DWORD,
+        wintypes.LPWSTR,
+        ctypes.POINTER(wintypes.DWORD),
+    )
+    query_name.restype = wintypes.BOOL
+    # PROCESS_QUERY_LIMITED_INFORMATION works for protected processes too.
+    handle = open_process(0x1000, False, int(pid))
+    if not handle:
+        return None
+    try:
+        size = wintypes.DWORD(32768)
+        buffer = ctypes.create_unicode_buffer(size.value)
+        if not query_name(handle, 0, buffer, ctypes.byref(size)):
+            return None
+        return buffer.value or None
+    finally:
+        close_handle(handle)
+
+
+def executable_identity(path):
+    """Return the cached SHA-256 and PE machine for one executable path."""
+    key = str(path)
+    with _IDENTITY_CACHE_LOCK:
+        cached = _IDENTITY_CACHE.get(key)
+    if cached is not None:
+        return dict(cached)
+    try:
+        identity = {
+            "sha256": sha256_file(key),
+            "pe_machine": pe_machine(key),
+            "error": None,
+        }
+    except (OSError, ValueError, WindowsProbeError) as exc:
+        identity = {
+            "sha256": None,
+            "pe_machine": None,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    with _IDENTITY_CACHE_LOCK:
+        _IDENTITY_CACHE.setdefault(key, identity)
+    return dict(identity)
+
+
 def _process_memory(pid):
     class PROCESS_MEMORY_COUNTERS_EX(ctypes.Structure):
         _fields_ = [
@@ -499,11 +565,21 @@ def sample_process_tree(root_pid):
         private += usage["private_commit_bytes"]
         working += usage["working_set_bytes"]
         process = processes.get(pid, {})
+        path = _process_image_path(pid)
+        identity = (
+            executable_identity(path)
+            if path
+            else {"sha256": None, "pe_machine": None, "error": "path unresolved"}
+        )
         process_records.append(
             {
                 "pid": pid,
                 "parent_pid": process.get("parent_pid"),
                 "image": process.get("image"),
+                "path": path,
+                "sha256": identity["sha256"],
+                "pe_machine": identity["pe_machine"],
+                "identity_error": identity["error"],
                 **usage,
             }
         )

@@ -28,6 +28,50 @@ or in progress; it does not mean an exit gate passed.
 Do not preserve comparability with known-invalid development output. No released
 result is retained evidence.
 
+## F0 protocol v1 — gate asserted a runtime contract that does not exist
+
+### Finding
+
+F0 v1 made 4B eligibility depend on Ollama rejecting the unknown option
+`brick_f0_unknown_option` with a 4xx client error naming it. Ollama's chat API
+defines `options` only as a runtime-options object and does not promise strict
+unknown-key rejection; 0.32.5 logs a warning and continues. The first native
+Lenovo run (`f0-20260801T020325Z-5f948e97`, candidate `e4dd167`) therefore failed
+on correct server behavior while every other check passed, including native tool
+conformance 3/3 and warm throughput of 23.00 tok/s against a 5 tok/s floor.
+
+Two reporting defects compounded it. `option-validation/summary.json` emitted an
+unconditional interpretation string asserting that the server rejects unknown
+names, which contradicted its own `passed: false`. And `verify_report`
+recomputed eligibility only for passing reports, so a failed bundle was echoed
+back rather than verified.
+
+### Why the fix is a versioned protocol change, not a repair
+
+`PROJECT_SETUP.md` provides for exactly this: revise and version the candidate
+protocol, then rerun all of F0. Lowering the check to make the existing run pass
+would be waiving a gate, and a waived gate produces a number nobody should
+believe. The failed bundle stays immutable and failed.
+
+### Remediation — protocol v2
+
+- Per-key option recognition replaces unknown-name rejection. Each frozen option
+  name given an invalid value type must be rejected while the same value under an
+  unknown name must be accepted. This discriminates at the frozen values,
+  including the neutral `top_p=1.0`, `min_p=0` and `repeat_penalty=1.0` where an
+  output differential provably cannot.
+- Output-differential comparisons are demoted to descriptive diagnostics. They
+  cannot serve as acceptance evidence: a no-op value is indistinguishable from an
+  ignored key, extreme probe values are not the frozen values, and no sampler
+  defines a monotonic output-length invariant.
+- Brick owns request validation, fail-closed, before any HTTP request.
+- Inference runners are attested by path, SHA-256 and PE architecture and must be
+  native ARM64 with a stable identity, closing the emulated-x64-runner gap.
+- Failures carry structured domain attribution so a protocol-contract or runner
+  fault is never recorded as a model failure.
+- Failed reports are verified semantically; v1 bundles remain verifiable for
+  integrity and identity only and can never establish a passing gate.
+
 ## Q0 — quarantine unsafe capability paths
 
 ### Finding

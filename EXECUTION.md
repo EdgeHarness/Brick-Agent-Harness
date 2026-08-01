@@ -16,18 +16,47 @@ of `CHANGELOG.md`, those win.
 3. `PROJECT_SETUP.md` — the stage you are about to work on
 4. `git log --oneline -5` and `CHANGELOG.md` `[Unreleased]` — ground truth
 
-## 2. State as of 31 July 2026
+## 2. State as of 1 August 2026
 
-**Released:** `v0.3.1`. **Candidate commit:** `61ed911`. **Offline suite:** 188
-passed, 2 skipped (Windows-only smoke tests). Linux and Windows x64 CI green.
+**Released:** `v0.3.1`. **Offline suite:** 229 passed, 2 skipped. Linux and
+Windows x64 CI required.
 
 **Done:** F0/Q0 source is written and audited. Q0 removed the general
 filesystem and PowerShell overlay, every legacy escape flag now fails before
 side effects, and confirmation callbacks fail closed. `bench/f0_probe.py`,
 `f0_windows.py`, `f0_storage.py` and `f0_protocol.json` implement the gate.
 
-**Not done:** F0 has never been executed. `v0.4.0` is unreleased and blocked on
-retained native-Lenovo evidence. Every stage from S4 onward is unstarted.
+**F0 has been executed once, on the native Lenovo, and it FAILED.** Candidate
+`e4dd167`, run `f0-20260801T020325Z-5f948e97`, archive SHA-256
+`9FEDF657AF259578E5C03B45610D4E3188D009F1CE194B8591C3A60E8BE6D7F5`. That bundle
+is immutable failed diagnostic evidence and is never repaired or reused.
+
+Everything except one check passed, and several passed decisively:
+
+| Component | Result |
+|---|---|
+| Environment (Lenovo, ARM64, AC, Defender, WSearch, NTFS) | pass, zero failures |
+| Marker-last storage: 200 cycles, 50 injected exits, 10 held handles | pass, 0 invalid, 0 renames |
+| All three model pulls | pass |
+| 4B metadata, digest stability, `tools` capability | pass |
+| 4B native tool conformance | pass, 3/3 cases |
+| 4B warm throughput | pass, median 23.00 tok/s against a 5 tok/s floor |
+| 4B process memory | pass, peak 6.45 GiB against a 28 GiB ceiling |
+| 4B loaded context / backend | 8192, classified `cpu` from measurement |
+| 4B option validation | **FAIL** |
+| 2B / 9B | not run — short-circuited by the primary failure, not failed |
+
+The single failure was protocol v1 requiring Ollama to reject the unknown option
+`brick_f0_unknown_option` with a 4xx naming it. Ollama never promised that;
+0.32.5 ignores unknown option names and returned 200. **The machine, the model
+and the research design did not fail — the gate asserted a runtime contract that
+did not exist.** The correction is protocol v2 (per-key option recognition,
+Brick-owned request validation, inference-runner attestation, domain-attributed
+failures), which is a new candidate requiring a complete F0 rerun.
+
+**Not done:** F0 has never passed. `v0.4.0` is unreleased and blocked on retained
+native-Lenovo evidence from a protocol v2 candidate. Every stage from S4 onward
+is unstarted.
 
 **Benchmark host, verified eligible:**
 
@@ -48,8 +77,9 @@ because verifying it is F0's job.
 
 ## 3. Immediate next action
 
-Run F0. It is the only thing standing between the current state and ten
-buildable stages.
+Rerun F0 from a protocol v2 candidate. It is the only thing standing between the
+current state and ten buildable stages. Do not rerun the v1 probe unchanged, and
+do not reuse any passing v1 subresult: a rerun is complete or it is nothing.
 
 Host preparation and the exact run and verify commands are in
 [`bench/README.md`](bench/README.md#preparing-the-lenovo-host). Summary: AC

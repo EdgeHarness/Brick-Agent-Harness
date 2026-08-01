@@ -144,12 +144,23 @@ The frozen candidate settings are:
 - maximum 4096 generated tokens and 14 total model calls per attempt; and
 - a deterministic per-instance seed base reused for the paired conditions.
 
-F0 saves the exact accepted payloads and requires the selected Lenovo Ollama
-build to reject a request containing the unknown
-`brick_f0_unknown_option`. It also captures the effective template and loaded
-context and requires thinking to remain disabled. This detects arbitrary-map
-acceptance; a black-box request cannot prove the numerical behavioral effect of
-every accepted sampling value, and Brick makes no such claim.
+F0 saves the exact accepted payloads and, under protocol v2, requires the
+selected Lenovo Ollama build to *recognize* every frozen option name
+individually: each name given a deliberately invalid value type must be rejected,
+while the same invalid value under an unknown name must be accepted. Brick
+validates every request against the frozen contract before it reaches the network,
+and F0 also captures the effective template and loaded context and requires
+thinking to remain disabled.
+
+Protocol v1 instead required rejection of an unknown option name. Ollama does not
+promise that, so that gate failed on correct server behavior and was corrected
+and versioned rather than waived. What the v2 suite establishes is per-key
+recognition and the declared value type for the exact production option map. A
+black-box request cannot prove the numerical behavioral effect of any sampling
+value, and Brick makes no such claim. Generated-output differentials are
+descriptive diagnostics only: at the frozen neutral values (`top_p=1.0`,
+`min_p=0`, `repeat_penalty=1.0`) an applied no-op and an ignored key are
+indistinguishable in any output.
 
 ## 6. Experimental units and outcomes
 

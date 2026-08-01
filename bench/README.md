@@ -200,12 +200,26 @@ All driver, planning and completion calls consume the ledger. This asks whether
 the harness pays for its overhead; it does not claim equal tokens, FLOPs,
 latency or energy. Record and report the full frontier.
 
-F0 must confirm native transport and accepted options on the Lenovo before S4.
+F0 must confirm native transport and recognized options on the Lenovo before S4.
 It saves exact payloads, captures template/context state, requires `think=false`,
-and requires explicit rejection of the unknown
-`brick_f0_unknown_option`. That proves option-name validation, not the numerical
-behavioral effect of every black-box sampling option. The exact Ollama binary and
-model digests come from F0 rather than a hard-coded version.
+and proves per-key option recognition under protocol v2.
+
+Protocol v1 required the server to *reject* the unknown option
+`brick_f0_unknown_option`. Ollama never promised that and 0.32.5 ignores unknown
+names, so v1 failed on correct server behavior; its bundle stays immutable and
+failed. Protocol v2 instead proves recognition positively: each frozen option
+name, given a deliberately invalid value type, must be rejected, while the same
+invalid value under an unknown name must be accepted. That contrast identifies a
+parsed key rather than an ignored one, and it holds at the frozen values —
+including the neutral `top_p=1.0`, `min_p=0` and `repeat_penalty=1.0` where an
+output differential cannot discriminate at all. Unknown-name acceptance is
+recorded as a diagnostic typo hazard, not a gate.
+
+This proves recognition and declared type for the exact production option map,
+not the numerical behavior of any sampler. Brick additionally owns the request
+contract: every request is validated against exact keys, types, finite values and
+frozen values before it reaches the network. The exact Ollama binary and model
+digests come from F0 rather than a hard-coded version.
 
 ## Preparing the Lenovo host
 
@@ -326,7 +340,8 @@ produces evidence for a tree nobody reviewed.
 | Host or process rejected | x64 shell, Python, or Ollama under emulation |
 | Model pull or metadata failure | a `qwen3.5:*-q4_K_M` tag does not exist as assumed |
 | Native tool conformance failure | this model or Ollama build lacks the function-call transport |
-| Option validation failure | this Ollama build accepts or rejects the wrong sampling options |
+| Option recognition failure | this Ollama build silently ignores a frozen option name |
+| Runner attestation failure | the real inference runner is not native ARM64, or its identity changed mid-probe |
 | Throughput below floor | CPU-only inference too slow for 4B (5 tok/s) or 9B (3 tok/s) |
 | Free-space failure after pulls | started with less than about 42 GiB |
 | Storage or held-handle failure | marker-last publication does not hold on this Windows configuration |

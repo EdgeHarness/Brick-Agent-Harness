@@ -44,6 +44,14 @@ Latest release is `v0.3.1`. F0/Q0 work toward `v0.4.0` is **unreleased and
 blocked** on retained native-Lenovo F0 evidence. Do not describe `v0.4.0` as
 complete, tagged, or validated.
 
+**F0 ran once on the native Lenovo and failed** (candidate `e4dd167`, run
+`f0-20260801T020325Z-5f948e97`). Only one check failed: protocol v1 required
+Ollama to reject an unknown option name, which Ollama never promised. The
+machine, the model and the design were fine — native tool calls passed 3/3 and
+warm throughput was 23.00 tok/s against a 5 tok/s floor. That bundle is immutable
+failed evidence. The correction is protocol v2, which is a new candidate needing
+a complete F0 rerun. See [`EXECUTION.md`](EXECUTION.md) §2.
+
 Offline suite, from the repository root:
 
 ```bash
@@ -51,17 +59,18 @@ python -m pip install -r requirements-test.txt
 python -m pytest -q
 ```
 
-Expect 188 passed, 2 skipped. The two skips are Windows-only smoke tests. The
+Expect 229 passed, 2 skipped. The two skips are platform-conditional. The
 suite requires no Ollama and no network; a test fails rather than reaching out.
 
 ## The F0 feasibility gate
 
 F0 answers "can this machine actually run the experiment we designed" before
-nine more stages are built on the assumption. It checks three things: that the
+nine more stages are built on the assumption. It checks four things: that the
 `qwen3.5:2b/4b/9b-q4_K_M` models exist and round-trip native tool calls, that the
-hardware meets measured throughput and memory floors, and that marker-last
-publication survives Windows with a real-time scanner and indexer holding
-handles.
+pinned Ollama build recognizes every frozen sampling option by name and runs
+inference in a native ARM64 runner, that the hardware meets measured throughput
+and memory floors, and that marker-last publication survives Windows with a
+real-time scanner and indexer holding handles.
 
 - First-time host setup:
   [`bench/README.md`](bench/README.md#preparing-the-lenovo-host)
@@ -69,9 +78,17 @@ handles.
   [`bench/README.md`](bench/README.md#running-the-lenovo-f0-gate)
 - Full requirements and attestation: [`PROJECT_SETUP.md`](PROJECT_SETUP.md)
 
-A 4B failure stops the research design. A 2B or 9B failure removes only that
+A 4B *model* failure — no native tool transport, throughput below floor, memory
+over ceiling — stops the research design. A 2B or 9B failure removes only that
 descriptive replication, with no substitute model. A storage failure means the S4
 evidence store needs redesign before it is built.
+
+A **protocol-contract** failure is different and must not be read as a model
+result: it says the pinned runtime does not honour a contract Brick declared.
+Per `PROJECT_SETUP.md`, revise and version the candidate protocol and rerun all of
+F0. Never lower a floor or drop a check to make an existing failed run pass —
+that waives a gate and produces a number nobody should believe. Failure codes
+carry a `domain` for exactly this reason.
 
 ## Remaining stages
 

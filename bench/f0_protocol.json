@@ -1,5 +1,5 @@
 {
-  "schema_version": "brick.f0.protocol/1",
+  "schema_version": "brick.f0.protocol/2",
   "primary_model": "qwen3.5:4b-q4_K_M",
   "models": [
     {
@@ -28,6 +28,20 @@
     "repeat_penalty": 1.0,
     "num_ctx": 8192
   },
+  "option_contract": {
+    "temperature": "float",
+    "top_p": "float",
+    "min_p": "float",
+    "presence_penalty": "float",
+    "repeat_penalty": "float",
+    "top_k": "integer",
+    "num_ctx": "integer",
+    "seed": "integer",
+    "num_predict": "integer"
+  },
+  "recognition_suite": "option-recognition-v2",
+  "unknown_option_sentinel": "brick_f0_unknown_option",
+  "recognition_invalid_value": "brick_f0_not_a_valid_value",
   "request_timeout_seconds": 600,
   "max_tree_private_commit_bytes": 30064771072,
   "minimum_free_disk_bytes_after_pulls": 32212254720,

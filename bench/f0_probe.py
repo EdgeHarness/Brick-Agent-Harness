@@ -11,6 +11,7 @@ import copy
 import datetime
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -29,7 +30,11 @@ from bench import f0_storage, f0_windows
 
 PROTOCOL_PATH = Path(__file__).with_name("f0_protocol.json")
 OLLAMA_URL = "http://127.0.0.1:11434"
-SUMMARY_SCHEMA = "brick.f0.summary/1"
+SUMMARY_SCHEMA = "brick.f0.summary/2"
+# The v1 protocol gated on unknown-option rejection, which Ollama never
+# promised. That candidate's failed bundle stays immutable and must remain
+# verifiable, so its schema is still accepted for integrity verification only.
+LEGACY_SUMMARY_SCHEMA = "brick.f0.summary/1"
 PREPARED_SCHEMA = "brick.f0.report-prepared/1"
 _DIGEST = re.compile(r"^[0-9a-f]{64}$")
 _RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -61,12 +66,27 @@ _EXPECTED_MODELS = [
         "min_eval_tps": 3.0,
     },
 ]
+_EXPECTED_OPTION_CONTRACT = {
+    "temperature": "float",
+    "top_p": "float",
+    "min_p": "float",
+    "presence_penalty": "float",
+    "repeat_penalty": "float",
+    "top_k": "integer",
+    "num_ctx": "integer",
+    "seed": "integer",
+    "num_predict": "integer",
+}
 _PROTOCOL_KEYS = frozenset(
     {
         "schema_version",
         "primary_model",
         "models",
         "sampling",
+        "option_contract",
+        "recognition_suite",
+        "unknown_option_sentinel",
+        "recognition_invalid_value",
         "request_timeout_seconds",
         "max_tree_private_commit_bytes",
         "minimum_free_disk_bytes_after_pulls",
@@ -211,10 +231,10 @@ def load_protocol(path=PROTOCOL_PATH):
 def validate_protocol(protocol):
     if not isinstance(protocol, dict):
         raise F0Error("F0 protocol must be an object")
-    if protocol.get("schema_version") != "brick.f0.protocol/1":
+    if protocol.get("schema_version") != "brick.f0.protocol/2":
         raise F0Error("unsupported F0 protocol schema")
     if set(protocol) != _PROTOCOL_KEYS:
-        raise F0Error("F0 protocol fields do not match schema version 1")
+        raise F0Error("F0 protocol fields do not match schema version 2")
     models = protocol.get("models")
     if not isinstance(models, list) or len(models) != 3:
         raise F0Error("F0 protocol requires exactly three model entries")
@@ -249,8 +269,29 @@ def validate_protocol(protocol):
     sampling = protocol.get("sampling")
     if sampling != _EXPECTED_SAMPLING:
         raise F0Error(
-            "F0 sampling differs from the version-1 research contract"
+            "F0 sampling differs from the version-2 research contract"
         )
+    if protocol.get("option_contract") != _EXPECTED_OPTION_CONTRACT:
+        raise F0Error(
+            "F0 option contract differs from the version-2 research contract"
+        )
+    if protocol.get("recognition_suite") != "option-recognition-v2":
+        raise F0Error("unsupported option-recognition suite")
+    for field in ("unknown_option_sentinel", "recognition_invalid_value"):
+        value = protocol.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise F0Error(f"{field} must be a nonempty string")
+    if (
+        protocol["unknown_option_sentinel"]
+        in _EXPECTED_OPTION_CONTRACT
+    ):
+        raise F0Error("the unknown-option sentinel collides with a real option")
+    # Every option the probe actually sends must be covered by the contract so
+    # that recognition is proven for the exact production option map.
+    sent_options = set(_EXPECTED_OPTION_CONTRACT)
+    declared = set(sampling) - {"think"}
+    if not declared <= sent_options:
+        raise F0Error("sampling declares options outside the option contract")
     integer_fields = (
         "request_timeout_seconds",
         "max_tree_private_commit_bytes",
@@ -427,6 +468,89 @@ def _seed(protocol_sha256, model_digest, case_id):
     ) & 0x7FFFFFFF
 
 
+_REQUEST_TOP_LEVEL_KEYS = frozenset(
+    {"model", "messages", "tools", "stream", "think", "keep_alive", "options"}
+)
+
+
+def validate_chat_request(payload, protocol):
+    """Fail closed on any request Brick itself has not fully specified.
+
+    F0 v1 relied on the server to reject a malformed option map. Ollama does
+    not promise that, so Brick owns the contract: every request is checked
+    against the frozen protocol *before* it reaches the network, and an
+    unexpected key, type, value, or non-finite number raises rather than
+    silently reaching the model.
+    """
+    sampling = protocol["sampling"]
+    contract = protocol["option_contract"]
+    if not isinstance(payload, dict):
+        raise F0Error("chat request must be an object")
+    if set(payload) != _REQUEST_TOP_LEVEL_KEYS:
+        raise F0Error(
+            "chat request keys do not match the frozen request contract"
+        )
+    if not isinstance(payload["model"], str) or not payload["model"].strip():
+        raise F0Error("chat request model must be a nonempty string")
+    if not isinstance(payload["messages"], list) or not payload["messages"]:
+        raise F0Error("chat request requires at least one message")
+    for message in payload["messages"]:
+        if not isinstance(message, dict) or not isinstance(
+            message.get("role"), str
+        ):
+            raise F0Error("chat request message is malformed")
+    if not isinstance(payload["tools"], list):
+        raise F0Error("chat request tools must be a list")
+    if payload["stream"] is not False:
+        raise F0Error("chat request must set stream to false")
+    if payload["think"] is not sampling["think"]:
+        raise F0Error("chat request think flag differs from the protocol")
+    if not isinstance(payload["keep_alive"], str) or not payload["keep_alive"]:
+        raise F0Error("chat request keep_alive must be a nonempty string")
+    options = payload["options"]
+    if not isinstance(options, dict):
+        raise F0Error("chat request options must be an object")
+    if set(options) != set(contract):
+        missing = sorted(set(contract) - set(options))
+        extra = sorted(set(options) - set(contract))
+        raise F0Error(
+            "chat request option keys do not match the option contract"
+            + (f"; missing={missing}" if missing else "")
+            + (f"; unexpected={extra}" if extra else "")
+        )
+    for key, expected in sorted(contract.items()):
+        value = options[key]
+        if expected == "integer":
+            # type() rather than isinstance() so bool cannot pass as int.
+            if type(value) is not int:
+                raise F0Error(f"option {key} must be an integer")
+        elif expected == "float":
+            if type(value) not in (int, float):
+                raise F0Error(f"option {key} must be a real number")
+            if not math.isfinite(float(value)):
+                raise F0Error(f"option {key} must be finite")
+        else:
+            raise F0Error(f"option {key} has an unsupported contract type")
+    for key in (
+        "temperature",
+        "top_p",
+        "top_k",
+        "min_p",
+        "presence_penalty",
+        "repeat_penalty",
+        "num_ctx",
+    ):
+        if options[key] != sampling[key]:
+            raise F0Error(
+                f"option {key} differs from the frozen sampling policy"
+            )
+    if not 0 <= options["seed"] <= 0x7FFFFFFF:
+        raise F0Error("option seed is outside the reproducible range")
+    if options["num_predict"] < 1:
+        raise F0Error("option num_predict must be positive")
+    return payload
+
+
 def _chat_payload(
     protocol,
     model,
@@ -436,7 +560,7 @@ def _chat_payload(
     num_predict=128,
 ):
     sampling = protocol["sampling"]
-    return {
+    payload = {
         "model": model,
         "messages": copy.deepcopy(messages),
         "tools": copy.deepcopy(tools),
@@ -455,6 +579,7 @@ def _chat_payload(
             "repeat_penalty": sampling["repeat_penalty"],
         },
     }
+    return validate_chat_request(payload, protocol)
 
 
 def _tool_calls(response):
@@ -673,38 +798,138 @@ def run_conformance(client, protocol, model, digest, output_dir):
     }
 
 
-def run_option_validation(client, protocol, model, digest, output_dir):
-    """Prove the backend validates option names instead of ignoring a map."""
-    output_dir = Path(output_dir)
-    sentinel = "brick_f0_unknown_option"
-    payload = _chat_payload(
-        protocol,
-        model,
-        [{"role": "user", "content": "Reply with the word ok."}],
-        [],
-        _seed(_protocol_hash(protocol), digest, "option-validation"),
-        num_predict=4,
-    )
-    payload["options"][sentinel] = 1
-    _write_json(output_dir / "request.json", payload)
+def _recognition_case(client, output_dir, name, payload):
+    """Post one deliberately-shaped payload and record it verbatim."""
+    _write_json(output_dir / f"{name}-request.json", payload)
     response = client.rejected_post("/api/chat", payload)
-    _write_json(output_dir / "response.json", response)
+    _write_json(output_dir / f"{name}-response.json", response)
+    status = response.get("status_code")
     serialized = json.dumps(
         response.get("body"), ensure_ascii=False, sort_keys=True
-    ).casefold()
-    passed = (
-        type(response.get("status_code")) is int
-        and 400 <= response["status_code"] < 500
-        and sentinel in serialized
-        and ("invalid" in serialized or "unknown" in serialized)
     )
+    return {
+        "status_code": status,
+        "is_success": type(status) is int and 200 <= status < 300,
+        "body_text": serialized[:2000],
+    }
+
+
+def run_option_recognition(client, protocol, model, digest, output_dir):
+    """Prove the server recognizes every frozen option name, key by key.
+
+    F0 v1 gated on the server rejecting an *unknown* option name. Ollama does
+    not promise that and 0.32.5 ignores unknown names, so that check tested an
+    assumption the runtime never made. Recognition is instead proven
+    positively: a real option name carrying a deliberately invalid value type
+    must be rejected, while the identical invalid value under an unknown name
+    must be accepted. Only that contrast separates a parsed key from an ignored
+    one, and unlike an output differential it holds at the frozen values --
+    including the neutral ones (``top_p=1.0``, ``min_p=0``,
+    ``repeat_penalty=1.0``) where changing a no-op cannot change any output.
+
+    This proves per-key recognition and the declared value type. It does not
+    claim to prove the numerical semantics of any sampler.
+    """
+    output_dir = Path(output_dir)
+    contract = protocol["option_contract"]
+    sentinel = protocol["unknown_option_sentinel"]
+    invalid = protocol["recognition_invalid_value"]
+    messages = [{"role": "user", "content": "Reply with the word ok."}]
+
+    def valid_payload(case_id):
+        return _chat_payload(
+            protocol,
+            model,
+            messages,
+            [],
+            _seed(_protocol_hash(protocol), digest, case_id),
+            num_predict=4,
+        )
+
+    baseline = _recognition_case(
+        client, output_dir, "baseline", valid_payload("recognition-baseline")
+    )
+
+    keys = {}
+    for key in sorted(contract):
+        payload = copy.deepcopy(valid_payload(f"recognition-{key}"))
+        # Deliberately invalid: bypasses validate_chat_request by construction.
+        payload["options"][key] = invalid
+        case = _recognition_case(client, output_dir, f"option-{key}", payload)
+        body = case["body_text"].casefold()
+        keys[key] = {
+            "expected_type": contract[key],
+            "status_code": case["status_code"],
+            "rejected": not case["is_success"],
+            "body_names_key": key.casefold() in body,
+            "body_states_expected_type": contract[key].casefold() in body,
+            "body_text": case["body_text"],
+        }
+
+    unknown_payload = copy.deepcopy(valid_payload("recognition-unknown"))
+    unknown_payload["options"][sentinel] = invalid
+    unknown = _recognition_case(
+        client, output_dir, "unknown-option", unknown_payload
+    )
+    health = _recognition_case(
+        client, output_dir, "health", valid_payload("recognition-health")
+    )
+
+    rejected = sorted(key for key, item in keys.items() if item["rejected"])
+    accepted = sorted(key for key, item in keys.items() if not item["rejected"])
+    named = sorted(key for key, item in keys.items() if item["body_names_key"])
+    passed = (
+        baseline["is_success"]
+        and health["is_success"]
+        and len(rejected) == len(contract)
+        and not accepted
+    )
+    failure_codes = []
+    if not baseline["is_success"]:
+        failure_codes.append("frozen_option_map_rejected")
+    if accepted:
+        failure_codes.append("option_names_not_recognized")
+    if not health["is_success"]:
+        failure_codes.append("server_unhealthy_after_probe")
     summary = {
-        "schema_version": "brick.f0.option-validation/1",
+        "schema_version": "brick.f0.option-recognition/2",
+        "suite": protocol["recognition_suite"],
         "sentinel_option": sentinel,
+        "invalid_value": invalid,
+        "baseline_accepted": baseline["is_success"],
+        "baseline_status_code": baseline["status_code"],
+        "health_accepted": health["is_success"],
+        "health_status_code": health["status_code"],
+        "recognized_options": rejected,
+        "unrecognized_options": accepted,
+        "options_named_in_error": named,
+        "options": keys,
+        "unknown_option_status_code": unknown["status_code"],
+        "unknown_option_accepted": unknown["is_success"],
+        "unknown_option_body": unknown["body_text"],
         "passed": passed,
+        "failure_codes": failure_codes,
         "interpretation": (
-            "The server rejects an undeclared option name; acceptance of the "
-            "frozen option map is therefore not arbitrary-map acceptance."
+            "Every frozen option name was recognized: each was rejected when "
+            "given an invalid value type, while the same invalid value under "
+            "an unknown name was accepted. Recognition and declared type are "
+            "established for the exact production option map; the numerical "
+            "behavior of each sampler is not claimed."
+            if passed
+            else (
+                "Option recognition failed. Unrecognized options: "
+                + (", ".join(accepted) if accepted else "none")
+                + ". Failure codes: "
+                + (", ".join(failure_codes) if failure_codes else "none")
+                + "."
+            )
+        ),
+        "unknown_option_note": (
+            "Unknown option names are ignored by this build rather than "
+            "rejected. That is recorded as a diagnostic typo hazard and does "
+            "not gate the run."
+            if unknown["is_success"]
+            else "This build also rejects unknown option names."
         ),
     }
     _write_json(output_dir / "summary.json", summary)
@@ -1042,6 +1267,84 @@ def _loaded_model_summary(ps, model, digest, minimum_context):
     }
 
 
+_RUNNER_IMAGE_TOKENS = ("ollama", "llama")
+
+
+def _attest_inference_runners(samples, listener_pid):
+    """Attest the identity and architecture of the real inference runners.
+
+    F0 v1 only checked that *some* descendant whose image name looked like a
+    runner existed. That cannot distinguish a native ARM64 runner from an
+    x64 one running under emulation beneath an ARM64 listener, which is the
+    exact claim the gate exists to establish. Every observed runner is now
+    identified by full path, SHA-256 and PE machine, and its identity must not
+    change while one model is probed.
+    """
+    if not isinstance(samples, list) or not samples:
+        return {
+            "schema_version": "brick.f0.runner-attestation/1",
+            "observed": False,
+            "passed": False,
+            "runners": [],
+            "failure_codes": ["no_process_samples"],
+        }
+    seen = {}
+    for sample in samples:
+        for process in sample.get("processes", []) or []:
+            pid = process.get("pid")
+            if pid == listener_pid:
+                continue
+            image = str(process.get("image", "")).casefold()
+            if not any(token in image for token in _RUNNER_IMAGE_TOKENS):
+                continue
+            identity = (
+                process.get("path"),
+                process.get("sha256"),
+                (process.get("pe_machine") or {}).get("value"),
+                (process.get("pe_machine") or {}).get("name"),
+            )
+            seen.setdefault(pid, {"image": image, "identities": []})
+            if identity not in seen[pid]["identities"]:
+                seen[pid]["identities"].append(identity)
+    runners = []
+    failure_codes = []
+    for pid in sorted(seen):
+        entry = seen[pid]
+        identities = entry["identities"]
+        stable = len(identities) == 1
+        path, sha256, machine_value, machine_name = identities[0]
+        native = machine_value == f0_windows.ARM64_PE_MACHINE
+        hashed = bool(_DIGEST.fullmatch(str(sha256 or "")))
+        runners.append(
+            {
+                "pid": pid,
+                "image": entry["image"],
+                "path": path,
+                "sha256": sha256,
+                "pe_machine": {"value": machine_value, "name": machine_name},
+                "identity_stable": stable,
+                "native_arm64": native,
+                "hashed": hashed,
+                "observed_identities": len(identities),
+            }
+        )
+        if not stable:
+            failure_codes.append(f"runner_identity_changed:{pid}")
+        if not native:
+            failure_codes.append(f"runner_not_arm64:{pid}")
+        if not hashed:
+            failure_codes.append(f"runner_not_hashed:{pid}")
+    if not runners:
+        failure_codes.append("no_inference_runner_observed")
+    return {
+        "schema_version": "brick.f0.runner-attestation/1",
+        "observed": bool(runners),
+        "passed": bool(runners) and not failure_codes,
+        "runners": runners,
+        "failure_codes": sorted(set(failure_codes)),
+    }
+
+
 def _probe_one_model(
     client,
     protocol,
@@ -1067,12 +1370,12 @@ def _probe_one_model(
     monitor.start()
     memory = None
     try:
-        option_validation = run_option_validation(
+        option_recognition = run_option_recognition(
             client,
             protocol,
             model,
             before["digest"],
-            output_dir / "option-validation",
+            output_dir / "option-recognition",
         )
         conformance = run_conformance(
             client,
@@ -1140,38 +1443,31 @@ def _probe_one_model(
             for sample in samples
         )
     )
-    runner_observed = (
-        type(memory.get("peak_process_count")) is int
-        and memory["peak_process_count"] >= 2
-        and isinstance(samples, list)
-        and any(
-            any(
-                process.get("pid") != listener_pid
-                and any(
-                    token in str(process.get("image", "")).casefold()
-                    for token in ("ollama", "llama")
-                )
-                for process in sample.get("processes", [])
-            )
-            for sample in samples
-        )
-    )
+    runner_attestation = _attest_inference_runners(samples, listener_pid)
+    runner_observed = runner_attestation["observed"]
     memory_passed = (
         memory.get("error") is None
         and type(memory_peak) is int
         and memory_peak <= protocol["max_tree_private_commit_bytes"]
         and listener_identity_passed
         and runner_observed
+        and runner_attestation["passed"]
     )
     return {
-        "schema_version": "brick.f0.model-summary/1",
+        "schema_version": "brick.f0.model-summary/2",
         "tag": model,
         "role": model_spec["role"],
         "digest": before["digest"],
         "digest_stable": digest_stable,
         "metadata_passed": metadata["passed"],
         "loaded_model": loaded,
-        "option_validation_passed": option_validation["passed"],
+        "option_recognition_passed": option_recognition["passed"],
+        "option_recognition_failure_codes": option_recognition[
+            "failure_codes"
+        ],
+        "unknown_option_accepted": option_recognition[
+            "unknown_option_accepted"
+        ],
         "native_tools_passed": conformance["passed"],
         "runtime": runtime,
         "minimum_eval_tps": minimum_tps,
@@ -1183,12 +1479,13 @@ def _probe_one_model(
             ],
             "listener_identity_passed": listener_identity_passed,
             "runner_observed": runner_observed,
+            "runner_attestation": runner_attestation,
             "passed": memory_passed,
         },
         "passed": (
             digest_stable
             and metadata["passed"]
-            and option_validation["passed"]
+            and option_recognition["passed"]
             and conformance["passed"]
             and throughput_passed
             and memory_passed
@@ -1270,41 +1567,11 @@ def _pull_log_succeeded(path):
 def _verify_passing_report(run_dir, summary):
     """Recompute pass eligibility from committed evidence files."""
     run_dir = Path(run_dir)
-    protocol = _report_json(run_dir, "protocol.json")
-    validate_protocol(protocol)
-    protocol_digest = _protocol_hash(protocol)
-    try:
-        recorded_protocol_digest = (
-            run_dir / "protocol.sha256"
-        ).read_text(encoding="ascii").strip()
-    except (OSError, UnicodeError) as exc:
-        raise F0Error("F0 protocol digest is unreadable") from exc
-    _require_evidence(
-        recorded_protocol_digest == protocol_digest
-        and summary.get("protocol_sha256") == protocol_digest,
-        "protocol digest mismatch",
-    )
-
+    protocol = _verify_common_identity(run_dir, summary)
     run = _report_json(run_dir, "run.json")
     _require_evidence(
-        run.get("schema_version") == "brick.f0.run/1"
-        and run.get("run_id") == summary.get("run_id")
-        and run.get("run_id") == run_dir.name
-        and run.get("pull_requested") is True,
+        run.get("pull_requested") is True,
         "run identity or pull attestation is invalid",
-    )
-    repository = _report_json(run_dir, "repository.json")
-    _require_evidence(
-        repository.get("schema_version") == "brick.f0.repository/1"
-        and repository.get("clean") is True
-        and isinstance(repository.get("commit"), str)
-        and bool(re.fullmatch(r"[0-9a-f]{40,64}", repository["commit"]))
-        and bool(
-            _DIGEST.fullmatch(
-                str(repository.get("behavior_tree_sha256", ""))
-            )
-        ),
-        "repository was not a clean pinned commit",
     )
 
     environment = _report_json(run_dir, "environment.json")
@@ -1413,7 +1680,7 @@ def _verify_passing_report(run_dir, summary):
             and after["digest"] == digest
             and model_summary.get("digest_stable") is True
             and model_summary.get("metadata_passed") is True
-            and model_summary.get("option_validation_passed") is True
+            and model_summary.get("option_recognition_passed") is True
             and model_summary.get("native_tools_passed") is True
             and model_summary.get("throughput_passed") is True
             and model_summary.get("memory", {}).get("passed") is True
@@ -1440,15 +1707,62 @@ def _verify_passing_report(run_dir, summary):
         metadata = _report_json(
             run_dir, f"models/{slug}/metadata.json"
         )
-        option_validation = _report_json(
-            run_dir, f"models/{slug}/option-validation/summary.json"
+        recognition = _report_json(
+            run_dir, f"models/{slug}/option-recognition/summary.json"
         )
         _require_evidence(
             metadata.get("passed") is True
             and metadata.get("digest") == digest
             and metadata.get("tool_capability_advertised") is True
-            and option_validation.get("passed") is True,
-            f"model metadata or option validation failed for {tag}",
+            and recognition.get("passed") is True,
+            f"model metadata or option recognition failed for {tag}",
+        )
+        # Recomputed from the recognition record rather than trusted: every
+        # frozen option name must have been individually recognized, and the
+        # server must have been healthy before and after the invalid probes.
+        contract_keys = sorted(protocol["option_contract"])
+        _require_evidence(
+            recognition.get("schema_version")
+            == "brick.f0.option-recognition/2"
+            and recognition.get("suite") == protocol["recognition_suite"]
+            and recognition.get("baseline_accepted") is True
+            and recognition.get("health_accepted") is True
+            and recognition.get("unrecognized_options") == []
+            and sorted(recognition.get("recognized_options") or [])
+            == contract_keys
+            and recognition.get("failure_codes") == []
+            and isinstance(recognition.get("options"), dict)
+            and sorted(recognition["options"]) == contract_keys
+            and all(
+                recognition["options"][key].get("rejected") is True
+                and recognition["options"][key].get("expected_type")
+                == protocol["option_contract"][key]
+                for key in contract_keys
+            ),
+            f"option recognition evidence is incomplete for {tag}",
+        )
+        attestation = (
+            model_summary.get("memory", {}).get("runner_attestation") or {}
+        )
+        runners = attestation.get("runners")
+        _require_evidence(
+            attestation.get("schema_version")
+            == "brick.f0.runner-attestation/1"
+            and attestation.get("observed") is True
+            and attestation.get("passed") is True
+            and attestation.get("failure_codes") == []
+            and isinstance(runners, list)
+            and bool(runners)
+            and all(
+                runner.get("native_arm64") is True
+                and runner.get("identity_stable") is True
+                and runner.get("hashed") is True
+                and bool(_DIGEST.fullmatch(str(runner.get("sha256", ""))))
+                and (runner.get("pe_machine") or {}).get("value")
+                == f0_windows.ARM64_PE_MACHINE
+                for runner in runners
+            ),
+            f"inference-runner attestation failed for {tag}",
         )
         for case in (
             "single_typed",
@@ -1620,13 +1934,288 @@ def verify_report(run_dir):
     summary = json.loads(
         (run_dir / "summary.json").read_text(encoding="utf-8")
     )
-    if summary.get("schema_version") != SUMMARY_SCHEMA:
+    schema = summary.get("schema_version")
+    status = summary.get("overall_status")
+    if schema == SUMMARY_SCHEMA:
+        if status == "pass":
+            _verify_passing_report(run_dir, summary)
+        elif status == "fail":
+            _verify_failed_report(run_dir, summary)
+        else:
+            raise F0Error("F0 summary status is unsupported")
+    elif schema == LEGACY_SUMMARY_SCHEMA:
+        _verify_legacy_report(run_dir, summary)
+    else:
         raise F0Error("F0 summary schema is unsupported")
-    if summary.get("overall_status") == "pass":
-        _verify_passing_report(run_dir, summary)
-    elif summary.get("overall_status") != "fail":
-        raise F0Error("F0 summary status is unsupported")
     return summary
+
+
+def _verify_common_identity(run_dir, summary, validate=True):
+    """Recompute the run, protocol and repository identity of any report."""
+    run_dir = Path(run_dir)
+    protocol = _report_json(run_dir, "protocol.json")
+    if validate:
+        validate_protocol(protocol)
+    protocol_digest = _protocol_hash(protocol)
+    try:
+        recorded = (run_dir / "protocol.sha256").read_text(
+            encoding="ascii"
+        ).strip()
+    except (OSError, UnicodeError) as exc:
+        raise F0Error("F0 protocol digest is unreadable") from exc
+    _require_evidence(
+        recorded == protocol_digest
+        and summary.get("protocol_sha256") == protocol_digest,
+        "protocol digest mismatch",
+    )
+    run = _report_json(run_dir, "run.json")
+    _require_evidence(
+        run.get("schema_version") == "brick.f0.run/1"
+        and run.get("run_id") == summary.get("run_id")
+        and run.get("run_id") == run_dir.name,
+        "run identity is invalid",
+    )
+    repository = _report_json(run_dir, "repository.json")
+    _require_evidence(
+        repository.get("schema_version") == "brick.f0.repository/1"
+        and repository.get("clean") is True
+        and isinstance(repository.get("commit"), str)
+        and bool(re.fullmatch(r"[0-9a-f]{40,64}", repository["commit"]))
+        and bool(
+            _DIGEST.fullmatch(
+                str(repository.get("behavior_tree_sha256", ""))
+            )
+        ),
+        "repository was not a clean pinned commit",
+    )
+    return protocol
+
+
+def _verify_failed_report(run_dir, summary):
+    """Semantically verify a *failed* report instead of trusting its status.
+
+    A failed bundle is evidence too: it must be internally consistent, its
+    identity must recompute, and every declared failure must be substantiated
+    by the underlying per-model records. Without this, a failed run could
+    misattribute an instrument fault to a model or hide a fault entirely.
+    """
+    run_dir = Path(run_dir)
+    protocol = _verify_common_identity(run_dir, summary)
+    failures = summary.get("failures")
+    _require_evidence(
+        isinstance(failures, list) and bool(failures),
+        "a failed F0 report must record at least one failure",
+    )
+    for axis in ("environment_status", "storage_status"):
+        _require_evidence(
+            summary.get(axis) in {"pass", "fail"},
+            f"{axis} is not a recognized status",
+        )
+    environment = _report_json(run_dir, "environment.json")
+    _require_evidence(
+        (environment.get("passed") is True)
+        == (summary.get("environment_status") == "pass"),
+        "environment status disagrees with the environment record",
+    )
+    if summary.get("environment_status") == "pass":
+        storage = _report_json(run_dir, "storage/summary.json")
+        _require_evidence(
+            (storage.get("passed") is True)
+            == (summary.get("storage_status") == "pass"),
+            "storage status disagrees with the storage record",
+        )
+    primary = summary.get("primary")
+    _require_evidence(
+        isinstance(primary, dict)
+        and primary.get("tag") == protocol["primary_model"]
+        and primary.get("role") == "primary",
+        "failed report does not identify the primary model",
+    )
+    recorded = [primary] + list(summary.get("descriptive_models") or [])
+    any_failure = False
+    for model_summary in recorded:
+        tag = model_summary.get("tag")
+        _require_evidence(
+            isinstance(tag, str) and bool(tag),
+            "a recorded model summary has no tag",
+        )
+        expected = "eligible" if model_summary.get("passed") else "ineligible"
+        _require_evidence(
+            model_summary.get("status") == expected,
+            f"model status disagrees with its passed flag for {tag}",
+        )
+        if not model_summary.get("passed"):
+            any_failure = True
+            # A failed model must say why: either an execution error, or at
+            # least one sub-check recorded as not passing. Silence would let a
+            # runner fault masquerade as a model result.
+            substantiated = bool(model_summary.get("error")) or any(
+                model_summary.get(field) is False
+                for field in (
+                    "digest_stable",
+                    "metadata_passed",
+                    "option_recognition_passed",
+                    "native_tools_passed",
+                    "throughput_passed",
+                )
+            ) or (model_summary.get("memory", {}).get("passed") is False)
+            _require_evidence(
+                substantiated,
+                f"failed model {tag} records no substantiating cause",
+            )
+        on_disk = _report_json(
+            run_dir, f"models/{_safe_model_slug(tag)}/summary.json"
+        )
+        _require_evidence(
+            on_disk.get("tag") == tag
+            and on_disk.get("passed") == model_summary.get("passed"),
+            f"model summary on disk disagrees with the report for {tag}",
+        )
+    # A run can legitimately fail without any failing component -- an
+    # unrequested pull, an exhausted disk, or a late instrument exception are
+    # run-level causes. The nonempty `failures` list asserted above is the
+    # authority for why; what must additionally hold is that any structured
+    # code is well-formed and attributed to a known domain, so a protocol
+    # fault is never silently filed as a model result.
+    codes = summary.get("failure_codes")
+    _require_evidence(
+        isinstance(codes, list),
+        "a failed F0 report must carry a structured failure-code list",
+    )
+    known_domains = {
+        "environment",
+        "storage",
+        "instrument",
+        "protocol_contract",
+        "model_runtime",
+    }
+    for code in codes:
+        _require_evidence(
+            isinstance(code, dict)
+            and code.get("domain") in known_domains
+            and isinstance(code.get("code"), str)
+            and bool(code["code"]),
+            "a structured failure code is malformed or misattributed",
+        )
+    _require_evidence(
+        summary.get("failure_domains")
+        == sorted({code["domain"] for code in codes}),
+        "recorded failure domains disagree with the failure codes",
+    )
+    if any_failure:
+        _require_evidence(
+            bool(codes),
+            "a failed model produced no structured failure code",
+        )
+
+
+def _verify_legacy_report(run_dir, summary):
+    """Verify integrity and identity of a pre-v2 bundle.
+
+    The v1 candidate's failed bundle is immutable retained diagnostic evidence.
+    Its protocol predates the option-recognition contract, so it is verified
+    for hash integrity, identity and internal status consistency only. It is
+    never eligible to support a release.
+    """
+    run_dir = Path(run_dir)
+    _verify_common_identity(run_dir, summary, validate=False)
+    protocol = _report_json(run_dir, "protocol.json")
+    _require_evidence(
+        protocol.get("schema_version") == "brick.f0.protocol/1",
+        "legacy verification requires a version-1 protocol record",
+    )
+    _require_evidence(
+        summary.get("overall_status") in {"pass", "fail"},
+        "legacy F0 summary status is unsupported",
+    )
+    _require_evidence(
+        summary.get("overall_status") == "fail",
+        "a version-1 bundle can never establish a passing gate",
+    )
+
+
+def _classify_failures(environment, storage, disk, models, pull):
+    """Attribute each failure to a domain so causes are never conflated.
+
+    A protocol-contract failure means the pinned runtime does not honour a
+    contract Brick declared; a model/runtime failure means the model itself did
+    not meet a measured floor. Collapsing the two is how a runner or transport
+    fault becomes a false statement about a model.
+    """
+    codes = []
+
+    def add(domain, code, detail=None, evidence=None):
+        entry = {"domain": domain, "code": code}
+        if detail:
+            entry["detail"] = detail
+        if evidence:
+            entry["evidence"] = evidence
+        codes.append(entry)
+
+    if environment is None:
+        add("environment", "environment_not_probed")
+    elif not environment.get("passed"):
+        for failure in environment.get("failures") or []:
+            add("environment", "environment_requirement_failed", failure,
+                "environment.json")
+    if storage is None:
+        add("storage", "storage_spike_not_run")
+    elif not storage.get("passed"):
+        add("storage", "marker_last_storage_failed", None,
+            "storage/summary.json")
+    if not pull:
+        add("instrument", "model_pull_not_requested")
+    if disk is not None and not disk.get("passed"):
+        add("instrument", "free_disk_below_minimum", None,
+            "ollama/disk-after-pulls.json")
+    for model in models or []:
+        tag = model.get("tag")
+        slug = _safe_model_slug(tag) if isinstance(tag, str) else "unknown"
+        base = f"models/{slug}/summary.json"
+        if model.get("passed"):
+            continue
+        if model.get("error"):
+            add("instrument", "model_probe_raised", model["error"], base)
+        if model.get("unload_error"):
+            add("instrument", "model_unload_failed",
+                model["unload_error"], base)
+        if model.get("option_recognition_passed") is False:
+            add(
+                "protocol_contract",
+                "option_recognition_failed",
+                "; ".join(model.get("option_recognition_failure_codes") or [])
+                or None,
+                f"models/{slug}/option-recognition/summary.json",
+            )
+        if model.get("native_tools_passed") is False:
+            add("protocol_contract", "native_tool_transport_failed", None,
+                f"models/{slug}/conformance")
+        if model.get("metadata_passed") is False:
+            add("instrument", "model_metadata_failed", None,
+                f"models/{slug}/metadata.json")
+        if model.get("digest_stable") is False:
+            add("instrument", "model_digest_changed", None, base)
+        if model.get("throughput_passed") is False:
+            runtime = model.get("runtime") or {}
+            add(
+                "model_runtime",
+                "throughput_below_floor",
+                f"median_eval_tps={runtime.get('median_eval_tps')} "
+                f"minimum={model.get('minimum_eval_tps')}",
+                f"models/{slug}/runtime",
+            )
+        memory = model.get("memory") or {}
+        if memory.get("passed") is False:
+            attestation = memory.get("runner_attestation") or {}
+            if attestation.get("failure_codes"):
+                add("instrument", "inference_runner_attestation_failed",
+                    "; ".join(attestation["failure_codes"]), base)
+            elif memory.get("listener_identity_passed") is False:
+                add("instrument", "listener_identity_unstable", None, base)
+            else:
+                add("model_runtime", "process_memory_exceeded_ceiling",
+                    f"peak={memory.get('peak_private_commit_bytes')}", base)
+    return codes
 
 
 def run_probe(
@@ -1777,7 +2366,7 @@ def run_probe(
         for spec in ordered:
             if spec["tag"] in pull_errors:
                 result = {
-                    "schema_version": "brick.f0.model-summary/1",
+                    "schema_version": "brick.f0.model-summary/2",
                     "tag": spec["tag"],
                     "role": spec["role"],
                     "passed": False,
@@ -1785,7 +2374,7 @@ def run_probe(
                 }
             elif primary_failed:
                 result = {
-                    "schema_version": "brick.f0.model-summary/1",
+                    "schema_version": "brick.f0.model-summary/2",
                     "tag": spec["tag"],
                     "role": spec["role"],
                     "passed": False,
@@ -1835,7 +2424,7 @@ def run_probe(
                     )
                 except Exception as exc:
                     result = {
-                        "schema_version": "brick.f0.model-summary/1",
+                        "schema_version": "brick.f0.model-summary/2",
                         "tag": spec["tag"],
                         "role": spec["role"],
                         "passed": False,
@@ -1884,6 +2473,9 @@ def run_probe(
         ),
         None,
     )
+    failure_codes = _classify_failures(
+        environment, storage, disk_after_pulls, models, pull
+    )
     overall = bool(
         environment
         and environment.get("passed")
@@ -1920,6 +2512,8 @@ def run_probe(
             model for model in models if model.get("role") == "descriptive"
         ],
         "failures": failures,
+        "failure_codes": failure_codes,
+        "failure_domains": sorted({code["domain"] for code in failure_codes}),
     }
     _write_json(run_dir / "summary.json", summary)
     _publish_report(run_dir)

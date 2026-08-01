@@ -64,6 +64,10 @@ class FakeMonitor:
                             "pid": self.pid + 1,
                             "parent_pid": self.pid,
                             "image": "ollama-runner.exe",
+                            "path": r"C:\fake\ollama-runner.exe",
+                            "sha256": "b" * 64,
+                            "pe_machine": {"value": 0xAA64, "name": "arm64"},
+                            "identity_error": None,
                             "private_commit_bytes": 1,
                             "working_set_bytes": 1,
                         },
@@ -202,7 +206,48 @@ class FakeClient:
         return tool_response("read_nonce", {"key": "alpha"}, model)
 
     def rejected_post(self, path, payload):
+        """Mirror the measured Ollama 0.32.5 option contract.
+
+        Unknown option names are ignored and succeed; a real option name given
+        an invalid value type is rejected with a key-specific 500. That
+        contrast is what proves per-key recognition.
+        """
         assert path == "/api/chat"
+        protocol = f0_probe.load_protocol()
+        contract = protocol["option_contract"]
+        sentinel = protocol["unknown_option_sentinel"]
+        invalid = protocol["recognition_invalid_value"]
+        options = payload["options"]
+        if sentinel in options:
+            return {
+                "status_code": 200,
+                "body": {
+                    "model": payload["model"],
+                    "done": True,
+                    "message": {"role": "assistant", "content": "ok"},
+                },
+            }
+        for key in sorted(contract):
+            if options.get(key) == invalid:
+                expected = (
+                    "float32" if contract[key] == "float" else "integer"
+                )
+                return {
+                    "status_code": 500,
+                    "body": {
+                        "error": f'option "{key}" must be of type {expected}'
+                    },
+                }
+        return {
+            "status_code": 200,
+            "body": {
+                "model": payload["model"],
+                "done": True,
+                "message": {"role": "assistant", "content": "ok"},
+            },
+        }
+
+    def _legacy_rejected_post(self, path, payload):
         unknown = "brick_f0_unknown_option"
         assert unknown in payload["options"]
         return {
@@ -630,7 +675,11 @@ def test_report_publish_rereads_prepared_manifest(tmp_path, monkeypatch):
     monkeypatch.setattr(f0_probe, "_load_report_manifest", observed)
     f0_probe._publish_report(run_dir)
     assert calls["count"] >= 2
-    f0_probe.verify_report(run_dir)
+    # Publication mechanics only. Semantic verification of a failed report is
+    # covered separately against a complete bundle, so this skeletal fixture
+    # asserts just the marker and manifest integrity.
+    assert (run_dir / "COMMITTED").is_file()
+    f0_probe._validate_report_manifest(run_dir, real_load(run_dir))
 
 
 def test_corrupt_prepared_report_never_gets_commit_marker(
@@ -679,7 +728,8 @@ def test_report_publish_retries_sharing_violation(
     monkeypatch.setattr(f0_probe, "_load_report_manifest", flaky)
     f0_probe._publish_report(run_dir)
     assert calls["count"] >= 4
-    f0_probe.verify_report(run_dir)
+    assert (run_dir / "COMMITTED").is_file()
+    f0_probe._validate_report_manifest(run_dir, real_load(run_dir))
 
 
 def test_late_probe_exception_can_never_leave_overall_pass(
@@ -815,3 +865,80 @@ def test_windows_ctypes_smoke_current_process_and_fixed_volume(tmp_path):
     sample = f0_windows.sample_process_tree(os.getpid())
     assert os.getpid() in sample["pids"]
     assert sample["processes"]
+
+
+def passing_mock_run(tmp_path, run_id):
+    """Produce one committed, verified passing report from the offline mocks."""
+    run_dir, summary = f0_probe.run_probe(
+        tmp_path,
+        client_factory=FakeClient,
+        environment_probe=fake_environment,
+        repository_probe=fake_repository,
+        storage_runner=fake_storage,
+        monitor_factory=FakeMonitor,
+        processor_probe=lambda _path: "NAME ID SIZE PROCESSOR\nfake",
+        listener_probe=fake_listener,
+        run_id=run_id,
+        pull=True,
+    )
+    assert summary["overall_status"] == "pass"
+    return run_dir, summary
+
+
+def model_summary_path(run_dir, summary):
+    slug = f0_probe._safe_model_slug(summary["primary"]["tag"])
+    return run_dir / "models" / slug / "summary.json"
+
+
+def rewrite_model_summary(run_dir, summary, mutate):
+    """Tamper the on-disk model summary the verifier actually reads."""
+    path = model_summary_path(run_dir, summary)
+    record = json.loads(path.read_text(encoding="utf-8"))
+    mutate(record)
+    path.write_text(json.dumps(record), encoding="utf-8")
+
+
+def test_passing_verifier_rejects_a_non_arm64_inference_runner(tmp_path):
+    """Verification must recompute runner architecture, not trust the summary.
+
+    `_verify_passing_report` is called directly so the semantic assertion is
+    exercised rather than the manifest hash check that would fire first.
+    """
+    run_dir, summary = passing_mock_run(tmp_path, "attestation-tamper")
+
+    def mutate(record):
+        runner = record["memory"]["runner_attestation"]["runners"][0]
+        runner["native_arm64"] = False
+        runner["pe_machine"] = {
+            "value": f0_windows.AMD64_PE_MACHINE,
+            "name": "amd64",
+        }
+
+    rewrite_model_summary(run_dir, summary, mutate)
+    with pytest.raises(f0_probe.F0Error, match="runner attestation failed"):
+        f0_probe._verify_passing_report(run_dir, copy.deepcopy(summary))
+
+
+def test_passing_verifier_rejects_an_unrecognized_option(tmp_path):
+    """A model cannot be eligible if a frozen option name went unrecognized."""
+    run_dir, summary = passing_mock_run(tmp_path, "recognition-tamper")
+    slug = f0_probe._safe_model_slug(summary["primary"]["tag"])
+    path = run_dir / "models" / slug / "option-recognition" / "summary.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record["unrecognized_options"] = ["presence_penalty"]
+    record["options"]["presence_penalty"]["rejected"] = False
+    path.write_text(json.dumps(record), encoding="utf-8")
+    with pytest.raises(f0_probe.F0Error, match="option recognition"):
+        f0_probe._verify_passing_report(run_dir, copy.deepcopy(summary))
+
+
+def test_passing_verifier_rejects_a_missing_runner_attestation(tmp_path):
+    """A v1-shaped model summary must not satisfy the v2 verifier."""
+    run_dir, summary = passing_mock_run(tmp_path, "attestation-absent")
+    rewrite_model_summary(
+        run_dir, summary, lambda record: record["memory"].pop(
+            "runner_attestation"
+        )
+    )
+    with pytest.raises(f0_probe.F0Error, match="runner attestation failed"):
+        f0_probe._verify_passing_report(run_dir, copy.deepcopy(summary))

@@ -17,6 +17,72 @@ that the research instrument is valid or that any measured effect exists.
 Work toward `v0.4.0` is not a release. The required native Windows 11 ARM64
 Lenovo F0 evidence is pending.
 
+**F0 was executed once on the native Lenovo from candidate `e4dd167` and
+failed.** Run `f0-20260801T020325Z-5f948e97`, archive SHA-256
+`9FEDF657AF259578E5C03B45610D4E3188D009F1CE194B8591C3A60E8BE6D7F5`. The
+environment, the 200-cycle marker-last storage spike, all three model pulls, 4B
+metadata and digest stability, 4B native tool conformance (3/3), 4B warm
+throughput (median 23.00 tok/s against a 5 tok/s floor) and 4B process memory
+(6.45 GiB against a 28 GiB ceiling) all passed. The sole failure was protocol
+v1's requirement that Ollama reject an unknown option name with a 4xx client
+error. Ollama does not promise that and 0.32.5 returned 200, so the gate failed
+on correct server behavior rather than on any defect in the machine, the model or
+the research design. That bundle stays immutable and failed; the gate was
+corrected and versioned instead of repaired or waived.
+
+### Added
+
+- F0 protocol v2 (`brick.f0.protocol/2`) with an explicit `option_contract`
+  declaring the exact permitted option names and value types, a named
+  `option-recognition-v2` suite, and a recorded unknown-option sentinel.
+- Per-key option recognition replacing unknown-name rejection as the eligibility
+  rule. Each frozen option name is sent with a deliberately invalid value type
+  and must be rejected, while the same invalid value under an unknown name must
+  be accepted. Only that contrast separates a parsed key from an ignored one, and
+  unlike a generated-output differential it discriminates at the frozen values —
+  including the neutral `top_p=1.0`, `min_p=0` and `repeat_penalty=1.0`, where
+  changing a no-op cannot change any output. Both 4xx and 5xx are accepted for the
+  invalid probe and the exact status, body, offending key and expected type are
+  recorded, followed by a valid request proving the server stayed healthy.
+- Brick-owned fail-closed chat-request validation (`validate_chat_request`)
+  enforcing exact top-level and option keys, exact types with booleans rejected
+  as integers, finite numbers, the exact frozen sampling values, `think=false`,
+  `stream=false`, and a reproducible seed range, all before any HTTP request.
+- Inference-runner attestation. Every observed Ollama model-runner descendant is
+  now identified by full executable path, SHA-256 and PE architecture, must be
+  native ARM64, and must keep a stable identity for the duration of a model
+  probe. Attesting only the listener could not distinguish a native runner from
+  an x64 runner under emulation, which is the exact claim the gate exists to
+  establish. Executable identities are cached per path so hashing does not repeat
+  on every 0.25-second sample.
+- Structured, domain-attributed failure codes (`environment`, `storage`,
+  `instrument`, `protocol_contract`, `model_runtime`) recorded on every summary
+  with evidence paths, so a protocol-contract or runner fault is never recorded
+  as a statement about a model.
+- Semantic verification of *failed* reports. Identity recomputes, component
+  statuses must agree with their underlying records, every failing model must
+  record a substantiating cause, and every structured failure code must be
+  well-formed and attributed to a known domain.
+- Backward verification of protocol v1 bundles for hash integrity and identity
+  only, so the immutable failed v1 evidence stays verifiable while never being
+  able to establish a passing gate.
+- `tests/test_f0_protocol_v2.py` covering the request contract, per-key
+  recognition, the diagnostic-only status of unknown-name acceptance, runner
+  attestation including emulated-x64 and identity-change rejection, failure
+  attribution, and both verification paths.
+
+### Fixed
+
+- `option-validation/summary.json` emitted a static interpretation string
+  asserting that the server rejects unknown option names regardless of outcome.
+  Alongside `passed: false` it stated the opposite of what happened, so any
+  reader taking the prose without the boolean drew the inverted conclusion.
+  Interpretation text is now conditional on the result and names the offending
+  options.
+- `verify_report` recomputed eligibility only for passing reports and returned
+  the stored summary for failed ones, so a failed bundle was echoed rather than
+  verified.
+
 ### Changed
 
 - Replaced the superseded S0–S18/G0–P4 execution taxonomy with the audited
