@@ -14,6 +14,40 @@ that the research instrument is valid or that any measured effect exists.
 
 ## [Unreleased]
 
+S1R is in progress. It is not released and no gate has passed.
+
+### Added
+
+- `harness/schema.py`, executable tool-argument schemas. The released registry
+  described parameters as prose -- `{"name": ("a date string", True)}` -- and
+  validated only that required keys were present, so `{"count": "seven"}` and
+  `{"count": true}` both reached the executor. The resulting type error surfaced
+  as an executor exception, which is recorded on a different status axis than a
+  model error, so a malformed argument could be misattributed as an instrument
+  fault. One `ToolSchema` now yields, by derivation rather than duplication:
+  validation of an argument mapping, the Ollama native function-call schema, and
+  the prompt documentation. Deriving all three from one object is the point:
+  prompt text that disagrees with the validator teaches a contract the runtime
+  will reject, and a native schema that disagrees with it lets the server accept
+  what Brick refuses.
+- Validation is closed by construction. Unknown properties are rejected because
+  `additionalProperties` defaults to false; `bool` never satisfies `integer` or
+  `number` despite Python's `bool` subclassing `int`; `int` satisfies `number`
+  but a float never satisfies `integer`; non-finite numbers are refused; string
+  patterns are anchored so a prefix cannot pass; and a string is never treated as
+  an array of characters. Every constraint failure is reported rather than only
+  the first, so one exchange conveys the whole contract, and problems are emitted
+  in a deterministic order because they become immutable attempt evidence.
+- Supported constraints are a deliberate JSON Schema subset: enums, object
+  properties/required/additionalProperties, array items with bounds and
+  uniqueness, string length/pattern/format, and numeric
+  minimum/maximum/exclusive bounds/multipleOf. Formats are `date`, `time`,
+  `date-time`, `email` and `identifier`. Accepting arbitrary JSON Schema would
+  mean shipping a general validator whose behaviour cannot be enumerated in
+  tests.
+- A malformed schema raises `SchemaError` at definition rather than at call
+  time, since a schema defect is a developer error, not a model error.
+
 ### Changed
 
 - **The estimand decision is made and locked: all 11 families, as written.**
