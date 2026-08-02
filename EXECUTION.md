@@ -106,7 +106,12 @@ were satisfied and `v0.5.0` is released.
 
 **S1R is released as `v0.6.0`.** Every item in its exit gate has passing tests:
 parser 33, schema 50, semantic-value 6, memory 36, completion 35, truncation 7,
-timeout 3, executor 31. B0 has not started.
+timeout 3, executor 31.
+
+**B0 is released as `v0.7.0`.** Gate coverage: tenant 8, approval 13,
+concurrency 2, expiry 3, idempotency 2, ambiguous-delivery 7, audit 4,
+no-network 3, plus a generic-package purity scan over 55 files in 7 package
+roots. S5 has not started.
 `v0.4.0` and the S4 candidate record no benchmark effect.
 
 **Benchmark host, verified eligible:**

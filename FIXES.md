@@ -4,7 +4,7 @@ This file maps known implementation defects to the active release sequence in
 [`PROJECT_SETUP.md`](PROJECT_SETUP.md). It does not define a second gate
 taxonomy.
 
-The latest release is `v0.6.0` (S1R repaired runtime), preceded by `v0.5.0` (S4 evidence store) and `v0.4.0` (F0/Q0 feasibility). The native Lenovo evidence required for `v0.4.0` exists and
+The latest release is `v0.7.0` (B0 synthetic lead-follow-up slice), preceded by `v0.6.0` (S1R repaired runtime), `v0.5.0` (S4 evidence store) and `v0.4.0` (F0/Q0 feasibility). The native Lenovo evidence required for `v0.4.0` exists and
 the F0 gate passed. Its independent verifier correction is pushed as CI-green
 commit `f12dd71`. `C` implements the `v0.5.0` S4 candidate without claiming
 native acceptance. “Targeted” below means planned, implemented in a candidate,
@@ -22,7 +22,7 @@ descendant `D` promotes status after the tag and is not part of `v0.5.0`.
 | Attempt isolation/evidence | Reused task directories and non-atomic `results.json` | S4 candidate implements marker-last immutable physical bundles and rebuildable projections; native acceptance remains pending |
 | Runtime schemas/parser | Key-only validation, unsafe fuzzy repair, fail-open completion | **Closed in `v0.6.0`.** Executable schemas, explicit-alias-only repair with no inference, completion decided by authoritative state |
 | Memory | Shared append-only untrusted JSONL | **Closed in `v0.6.0`.** Tenant/subject/attempt scoped, versioned, expiring untrusted input with quarantine |
-| Synthetic Brix layer | Not implemented | B0 fictional lead follow-up after S1R |
+| Synthetic Brix layer | Not implemented | **Closed in `v0.7.0`.** Fictional lead follow-up with fake records, a no-network fake provider, approval-gated delivery and reconciliation |
 | Graders | Loose associations, variable denominators, exceptions scored as zero | S5 strict versioned evidence graders |
 | Agent Lab | Unauthenticated loopback control plane | Q0 removes unsafe capabilities; S5W hardens the remaining control plane |
 | Task instances | Twelve fixed prompts and shared order/state | S6G structural generators and isolated splits |

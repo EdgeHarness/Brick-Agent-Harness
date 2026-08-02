@@ -252,20 +252,42 @@ def test_prompt_docs_state_that_drafting_does_not_send():
 # --- rule 8 -------------------------------------------------------------------
 
 
-def test_the_harness_core_imports_no_brix_module():
+GENERIC_PACKAGE_ROOTS = (
+    "harness", "bench", "webui", "agents", "training_scripts",
+    "domains/office_demo", "domains/counter_demo",
+)
+
+
+def test_no_generic_package_imports_a_brix_module():
+    """The gate says "generic packages", not just the harness core.
+
+    Scanning only `harness/` would let the guarantee decay the moment an import
+    appeared in `bench/` or another domain, which is exactly how a
+    domain-independent core stops being one.
+    """
     import ast
     import pathlib
 
-    core = pathlib.Path("harness")
     offenders = []
-    for path in sorted(core.glob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        for node in ast.walk(tree):
-            names = []
-            if isinstance(node, ast.Import):
-                names = [a.name for a in node.names]
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                names = [node.module]
-            if any("brix" in name for name in names):
-                offenders.append(path.name)
+    scanned = 0
+    for root in GENERIC_PACKAGE_ROOTS:
+        base = pathlib.Path(root)
+        if not base.exists():
+            continue
+        for path in sorted(base.rglob("*.py")):
+            if "__pycache__" in path.parts:
+                continue
+            scanned += 1
+            tree = ast.parse(
+                path.read_text(encoding="utf-8"), filename=str(path)
+            )
+            for node in ast.walk(tree):
+                names = []
+                if isinstance(node, ast.Import):
+                    names = [alias.name for alias in node.names]
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    names = [node.module]
+                if any("brix" in name.lower() for name in names):
+                    offenders.append("{}:{}".format(path, node.lineno))
+    assert scanned > 0, "the scan must actually reach some files"
     assert offenders == []

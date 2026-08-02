@@ -4,7 +4,7 @@ This directory contains the released **exploratory synthetic benchmark** and is
 being rebuilt into the instrument specified in
 [`../PROJECT_SETUP.md`](../PROJECT_SETUP.md).
 
-The latest release is `v0.6.0` (S1R repaired runtime), preceded by `v0.5.0` (S4 evidence store) and `v0.4.0` (F0/Q0 feasibility). The Lenovo F0 gate passed, establishing that this
+The latest release is `v0.7.0` (B0 synthetic lead-follow-up slice), preceded by `v0.6.0` (S1R repaired runtime), `v0.5.0` (S4 evidence store) and `v0.4.0` (F0/Q0 feasibility). The Lenovo F0 gate passed, establishing that this
 host can run the designed experiment. S4's production evidence store and
 attestor are released: the native gate passed with `overall_status` pass, 461
 passed, 0 failed and `s4_skipped` 0. The rest of the benchmark instrument

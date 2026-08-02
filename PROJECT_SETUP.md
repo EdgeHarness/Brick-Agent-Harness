@@ -7,13 +7,16 @@ the former `S0`–`S18`, `G0`–`G1`, `R1`–`R5`, and `P0`–`P4` execution tax
 Those names may remain in released changelog entries as historical descriptions,
 but they no longer authorize or order current work.
 
-The latest released version is `v0.6.0`. The native-Windows Lenovo F0 gate
+The latest released version is `v0.7.0`. The native-Windows Lenovo F0 gate
 passed, so `v0.4.0` records feasibility, and the native Windows ARM64 S4 gate
 passed from candidate `0b8f77d` with `overall_status` pass, 461 passed, 0 failed
 and `s4_skipped` 0, so `v0.5.0` records the production evidence store. Both
 record instrument behaviour only. S1R is released as `v0.6.0`: parser, schema,
 semantic-value, memory, completion, truncation, timeout and executor tests all
-fail closed. B0 through S9 are unstarted and no measured
+fail closed. B0 is released as `v0.7.0`: the fictional lead-follow-up slice
+passes tenant, approval, concurrency, expiry, idempotency, ambiguous-delivery,
+audit and no-network tests, and no generic package imports a Brix module.
+S5 through S9 are unstarted and no measured
 effect exists.
 
 Release identity is authoritative in annotated Git tags and their bound

@@ -18,7 +18,7 @@ Brick currently provides:
 - experimental LoRA generators and training scripts, but no shipped corpus,
   adapter or model.
 
-The latest release is `v0.6.0` (S1R repaired runtime), preceded by `v0.5.0` (S4 evidence store) and `v0.4.0` (F0/Q0 feasibility). The required native Lenovo F0 evidence exists and the gate
+The latest release is `v0.7.0` (B0 synthetic lead-follow-up slice), preceded by `v0.6.0` (S1R repaired runtime), `v0.5.0` (S4 evidence store) and `v0.4.0` (F0/Q0 feasibility). The required native Lenovo F0 evidence exists and the gate
 passed; its verifier correction is pushed as CI-green commit `f12dd71`. That
 establishes host and model feasibility only. `C` implements the `v0.5.0` S4
 store and attestor without claiming native acceptance, and no measured effect

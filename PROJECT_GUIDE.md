@@ -8,7 +8,7 @@ history is recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## 1. Candidate status and release authority
 
-The latest release is `v0.6.0` (S1R repaired runtime), preceded by `v0.5.0` (S4 evidence store) and `v0.4.0` (F0/Q0 feasibility). Brick
+The latest release is `v0.7.0` (B0 synthetic lead-follow-up slice), preceded by `v0.6.0` (S1R repaired runtime), `v0.5.0` (S4 evidence store) and `v0.4.0` (F0/Q0 feasibility). Brick
 is an experimental local agent-harness research scaffold with:
 
 - explicit runtime, registry, policy, hook, and domain-pack contracts;

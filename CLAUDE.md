@@ -75,7 +75,15 @@ S1R is released as `v0.6.0`: executable tool-argument schemas from which the
 native schema and prompt docs are derived, conservative parsing with no
 inference, fail-closed completion decided by authoritative state, scoped
 untrusted memory with quarantine, origin-classified faults, and a typed executor
-whose gates admit a call only when all of them agree. B0 has not started.
+whose gates admit a call only when all of them agree.
+
+B0 is released as `v0.7.0`: `domains/brix_followup_synthetic`, a fictional
+lead-follow-up slice with fake records and a no-network fake provider. The model
+may list due follow-ups, inspect an assigned lead, propose a follow-up, inspect
+its proposals, think and finish. It cannot approve, dispatch, cross a tenant,
+choose a recipient or bypass policy, because those capabilities are not offered
+at all. Passing it demonstrates replaceable layering only; it does not make the
+workflow Brix-approved or deployed. S5 has not started.
 
 For S4, release state is authoritative in the annotated tag and bound evidence.
 Direct descendant `R` adds only the regular file

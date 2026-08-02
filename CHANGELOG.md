@@ -14,7 +14,22 @@ that the research instrument is valid or that any measured effect exists.
 
 ## [Unreleased]
 
-B0 is in progress. It is not released and no gate has passed.
+No unreleased changes. The next stage is S5, which begins only after a separate
+review decision.
+
+## [0.7.0] — 2026-08-02
+
+B0, the replaceable synthetic lead-follow-up slice. Every item in the stage's
+exit gate has passing tests, measured item by item: tenant 8, approval 13,
+concurrency 2, expiry 3, idempotency 2, ambiguous-delivery 7, audit 4,
+no-network 3. A generic-package purity scan covers 55 files across 7 package
+roots, and is verified to fail when a violating import is injected rather than
+only to pass. Offline suite 764 passed, 3 skipped on native Windows ARM64, with
+required Linux Python 3.9–3.13 and Windows x64 CI green.
+
+Passing this slice demonstrates the tested replaceable layering only. It does
+not make the workflow Brix-approved or deployed, it is not a benchmark result,
+no measured effect exists, and S5 through S9 are unstarted.
 
 ### Added
 
