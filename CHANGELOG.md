@@ -70,6 +70,29 @@ S1R is in progress. It is not released and no gate has passed.
   discarded with no record. Refusing to repair is the safe outcome: a rejected
   call costs one turn, a wrongly repaired one produces a wrong effect the grader
   may score as a genuine model failure.
+- `harness/completion.py`, fail-closed completion. The released loop asked a
+  model to verify its own work and read the answer with
+  `verdict.get("complete", True)`, so every degenerate case resolved to
+  *complete*: a malformed verdict, a missing key, a non-boolean value, a
+  timed-out verifier, a verifier that exhausted its budget. The one situation
+  where a task is most likely unfinished — the verifier could not answer — was
+  scored as finished.
+- Completion is now decided by authoritative postconditions over real state; a
+  model verifier may only explain, never establish. Unsatisfied postconditions
+  plus a verifier claiming completion yields `incomplete`. Satisfied
+  postconditions plus a verifier claiming otherwise yields `complete`, because
+  state is authoritative and letting an unreliable verifier veto real evidence
+  would manufacture false negatives; the disagreement is recorded rather than
+  obeyed. Every unavailable, malformed, or raising postcondition check yields
+  `unknown`.
+- `unknown` is a first-class outcome, not a synonym for incomplete. Keeping the
+  axes separate is what stops an instrument failure from being recorded as a
+  model failure, which hard rule 5 forbids. A postcondition check that raises is
+  caught and reported as `unknown` rather than propagating.
+- The harness core owns the precedence rule and never imports a domain. A domain
+  pack supplies one opaque callable reporting whether the required effects exist
+  in authoritative state, so the contract is fixed now while B0 and S6G remain
+  unbuilt.
 
 ### Changed
 
