@@ -50,6 +50,29 @@ B0 is in progress. It is not released and no gate has passed.
   concurrency: eight racing dispatches deliver exactly once, and eight racing
   approvals grant once. The audit log is append-only and its accessor returns
   copies, so history cannot be edited through it.
+- `domains/brix_followup_synthetic/tools.py`, the six model-facing tools:
+  `list_due_followups`, `inspect_lead`, `propose_followup`, `inspect_proposals`,
+  `think` and `finish`. What is absent is as deliberate as what is present —
+  there is no `approve`, `dispatch`, `set_recipient` or `switch_tenant`. Those
+  are not merely refused when called, they are **not offered**, so no phrasing
+  reaches them. A refusal a model can argue with is a weaker guarantee than a
+  capability that does not exist.
+- No tool schema accepts an `actor`, `recipient` or `tenant` parameter, and the
+  actor is bound when the registry is built, so the model cannot act as someone
+  else or redirect a message by supplying an argument.
+- This is the first real consumer of the S1R typed runtime. Each tool is a
+  `ToolContract` with an executable schema, deterministic semantic invariants and
+  a `mutating` flag. Two invariants catch what a schema cannot: a body that is
+  long enough but entirely whitespace, and a body forging an approval it does not
+  have — which cannot actually approve anything but can mislead a human reviewing
+  the queue, and is what a model reaches for when it cannot dispatch itself.
+- The alias policy is visible at the domain boundary: `id` → `lead_id` helps the
+  read-only tools, and the same alias never rewrites `propose_followup`, the one
+  tool that writes.
+- A `PolicyRefusal` becomes a `ModelInputFault`, the only fault class the model
+  sees. Anything else escaping a service is a runner or environment fault that
+  aborts rather than being described to the model as its own mistake, verified by
+  tests that inject a service bug and a full disk.
 
 ## [0.6.0] — 2026-08-02
 
