@@ -7,11 +7,12 @@ the former `S0`–`S18`, `G0`–`G1`, `R1`–`R5`, and `P0`–`P4` execution tax
 Those names may remain in released changelog entries as historical descriptions,
 but they no longer authorize or order current work.
 
-At the pre-attestation candidate state described by this source, the preceding
-published release is `v0.4.0`. The native-Windows Lenovo F0 gate passed, so
-`v0.4.0` records feasibility. S4 is implemented as a `v0.5.0` candidate but its
-native gate remains open; S1R through S9 are unstarted and no measured effect
-exists.
+The latest released version is `v0.5.0`. The native-Windows Lenovo F0 gate
+passed, so `v0.4.0` records feasibility, and the native Windows ARM64 S4 gate
+passed from candidate `0b8f77d` with `overall_status` pass, 461 passed, 0 failed
+and `s4_skipped` 0, so `v0.5.0` records the production evidence store. Both
+record instrument behaviour only; S1R through S9 are unstarted and no measured
+effect exists.
 
 Release identity is authoritative in annotated Git tags and their bound
 evidence, not in mutable current-status prose. S4 uses three commits/states:
@@ -19,8 +20,9 @@ tested candidate `C`; direct attestation-only release descendant `R`, tagged
 `v0.5.0`; and an immediate docs-only descendant `D` that promotes changelog and
 current-status wording after the tag exists. `D` is not part of `v0.5.0` and
 does not alter its code or evidence. Consequently the tagged `R` intentionally
-retains `C`'s explicitly pre-attestation wording; the tag and
-`evidence/s4/v0.5.0.json` determine whether S4 actually passed.
+retains `C`'s candidate-scoped wording; the tag and
+`evidence/s4/v0.5.0.json` are authoritative for whether S4 passed. They record
+that it did.
 
 The current milestone has two outputs:
 

@@ -17,8 +17,7 @@ benchmark results, training corpora, adapters, or model weights are shipped.
 surfaces; it is not evidence of generalization or performance. The proposition
 that orchestration improves model tool use remains an untested hypothesis.
 
-This text records the pre-attestation `v0.5.0` candidate state; its preceding
-published release is `v0.4.0`. The required native-Windows Lenovo F0 evidence
+The latest release is `v0.5.0` (S4 evidence store), preceded by `v0.4.0`. The required native-Windows Lenovo F0 evidence
 exists and the gate passed, establishing host and model feasibility only.
 Commit `f12dd71` contains the subsequent independent verifier correction and is
 pushed with required CI green. Candidate `C` implements S4 but does not claim

@@ -18,15 +18,16 @@ of `CHANGELOG.md`, those win.
 
 ## 2. State as of 1 August 2026
 
-This section records pre-attestation candidate `C`. It intentionally remains
-unchanged in attestation-only tagged descendant `R`; the annotated tag and bound
-evidence are authoritative, and immediate docs-only descendant `D` promotes
-current status without becoming part of `v0.5.0`.
+**S4 is released as `v0.5.0`.** The native Windows ARM64 gate passed from
+candidate `0b8f77d`: `overall_status` pass, 461 passed, 0 failed, 3 skipped,
+`s4_skipped` 0, collected 464. JUnit report
+`df2d8d1f3565f815148139ef1f91954a1b890deef1f02413cc12851952ba54aa` is attached
+to the release and bound by the annotated tag. **Next stage: S1R**, which begins
+only after a separate review decision.
 
-**Preceding published release at `C`:** `v0.4.0`. **F0 verifier correction:**
-commit `f12dd71` is pushed to `main` and required CI is green. **Candidate
-source version:** `0.5.0`. The final clean-candidate test count is not claimed
-by this pre-attestation snapshot.
+**Released:** `v0.5.0`, preceded by `v0.4.0`. **Offline suite at the released
+candidate:** 461 passed, 3 skipped on native Windows ARM64 with Developer Mode
+enabled; `s4_skipped` 0.
 
 **Done:** F0/Q0 and the independent F0 verifier correction. Q0 removed the
 general filesystem and PowerShell overlay, every legacy escape flag fails before
@@ -319,10 +320,10 @@ Accurate framing now:
 > prerequisites. Commit `f12dd71` contains the pushed, CI-green independent
 > verifier correction. Candidate `C` contains the `v0.5.0` S4 store and
 > attestor; native zero-skip acceptance, candidate-bound attestation, and CI are
-> requirements, not claims made by this pre-attestation prose. Tagged
-> attestation-only `R` and its bound evidence authoritatively record the result;
-> docs-only `D` later promotes status. This is not a benchmark result, and S1R
-> has not started.
+> requirements, all of which were satisfied. Tagged attestation-only `R` and its
+> bound evidence authoritatively record the result: `overall_status` pass, 461
+> passed, 0 failed, `s4_skipped` 0. This is not a benchmark result, and S1R has
+> not started.
 
 Never say "the research passed" when only feasibility passed. Never say a
 benchmark result exists before S9 is sealed. Never round a conditional result

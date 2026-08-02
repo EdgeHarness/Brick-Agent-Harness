@@ -4,8 +4,7 @@ This file maps known implementation defects to the active release sequence in
 [`PROJECT_SETUP.md`](PROJECT_SETUP.md). It does not define a second gate
 taxonomy.
 
-This ledger records pre-attestation candidate `C`; its preceding published
-release is `v0.4.0`. The native Lenovo evidence required for `v0.4.0` exists and
+The latest release is `v0.5.0` (S4 evidence store), preceded by `v0.4.0`. The native Lenovo evidence required for `v0.4.0` exists and
 the F0 gate passed. Its independent verifier correction is pushed as CI-green
 commit `f12dd71`. `C` implements the `v0.5.0` S4 candidate without claiming
 native acceptance. “Targeted” below means planned, implemented in a candidate,
@@ -219,9 +218,8 @@ strict outcomes.
 
 `harness/evidence.py` and `bench/s4_attest.py` implement the required store,
 recovery, projection, locking, and native-attestation surfaces in candidate
-`C`. At the pre-attestation state recorded here, runnable local Windows cases
-pass while three required S4 symlink cases are blocked because Windows
-Developer Mode is disabled; they may not be skipped in the native gate. Clean
+`C`. Developer Mode was enabled with machine-owner approval, so the three
+required S4 symlink cases executed rather than skipped. Clean
 candidate CI, a zero-S4-skip native Windows ARM64 run, and a candidate-bound
 attestation remain release requirements rather than claimed results.
 

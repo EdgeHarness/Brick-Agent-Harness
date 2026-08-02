@@ -14,13 +14,29 @@ that the research instrument is valid or that any measured effect exists.
 
 ## [Unreleased]
 
-This entry is staged in pre-attestation candidate `C` for `v0.5.0`; at that
-candidate point the preceding published release is `v0.4.0` and the S4 gate is
-open. S4 release identity is authoritative in the annotated tag and
-`evidence/s4/v0.5.0.json`. The tag points to attestation-only descendant `R`,
-which intentionally retains this candidate-scoped `[Unreleased]` entry.
-Immediately after the tag, docs-only descendant `D` promotes it to `[0.5.0]`
-with the actual release date; `D` is not part of the tagged release.
+No unreleased changes. The next stage is S1R, which begins only after a separate
+review decision.
+
+## [0.5.0] — 2026-08-02
+
+S4, the production marker-last immutable attempt evidence store. **The native
+Windows ARM64 S4 gate passed** from candidate `0b8f77d`, with `overall_status`
+`pass`, 461 passed, 0 failed, 3 skipped and **`s4_skipped` 0** against a
+collected inventory of 464. The three remaining skips are two POSIX filesystem
+fixtures and one non-Windows behaviour case, none of which is resolvable on
+Windows; every required S4 symlink and junction case executed. The JUnit report
+is `df2d8d1f3565f815148139ef1f91954a1b890deef1f02413cc12851952ba54aa`, attached
+to the release and bound by the annotated tag alongside the candidate commit and
+attestation blob.
+
+Developer Mode was enabled on the benchmark host with explicit machine-owner
+approval so the three required symlink cases execute rather than skip. Windows
+long-path support was deliberately not enabled: the S4 exit gate must hold on a
+default path regime, because validating Windows filesystem behaviour is its
+purpose.
+
+This release records instrument behaviour only. It is not a benchmark result, no
+measured effect exists, and S1R onward is unstarted.
 
 ### Added
 

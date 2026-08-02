@@ -4,17 +4,15 @@ This directory contains the released **exploratory synthetic benchmark** and is
 being rebuilt into the instrument specified in
 [`../PROJECT_SETUP.md`](../PROJECT_SETUP.md).
 
-This text records the pre-attestation `v0.5.0` candidate state; its preceding
-published release is `v0.4.0`. The Lenovo F0 gate passed, establishing that this
+The latest release is `v0.5.0` (S4 evidence store), preceded by `v0.4.0`. The Lenovo F0 gate passed, establishing that this
 host can run the designed experiment. S4's production evidence store and
-attestor are implemented as a candidate, but the native S4 gate is open and the
-rest of the benchmark instrument remains unbuilt. No committed result
-establishes that the harness improves a model.
+attestor are released: the native gate passed with `overall_status` pass, 461
+passed, 0 failed and `s4_skipped` 0. The rest of the benchmark instrument
+remains unbuilt, and no committed result establishes that the harness improves a
+model.
 
-Annotated tags and bound evidence are release-authoritative. The tagged S4
-release commit `R` is attestation-only and therefore intentionally retains this
-candidate-scoped wording. An immediate docs-only descendant `D` promotes status
-after the tag and is not part of `v0.5.0`; see the canonical lifecycle in
+Annotated tags and bound evidence are release-authoritative; see the canonical
+`C`/`R`/`D` lifecycle in
 [`../PROJECT_SETUP.md`](../PROJECT_SETUP.md#native-windows-arm64-attestation).
 
 ## Confirmatory question

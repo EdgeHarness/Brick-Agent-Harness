@@ -8,9 +8,8 @@ history is recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## 1. Candidate status and release authority
 
-This section records the pre-attestation `v0.5.0` candidate state. At that
-point the preceding published release is `v0.4.0`. Brick is an experimental
-local agent-harness research scaffold with:
+The latest release is `v0.5.0` (S4 evidence store), preceded by `v0.4.0`. Brick
+is an experimental local agent-harness research scaffold with:
 
 - explicit runtime, registry, policy, hook, and domain-pack contracts;
 - `office_demo@0.1.0`, a synthetic office fixture;
@@ -18,19 +17,20 @@ local agent-harness research scaffold with:
 - legacy prompt-JSON raw and harness loops;
 - simulated email, calendar, messaging, and reminder effects;
 - local PowerPoint and spreadsheet generation;
-- a production marker-last evidence-store candidate and S4 attestor; and
+- a production marker-last evidence store and its native S4 attestor; and
 - an exploratory benchmark, local Ollama client, Agent Lab development console,
   and blocked experimental training code.
 
-F0/Q0 is released as `v0.4.0`. The native Lenovo F0 evidence exists and the gate
-passed, which records host and model feasibility only. S4 is implemented but
-its native gate is open; S1R through S9 are unstarted.
+F0/Q0 is released as `v0.4.0` and S4 as `v0.5.0`. The native Lenovo F0 gate
+passed, recording host and model feasibility; the native Windows ARM64 S4 gate
+passed from candidate `0b8f77d` with `overall_status` pass, 461 passed, 0 failed
+and `s4_skipped` 0. Both record instrument behaviour only. S1R through S9 are
+unstarted.
 
 Annotated tags and their bound evidence are authoritative. The tagged S4 release
-commit `R` adds only `evidence/s4/v0.5.0.json` to tested candidate `C`, so it
-intentionally retains this explicitly candidate-scoped prose. Immediately after
-the tag, docs-only descendant `D` promotes the changelog and current-status
-wording; `D` is not part of `v0.5.0`. See the exact lifecycle in
+commit `R` adds only `evidence/s4/v0.5.0.json` to tested candidate `C`; docs-only
+descendant `D` promoted this status afterwards and is not part of `v0.5.0`. See
+the exact lifecycle in
 [`PROJECT_SETUP.md`](PROJECT_SETUP.md#native-windows-arm64-attestation).
 
 Brick currently has no valid retained result, demonstrated harness improvement,

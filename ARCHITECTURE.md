@@ -18,8 +18,7 @@ Brick currently provides:
 - experimental LoRA generators and training scripts, but no shipped corpus,
   adapter or model.
 
-This status records pre-attestation candidate `C`; its preceding published
-release is `v0.4.0`. The required native Lenovo F0 evidence exists and the gate
+The latest release is `v0.5.0` (S4 evidence store), preceded by `v0.4.0`. The required native Lenovo F0 evidence exists and the gate
 passed; its verifier correction is pushed as CI-green commit `f12dd71`. That
 establishes host and model feasibility only. `C` implements the `v0.5.0` S4
 store and attestor without claiming native acceptance, and no measured effect
@@ -100,10 +99,10 @@ record to the required environment and source identities.
 
 This store is not yet wired into the legacy exploratory benchmark runner; that
 integration belongs to S6C after S1R, B0, S5, S5W, and S6G. At the
-pre-attestation candidate state recorded here, S4 acceptance still requires
-Developer Mode so all required symlink tests execute, clean candidate CI, and a
-candidate-bound native Windows ARM64 attestation. The tag and evidence, rather
-than this frozen candidate statement, record the eventual result.
+released state recorded here, S4 acceptance required Developer Mode so all
+required symlink tests execute, clean candidate CI, and a candidate-bound native
+Windows ARM64 attestation. All three were satisfied: see `evidence/s4/v0.5.0.json`
+and the annotated `v0.5.0` tag, which remain authoritative over this prose.
 
 The office CLI preserves the historic `workspace/`, `memory/` and `logs/`
 layout for prompt and path compatibility. Other packs use

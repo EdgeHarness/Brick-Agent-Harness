@@ -18,8 +18,7 @@ None participates in the retained protocol. The confirmatory candidate is
 Qwen3.5 4B, resolved by immutable digest after Lenovo F0. Qwen3.5 2B and 9B are
 descriptive system replications only.
 
-This text records the pre-attestation `v0.5.0` candidate state; its preceding
-published release is `v0.4.0`. The native Lenovo F0 feasibility gate passed;
+The latest release is `v0.5.0` (S4 evidence store), preceded by `v0.4.0`. The native Lenovo F0 feasibility gate passed;
 that records host feasibility only and is not a benchmark result. Annotated tags
 and bound evidence are release-authoritative; see the `C`/`R`/`D` lifecycle in
 [`../PROJECT_SETUP.md`](../PROJECT_SETUP.md).

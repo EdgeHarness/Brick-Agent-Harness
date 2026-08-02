@@ -14,8 +14,7 @@ the resulting adapter improves the harness.
 
 This legacy training path is outside the `v0.14.0` milestone. It cannot supply a
 model, adapter, training result, or condition to the retained Qwen3.5 protocol.
-This text records the pre-attestation `v0.5.0` candidate state; its preceding
-published release is `v0.4.0`. The F0 feasibility gate passed and does not
+The latest release is `v0.5.0` (S4 evidence store), preceded by `v0.4.0`. The F0 feasibility gate passed and does not
 authorize training. Annotated tags and bound evidence are release-authoritative;
 see the `C`/`R`/`D` lifecycle in
 [`../PROJECT_SETUP.md`](../PROJECT_SETUP.md).

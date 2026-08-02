@@ -40,8 +40,8 @@ per-session protocol. Read it before starting work.
 
 ## Current position
 
-This section records the pre-attestation `v0.5.0` candidate state. Its preceding
-published release is `v0.4.0`. **The native-Lenovo F0 gate passed** from
+Latest release is `v0.5.0` (S4 marker-last evidence store), preceded by
+`v0.4.0` (F0/Q0 feasibility). **The native-Lenovo F0 gate passed** from
 candidate `6402bf5`, run `f0-20260801T164210Z-07054bec`, with all three models
 eligible — 4B at 22.26 tok/s against a 5 tok/s floor, 2B at 45.02, 9B at 12.37
 against a 3 tok/s floor — and inference attested to a native ARM64
@@ -62,12 +62,14 @@ with required CI green. It strengthens option-recognition and runner-stability
 verification without altering the retained evidence; both the original and
 extracted `v0.4.0` bundles still pass.
 
-Candidate `C` implements the production marker-last evidence store and its
-attestor. At this pre-attestation state, runnable local Windows tests are green
-but three required S4 symlink cases remain blocked because Windows
-Developer Mode is disabled. Candidate freeze and CI, a zero-S4-skip native
-Windows ARM64 run, and candidate-bound attestation remain release requirements,
-not claimed results. S1R has not started.
+`harness/evidence.py` implements the production marker-last evidence store and
+`bench/s4_attest.py` its native attestor. `v0.5.0` is released. The native Windows ARM64 S4 gate passed from candidate
+`0b8f77d`: `overall_status` pass, 461 passed, 0 failed, 3 skipped, `s4_skipped`
+0, collected 464. That records instrument behaviour only, not a benchmark
+result. Developer Mode is
+enabled on the benchmark host so the three required S4 symlink cases execute;
+Windows long-path support is deliberately off, because the gate must hold on a
+default path regime. S1R has not started.
 
 For S4, release state is authoritative in the annotated tag and bound evidence.
 Direct descendant `R` adds only the regular file
