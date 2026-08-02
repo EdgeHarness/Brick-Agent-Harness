@@ -146,6 +146,26 @@ S1R is in progress. It is not released and no gate has passed.
   how many turns went. Silently shortening input changes what the model saw
   without leaving a trace, so a reader could not distinguish a model that ignored
   information from one that never received it.
+- `harness/typed_executor.py`, the typed tool contract and its fail-closed
+  executor, where the S1R pieces compose into one admission path: unknown-tool
+  check, alias repair, schema validation, deterministic semantic invariants, then
+  execution with origin-classified faults.
+- Semantic invariants close the "deterministic domain invariants" requirement
+  that JSON Schema cannot express — an end after its start, a due date not
+  already past. Structural validity is not semantic validity, and a
+  structurally perfect call can still be nonsense. Invariants run **only after**
+  the schema passes, so they may assume shape and check meaning; a test asserts
+  an invariant never sees an unvalidated value. A raising or wrongly-typed
+  invariant is a runner fault, not a model rejection, because telling the model
+  to fix a harness bug would charge a model failure for our defect.
+- The failure asymmetry is enforced end to end. A model fault yields a message
+  and costs a turn; a runner or environment fault aborts the attempt and its
+  observation is `None`, so it can never reach the model. Arguments are
+  deep-copied before execution, so a tool cannot mutate the caller's record of
+  what was requested.
+- The registry holds no domain knowledge: a domain pack supplies schemas,
+  invariant callables and executors, while the core supplies the gate ordering
+  and the failure semantics.
 
 ### Changed
 
