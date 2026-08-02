@@ -118,6 +118,34 @@ S1R is in progress. It is not released and no gate has passed.
   no-memory ablation is enforced by the instrument rather than by a caller
   remembering not to write. Expiry hides a record without deleting it, and an
   expiry that cannot be evaluated counts as expired.
+- `harness/faults.py`, fault classification and explicit context outcomes. The
+  released executor ended with a bare `except Exception` that handed every
+  failure to the model as `ERROR: ...`. A disk-full `OSError`, a `MemoryError`, a
+  broken install, and outright harness bugs all arrived as though the model had
+  erred, and it retried against them — the conversion hard rule 5 forbids. It
+  also spent the opportunity budget on something no model can fix and could turn
+  one infrastructure fault into a failed attempt a grader scores as a genuine
+  model loss. A narrower instance sat above it: a bare `except KeyError`
+  reported "missing required parameter", so a `KeyError` from any dict access
+  inside a tool body was described to the model as its own bad argument.
+- Faults are classified onto the `model` / `runner` / `environment` origin axis
+  the S4 evidence store already records, with a test asserting the status and
+  origin vocabularies match so no second translation table can drift. Only a
+  model-origin fault is shown to the model or allows the attempt to continue;
+  a runner or environment fault aborts and is never described to the model.
+- Classification is deliberately conservative in one direction: an unrecognised
+  exception is a **runner** fault. Misattributing an unknown defect to the model
+  silently corrupts the outcome being measured, while attributing it to the
+  runner produces a visible instrument failure someone investigates. Timeout is
+  runner origin, not model, because a model cannot choose to be faster and a slow
+  host must not depress a measured score; `TimeoutError` is matched before
+  `OSError`, which it subclasses. Budget exhaustion is a model outcome but is not
+  shown, since no turn remains in which to say so.
+- Context outcomes are explicit. Truncating an observation appends an in-band
+  notice and records the original and delivered lengths; dropping history records
+  how many turns went. Silently shortening input changes what the model saw
+  without leaving a trace, so a reader could not distinguish a model that ignored
+  information from one that never received it.
 
 ### Changed
 
