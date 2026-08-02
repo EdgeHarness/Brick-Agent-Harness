@@ -243,31 +243,57 @@ to the canonical gate.
 runtime rule decides between 20 and 12 instances per family. A deadline is not
 an input to that rule.
 
-## 8. One protocol decision to make before D0
+## 8. The estimand decision — DECIDED AND LOCKED
 
-`PROJECT_SETUP.md` freezes an equal-family estimand over 11 families. Families
-that both conditions solve trivially, or both fail completely, contribute a
-family mean near zero and pull the pooled effect toward zero while still
-consuming attempts.
+**Recorded 2 August 2026, before any efficacy data exists.** At this date the
+only releases are `v0.4.0` (F0 feasibility) and `v0.5.0` (S4 evidence store).
+No generator, grader, condition, or attempt outcome exists, so this choice
+cannot have been influenced by observed results. That ordering is the entire
+reason it is written down now rather than at D0.
 
-Two legitimate options, and the choice must be made and written down **before**
-any efficacy data exists:
+**Decision: all 11 families, as written.** The estimand remains the equal-family
+mean paired difference over the 11 fixed generator distributions:
 
-- **As written.** All 11 families. Broader coverage, more dilution risk.
-- **Narrowed.** A preregistered structural subset, for example families
-  requiring three or more dependent tool calls where a later write depends on an
-  earlier read. Same run cost, better power on a sharper question, narrower
-  claim.
+```text
+Delta = (1 / 11) * sum(family_mean(harness_success - native_success))
+```
 
-Narrowing changes the estimand, so it is a versioned protocol change, not a
-scope cut. Selecting on observed outcomes instead of structure is invalid; D0's
-score masking exists to make the honest version enforceable.
+The families are `pptx_basic`, `pptx_from_email`, `xlsx_basic`,
+`xlsx_from_email`, `email_reply`, `cal_add`, `cal_freeslot`, `cal_brief`,
+`remind_msg`, `learn_store_use`, and `multi_offsite`.
 
-Regardless of which you pick, run the development-set floor and ceiling check
-before freezing: on development and sentinel instances only, flag any family
-whose combined success across both conditions falls below roughly 15% or above
-85%. Without it, a floor effect is indistinguishable from a null result, and you
-can spend the entire retained run learning nothing.
+The rejected alternative was a preregistered structural subset, for example
+families requiring three or more dependent tool calls where a later write
+depends on an earlier read. It offers better power on a sharper question at the
+same run cost. It is rejected because the broader claim is the one worth making:
+a harness that helps only on the subset selected for it is a weaker result than
+a smaller effect measured across the full frozen distribution. Dilution is
+accepted as an honest cost.
+
+### Preregistered floor and ceiling audit
+
+Dilution risk is managed by a rule fixed in advance, not by later judgement.
+
+D0 runs 44 score-masked development pairs: four pairs per family, therefore
+**eight outcomes per family** across both conditions. Audit combined
+development-set success only, never retained outcomes:
+
+- **0 or 1** of 8 successes triggers the `<15%` floor flag (1/8 = 12.5%);
+- **7 or 8** of 8 successes triggers the `>85%` ceiling flag (7/8 = 87.5%).
+
+A flag **blocks the S7 protocol freeze**. It permits exactly one versioned,
+direction-blind generator or grader correction — direction-blind meaning the
+correction may not be chosen to move the effect in either direction — followed
+by a disjoint 44-pair D0 rerun on fresh instances.
+
+A repeated flag after that correction **stops the work before S8**. No family is
+silently removed, reweighted, or excluded from the estimand. A family that
+cannot be brought inside the band is reported as a floor or ceiling effect in
+the final report, with its measurements intact.
+
+Selecting on observed efficacy rather than structure is invalid, and D0's score
+masking exists to make that enforceable. Narrowing the estimand later would be a
+versioned protocol change requiring a complete rerun, not a scope cut.
 
 ## 9. Per-session protocol
 

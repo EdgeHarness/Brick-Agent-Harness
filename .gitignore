@@ -95,3 +95,7 @@ htmlcov/
 *.swp
 .DS_Store
 Thumbs.db
+
+# Agent/tool scratch directories. Multiple agents work in this tree and a
+# harness-created temp directory must never be stageable as project content.
+.tmp-*/

@@ -14,8 +14,27 @@ that the research instrument is valid or that any measured effect exists.
 
 ## [Unreleased]
 
-No unreleased changes. The next stage is S1R, which begins only after a separate
-review decision.
+### Changed
+
+- **The estimand decision is made and locked: all 11 families, as written.**
+  Recorded 2 August 2026, when the only releases were `v0.4.0` (F0 feasibility)
+  and `v0.5.0` (S4 evidence store). No generator, grader, condition, or attempt
+  outcome existed, so the choice provably could not have been influenced by
+  observed results — which is the whole reason `EXECUTION.md` requires it before
+  D0 rather than at D0. The rejected alternative, a preregistered structural
+  subset, offers better power on a sharper question at equal run cost; it is
+  rejected because a harness that helps only on the subset selected for it is a
+  weaker result than a smaller effect across the full frozen distribution.
+  Dilution is accepted as an honest cost and managed by a preregistered floor and
+  ceiling audit: with eight development outcomes per family, 0–1 successes flags
+  `<15%` and 7–8 flags `>85%`; a flag blocks the S7 freeze and permits exactly one
+  versioned, direction-blind correction plus a disjoint 44-pair D0 rerun; a
+  repeated flag stops the work before S8. No family is ever silently removed,
+  reweighted, or excluded.
+- `.gitignore` now excludes `.tmp-*/`. Multiple agents work in this tree and a
+  harness-created scratch directory must never be stageable as project content.
+
+The next stage is S1R.
 
 ## [0.5.0] — 2026-08-02
 
