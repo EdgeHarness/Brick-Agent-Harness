@@ -64,7 +64,7 @@ extracted `v0.4.0` bundles still pass.
 
 Candidate `C` implements the production marker-last evidence store and its
 attestor. At this pre-attestation state, runnable local Windows tests are green
-but three required S4 symlink cases remain blocked solely because Windows
+but three required S4 symlink cases remain blocked because Windows
 Developer Mode is disabled. Candidate freeze and CI, a zero-S4-skip native
 Windows ARM64 run, and candidate-bound attestation remain release requirements,
 not claimed results. S1R has not started.

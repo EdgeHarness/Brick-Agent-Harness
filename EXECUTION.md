@@ -94,7 +94,12 @@ commit is pushed and required CI is green.
 **S4 candidate implemented, gate open at `C`:** `harness/evidence.py`
 implements the production marker-last store and `bench/s4_attest.py` implements
 its native attestor. Runnable local Windows cases pass. Three required S4
-symlink cases are blocked solely because Windows Developer Mode is disabled.
+symlink cases are blocked because Windows Developer Mode is disabled. A second,
+independent condition also gated the native run: the Windows platform tests
+inherited pytest's deep default root, so the junction case reached 250
+characters and failed `CreateDirectoryW`, whose limit is MAX_PATH - 12 = 248.
+That failure moved with the pytest counter and the user name, so the gate could
+silently flip. The S4 test root is now bounded and asserted.
 Candidate CI, a clean native Windows ARM64 run, and candidate-bound attestation
 remain release requirements rather than claimed results. S1R has not started.
 `v0.4.0` and the S4 candidate record no benchmark effect.

@@ -110,7 +110,9 @@ python -m pytest
 The test suite is designed to run without Ollama. Passing it characterizes the
 implemented cases; it does not complete the S4 native gate or validate a
 retained result. Three required S4 symlink cases currently remain skipped on
-this Lenovo solely because Windows Developer Mode is disabled; the native gate
+this Lenovo because Windows Developer Mode is disabled, and previously also
+because the S4 test root was unbounded against the Windows 248-character
+directory limit; the native gate
 permits no such skip.
 
 The released F0 gate was a separate live-model operation. Its passing bundle is

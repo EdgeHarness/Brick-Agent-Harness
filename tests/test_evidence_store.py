@@ -226,6 +226,14 @@ def clone_valid_candidate(candidate, *, committed):
     return clone
 
 
+
+@pytest.fixture
+def tmp_path(s4_bounded_root):
+    """Bound this module's test root so the deepest S4 path stays under the
+    Windows directory limit. Shadows pytest's builtin for this module only, so
+    no test signature changes. See tests/conftest.py for the derivation."""
+    return s4_bounded_root
+
 def test_attempt_key_golden_vector_is_exact_and_self_consistent():
     key = make_key()
 

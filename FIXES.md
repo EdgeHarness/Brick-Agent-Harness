@@ -220,7 +220,7 @@ strict outcomes.
 `harness/evidence.py` and `bench/s4_attest.py` implement the required store,
 recovery, projection, locking, and native-attestation surfaces in candidate
 `C`. At the pre-attestation state recorded here, runnable local Windows cases
-pass while three required S4 symlink cases are blocked solely because Windows
+pass while three required S4 symlink cases are blocked because Windows
 Developer Mode is disabled; they may not be skipped in the native gate. Clean
 candidate CI, a zero-S4-skip native Windows ARM64 run, and a candidate-bound
 attestation remain release requirements rather than claimed results.

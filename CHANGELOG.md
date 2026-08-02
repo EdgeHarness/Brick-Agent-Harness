@@ -42,6 +42,34 @@ with the actual release date; `D` is not part of the tagged release.
 
 ### Fixed
 
+- The Windows S4 platform tests inherited pytest's deep default root, so the
+  real-junction case built a 250-character path and failed `CreateDirectoryW`,
+  whose limit is `MAX_PATH - 12 = 248` rather than 260 because Windows reserves
+  twelve characters for an 8.3 name inside the new directory. The failure was not
+  constant: the path moved with the pytest counter (`pytest-99` to `pytest-100`
+  adds a character) and with the operator's user name, so the S4 gate could pass
+  or fail depending on how often the suite had been run. A release gate must not
+  depend on either. The S4 test root is now bounded explicitly, the bound is
+  asserted at fixture setup so a regression fails loudly instead of returning as
+  an intermittent result, and `tests/test_s4_path_contract.py` pins the
+  derivation against the real modules. Long-path support is deliberately not
+  relied upon: this host has `LongPathsEnabled=0`, and the S4 exit gate must hold
+  on a default Windows configuration because validating Windows filesystem
+  behaviour is its purpose.
+- The bound covers every S4 module that creates evidence runs, not only the
+  platform tests. `tests/test_evidence_store.py` contains a symlink case that
+  only begins executing once Developer Mode is enabled; under the old root it
+  would have started running at 245 characters, reintroducing the same fragility
+  inside the native gate it is meant to satisfy.
+- The attestor's native report-directory rule asserted a flat maximum of 120
+  characters that was tied to no documented limit and neither proved nor
+  explained the bound it imposed. It is replaced by a derived preflight: the
+  worst S4 path is computed from the report directory and must clear the 248
+  directory limit by at least the 32-character margin, failing before the report
+  directory is consumed so a too-long path is refused at preflight rather than
+  surfacing as a mid-run `WinError 206` inside a required case. The attestor also
+  supplies the bounded root through `BRICK_S4_PLATFORM_ROOT` and never inherits
+  an operator's value, since a bound is only meaningful for the root it verified.
 - A strict post-release audit found that `option-recognition-v2` recorded
   key-specific and type-specific error fields but gated only on a non-2xx
   response. A generic error could therefore have been mislabeled as proof of
@@ -81,8 +109,8 @@ with the actual release date; `D` is not part of the tagged release.
 
 At the candidate state recorded by this entry, commit `f12dd71`, the independent
 F0 verifier correction, is pushed to `main` and required CI is green. Runnable
-S4 cases pass locally on Windows, while three required symlink cases are blocked
-solely because Windows Developer Mode is disabled. Candidate freeze and CI, the
+S4 cases pass locally on Windows. Three required symlink cases remain blocked
+because Windows Developer Mode is disabled. Candidate freeze and CI, the
 zero-S4-skip native Windows ARM64 run, and the candidate-bound attestation remain
 release requirements rather than claimed results. The regular attestation file
 must be the only change in release descendant `R`; the tag and bound evidence

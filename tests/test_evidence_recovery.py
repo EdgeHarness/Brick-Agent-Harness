@@ -216,6 +216,14 @@ def projection(store):
     return json.loads((store.run_dir / evidence.RESULTS).read_text("utf-8"))
 
 
+
+@pytest.fixture
+def tmp_path(s4_bounded_root):
+    """Bound this module's test root so the deepest S4 path stays under the
+    Windows directory limit. Shadows pytest's builtin for this module only, so
+    no test signature changes. See tests/conftest.py for the derivation."""
+    return s4_bounded_root
+
 @pytest.mark.parametrize("boundary", HARD_EXIT_BOUNDARIES)
 def test_hard_process_exit_recovers_fail_closed_without_duplicate_execution(
     tmp_path,

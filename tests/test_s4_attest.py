@@ -1,6 +1,7 @@
 import copy
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import shutil
 import struct
@@ -697,7 +698,17 @@ def test_release_runner_owns_exact_pytest_command_and_sanitized_environment(
 ):
     project = tmp_path / "project"
     evidence_dir = project / "evidence"
-    report_parent = Path(tempfile.mkdtemp(prefix="brick-s4-attest-"))
+    # The attestor's preflight requires the worst S4 path to clear the Windows
+    # 248-character directory limit with margin, which bounds the report
+    # directory to 47 characters. Production uses C:\BrickRuns\s4; %TEMP% is
+    # already 36 characters on this host, so a unit test that exercises the real
+    # preflight rather than monkeypatching it away must allocate equally short.
+    drive_root = os.path.splitdrive(os.getcwd())[0] + os.sep
+    report_parent = Path(
+        tempfile.mkdtemp(prefix="bs4t-", dir=drive_root)
+        if os.name == "nt"
+        else tempfile.mkdtemp(prefix="bs4t-")
+    )
     request.addfinalizer(
         lambda: shutil.rmtree(report_parent, ignore_errors=True)
     )
@@ -706,7 +717,7 @@ def test_release_runner_owns_exact_pytest_command_and_sanitized_environment(
     report_dir = (
         report_parent / ("s4-" + COMMIT[:12] + "-run0001")
     ).resolve()
-    assert len(str(report_dir)) <= 120
+    assert s4_attest.s4_path_headroom(report_dir) >= s4_attest.S4_PATH_MARGIN
     output = evidence_dir / "s4" / "v0.5.0.json"
     fixture_report = tmp_path / "fixture.xml"
     _write_junit(fixture_report)

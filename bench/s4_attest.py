@@ -787,13 +787,64 @@ def _verify_release_tag(project_root, candidate_commit, report_sha256):
     return blob
 
 
-def _native_test_environment():
+# Windows fails CreateDirectoryW at MAX_PATH - 12, not 260, because it reserves
+# twelve characters for an 8.3 name inside the new directory. A directory
+# junction is created through that API, so the S4 layout must be bounded against
+# 248 rather than 260. Mirrored in tests/conftest.py and asserted equal by
+# tests/test_s4_path_contract.py.
+WINDOWS_DIRECTORY_PATH_LIMIT = 248
+S4_PATH_MARGIN = 32
+S4_MAX_WORST_PATH = WINDOWS_DIRECTORY_PATH_LIMIT - S4_PATH_MARGIN
+S4_LONGEST_RUN_ID = "s4-platform-test"
+S4_LONGEST_ARTIFACT_LEAF = "reparse-link"
+S4_PLATFORM_ROOT_ENV = "BRICK_S4_PLATFORM_ROOT"
+S4_PLATFORM_ROOT_DIRNAME = "s4p"
+# mkdtemp allocates an eight-character name below the supplied root.
+S4_ROOT_ALLOCATION = 1 + 8
+
+
+def s4_worst_suffix_length():
+    """Length of the deepest path an S4 test creates below its root."""
+    return len(
+        "\\runs\\{run}\\attempts\\{logical}\\{physical}\\artifacts\\{leaf}".format(
+            run=S4_LONGEST_RUN_ID,
+            logical="a" * 64,
+            physical="b" * 36,
+            leaf=S4_LONGEST_ARTIFACT_LEAF,
+        )
+    )
+
+
+def s4_platform_root_for(report_dir):
+    return Path(report_dir) / S4_PLATFORM_ROOT_DIRNAME
+
+
+def s4_worst_path_length(report_dir):
+    """Worst S4 path length implied by this report directory."""
+    return (
+        len(str(s4_platform_root_for(report_dir)))
+        + S4_ROOT_ALLOCATION
+        + s4_worst_suffix_length()
+    )
+
+
+def s4_path_headroom(report_dir):
+    return WINDOWS_DIRECTORY_PATH_LIMIT - s4_worst_path_length(report_dir)
+
+
+def _native_test_environment(platform_root=None):
     environment = dict(os.environ)
     for name in ("PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTHONPATH"):
         environment.pop(name, None)
     environment["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
     environment["BRICK_S4_NATIVE_REQUIRED"] = "1"
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    if platform_root is None:
+        # Never inherit an operator's value: the bound is only meaningful when
+        # the attestor owns the root it verified.
+        environment.pop(S4_PLATFORM_ROOT_ENV, None)
+    else:
+        environment[S4_PLATFORM_ROOT_ENV] = str(platform_root)
     return environment
 
 
@@ -1200,9 +1251,26 @@ def _create_native_report_directory(project_root, report_dir, commit):
                 report_dir.name[len("s4-" + commit[:12] + "-"):],
             )
         )
-        and len(str(report_dir)) <= 120,
+        ,
         "native report directory must be named "
-        "s4-<candidate-prefix>-<unique-token> at a path of at most 120 chars",
+        "s4-<candidate-prefix>-<unique-token>",
+    )
+    # Derived rather than asserted: the previous flat 120-character rule was not
+    # tied to any Windows limit and neither proved nor explained the bound it
+    # imposed. The real constraint is CreateDirectoryW at MAX_PATH - 12 = 248,
+    # which a directory junction hits. Fail before the report directory is
+    # consumed so a too-long path is reported as a preflight refusal rather than
+    # as a mid-run WinError 206 inside a required S4 case.
+    _require(
+        s4_path_headroom(report_dir) >= S4_PATH_MARGIN,
+        "native report directory leaves insufficient Windows path headroom: "
+        "worst S4 path would be {} characters, leaving {} below the {} "
+        "directory limit; at least {} required".format(
+            s4_worst_path_length(report_dir),
+            s4_path_headroom(report_dir),
+            WINDOWS_DIRECTORY_PATH_LIMIT,
+            S4_PATH_MARGIN,
+        ),
     )
     _require(
         not os.path.lexists(str(report_dir)),
@@ -1282,10 +1350,12 @@ def _run_command(args):
         "--junitxml",
         str(report_path),
     ]
+    platform_root = s4_platform_root_for(report_dir)
+    platform_root.mkdir(parents=True, exist_ok=False)
     completed = subprocess.run(
         command,
         cwd=str(project_root),
-        env=_native_test_environment(),
+        env=_native_test_environment(platform_root),
         check=False,
         capture_output=True,
         text=True,

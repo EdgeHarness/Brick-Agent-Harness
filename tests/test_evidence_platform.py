@@ -110,6 +110,14 @@ finally:
 """
 
 
+
+@pytest.fixture
+def tmp_path(s4_bounded_root):
+    """Bound this module's test root so the deepest S4 path stays under the
+    Windows directory limit. Shadows pytest's builtin for this module only, so
+    no test signature changes. See tests/conftest.py for the derivation."""
+    return s4_bounded_root
+
 def _attempt_key(instance_id="platform-instance"):
     """Build the complete, explicit key used by every platform fixture."""
 
