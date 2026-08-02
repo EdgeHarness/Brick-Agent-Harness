@@ -93,6 +93,31 @@ S1R is in progress. It is not released and no gate has passed.
   pack supplies one opaque callable reporting whether the required effects exist
   in authoritative state, so the contract is fixed now while B0 and S6G remain
   unbuilt.
+- `harness/scoped_memory.py`, scoped and untrusted memory. The released store
+  appended `{"fact": "..."}` to one shared JSONL file and loaded it with
+  `json.loads(line)["fact"]` inside `__init__`, so a single malformed line raised
+  and made the entire store unreadable — a recoverable defect ended the run.
+  A malformed record is now quarantined with its line number, reason and raw
+  text, and loading continues. Quarantine rather than discard is deliberate: a
+  silently dropped memory and a correctly absent one are indistinguishable
+  afterwards, which would make a memory failure look like a model that never
+  learned.
+- Every record carries tenant/subject/attempt scope, provenance, schema version
+  and optional expiry. Reads never cross a scope boundary; an attempt-scoped
+  record is private to that attempt while a subject-scoped record is shared, and
+  nothing widens a scope. The released single shared file let a preference leak
+  across tasks, tenants and subjects — which for the learning family, where the
+  whole measurement is whether a stored preference is used later, does not add
+  noise but fabricates the effect being measured.
+- Memory is treated as untrusted model-authored input, not configuration.
+  Control markers such as `<|im_start|>` and NUL are refused, content is length
+  bounded, and rendering quotes records as inert, clearly attributed data with
+  newlines flattened so a record cannot forge turn boundaries in the assembled
+  prompt.
+- `write_policy` is explicit. `read_only` refuses writes at the store, so the
+  no-memory ablation is enforced by the instrument rather than by a caller
+  remembering not to write. Expiry hides a record without deleting it, and an
+  expiry that cannot be evaluated counts as expired.
 
 ### Changed
 
