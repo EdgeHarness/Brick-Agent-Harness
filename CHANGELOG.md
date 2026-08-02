@@ -47,6 +47,29 @@ S1R is in progress. It is not released and no gate has passed.
   tests.
 - A malformed schema raises `SchemaError` at definition rather than at call
   time, since a schema defect is a developer error, not a model error.
+- `harness/parsing.py`, conservative tool-call parsing. Two released defects,
+  both silent. The brace matcher was not string-aware, so a closing brace inside
+  a JSON string terminated the object early: a valid tool call whose body reads
+  `Hi {name}, bye}` was **rejected**, consuming a turn of the opportunity budget
+  and recording a spurious model error. Extraction now tracks string literals and
+  backslash escapes, and reports an unterminated string rather than mis-parsing.
+  It deliberately no longer repairs trailing commas; the released parser did,
+  which taught the model that invalid output is acceptable and made the
+  transcript disagree with what was executed.
+- Argument repair is limited to an explicit, versioned alias table. The released
+  `repair_args` used `difflib.get_close_matches(cutoff=0.5)` and then fell back to
+  substring matching, so `{"id": ...}` was renamed to `lead_id` on a delete tool
+  — inference on a mutation argument, where the model said one thing and the
+  runtime executed another against authoritative state. Similarity and substring
+  matching are gone entirely. A mutating tool accepts only aliases declared for
+  that specific tool; a global alias never rewrites an argument that reaches
+  authoritative state. Chained aliases are refused because resolving `a`→`b`→`c`
+  would make the applied rename depend on iteration order.
+- Unknown parameters are reported, never dropped. The released repair deleted
+  them silently, so a model sending `confirm: false` had its safety intent
+  discarded with no record. Refusing to repair is the safe outcome: a rejected
+  call costs one turn, a wrongly repaired one produces a wrong effect the grader
+  may score as a genuine model failure.
 
 ### Changed
 
