@@ -102,7 +102,11 @@ characters and failed `CreateDirectoryW`, whose limit is MAX_PATH - 12 = 248.
 That failure moved with the pytest counter and the user name, so the gate could
 silently flip. The S4 test root is now bounded and asserted.
 Candidate CI, a clean native Windows ARM64 run, and candidate-bound attestation
-remain release requirements rather than claimed results. S1R has not started.
+were satisfied and `v0.5.0` is released.
+
+**S1R is released as `v0.6.0`.** Every item in its exit gate has passing tests:
+parser 33, schema 50, semantic-value 6, memory 36, completion 35, truncation 7,
+timeout 3, executor 31. B0 has not started.
 `v0.4.0` and the S4 candidate record no benchmark effect.
 
 **Benchmark host, verified eligible:**

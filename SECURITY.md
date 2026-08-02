@@ -6,7 +6,7 @@ Brick is an experimental research scaffold. It is not approved for production,
 private Brix data, authoritative business systems, or unattended external side
 effects.
 
-The latest release is `v0.5.0` (S4 evidence store), preceded by `v0.4.0`.4.0`, whose native-Windows Lenovo F0 gate passed.
+The latest release is `v0.6.0` (S1R repaired runtime), preceded by `v0.5.0` (S4 evidence store) and `v0.4.0` (F0/Q0 feasibility). The native-Windows Lenovo F0 gate and the native S4 gate both passed.
 Annotated tags and bound evidence are release-authoritative; the tagged S4
 release commit intentionally retains candidate prose until immediate docs-only
 descendant `D` promotes status. No release is approved for real Brix data.

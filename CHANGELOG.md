@@ -14,7 +14,22 @@ that the research instrument is valid or that any measured effect exists.
 
 ## [Unreleased]
 
-S1R is in progress. It is not released and no gate has passed.
+No unreleased changes. The next stage is B0, which begins only after a separate
+review decision.
+
+## [0.6.0] — 2026-08-02
+
+S1R, the repaired typed runtime. Every item in the stage's exit gate has passing
+tests, measured item by item rather than asserted: parser 33, schema 50,
+semantic-value 6, memory 36, completion 35, truncation 7, timeout 3, executor 31.
+Offline suite 680 passed, 3 skipped on native Windows ARM64, with required Linux
+Python 3.9–3.13 and Windows x64 CI green.
+
+S1R needs no native attestation. Unlike S4, its exit gate is that the named tests
+fail closed, which the offline suite and required CI establish.
+
+This release records instrument behaviour only. It is not a benchmark result, no
+measured effect exists, and B0 through S9 are unstarted.
 
 ### Added
 

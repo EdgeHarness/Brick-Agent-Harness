@@ -17,7 +17,7 @@ benchmark results, training corpora, adapters, or model weights are shipped.
 surfaces; it is not evidence of generalization or performance. The proposition
 that orchestration improves model tool use remains an untested hypothesis.
 
-The latest release is `v0.5.0` (S4 evidence store), preceded by `v0.4.0`. The required native-Windows Lenovo F0 evidence
+The latest release is `v0.6.0` (S1R repaired runtime), preceded by `v0.5.0` (S4 evidence store) and `v0.4.0` (F0/Q0 feasibility). The required native-Windows Lenovo F0 evidence
 exists and the gate passed, establishing host and model feasibility only.
 Commit `f12dd71` contains the subsequent independent verifier correction and is
 pushed with required CI green. Candidate `C` implements S4 but does not claim
@@ -207,7 +207,7 @@ Release descendant `R` may add only that regular attestation file. The annotated
 tag and bound evidence—not this candidate-scoped paragraph—authoritatively establish
 whether S4 passed and `v0.5.0` was released. Immediately after the tag,
 docs-only `D` promotes current status without moving the tag. Stop for review
-before S1R, which has not started.
+before B0, which has not started. S1R is released as `v0.6.0`.
 
 No retained matrix begins before the marker-last store, repaired runtime, strict
 graders, independent generators, shared native transport, score-masked

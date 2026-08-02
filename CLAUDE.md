@@ -69,7 +69,13 @@ extracted `v0.4.0` bundles still pass.
 result. Developer Mode is
 enabled on the benchmark host so the three required S4 symlink cases execute;
 Windows long-path support is deliberately off, because the gate must hold on a
-default path regime. S1R has not started.
+default path regime.
+
+S1R is released as `v0.6.0`: executable tool-argument schemas from which the
+native schema and prompt docs are derived, conservative parsing with no
+inference, fail-closed completion decided by authoritative state, scoped
+untrusted memory with quarantine, origin-classified faults, and a typed executor
+whose gates admit a call only when all of them agree. B0 has not started.
 
 For S4, release state is authoritative in the annotated tag and bound evidence.
 Direct descendant `R` adds only the regular file

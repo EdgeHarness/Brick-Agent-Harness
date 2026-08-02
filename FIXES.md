@@ -4,7 +4,7 @@ This file maps known implementation defects to the active release sequence in
 [`PROJECT_SETUP.md`](PROJECT_SETUP.md). It does not define a second gate
 taxonomy.
 
-The latest release is `v0.5.0` (S4 evidence store), preceded by `v0.4.0`. The native Lenovo evidence required for `v0.4.0` exists and
+The latest release is `v0.6.0` (S1R repaired runtime), preceded by `v0.5.0` (S4 evidence store) and `v0.4.0` (F0/Q0 feasibility). The native Lenovo evidence required for `v0.4.0` exists and
 the F0 gate passed. Its independent verifier correction is pushed as CI-green
 commit `f12dd71`. `C` implements the `v0.5.0` S4 candidate without claiming
 native acceptance. “Targeted” below means planned, implemented in a candidate,
@@ -20,8 +20,8 @@ descendant `D` promotes status after the tag and is not part of `v0.5.0`.
 |---|---|---|
 | General filesystem/shell | Unsafe lexical overlay exposed by CLI and Agent Lab | Q0 removes all supported activation paths instead of attempting to harden arbitrary host access |
 | Attempt isolation/evidence | Reused task directories and non-atomic `results.json` | S4 candidate implements marker-last immutable physical bundles and rebuildable projections; native acceptance remains pending |
-| Runtime schemas/parser | Key-only validation, unsafe fuzzy repair, fail-open completion | S1R executable schemas, known-alias-only recovery and authoritative completion |
-| Memory | Shared append-only untrusted JSONL | S1R scoped, versioned, expiring untrusted input |
+| Runtime schemas/parser | Key-only validation, unsafe fuzzy repair, fail-open completion | **Closed in `v0.6.0`.** Executable schemas, explicit-alias-only repair with no inference, completion decided by authoritative state |
+| Memory | Shared append-only untrusted JSONL | **Closed in `v0.6.0`.** Tenant/subject/attempt scoped, versioned, expiring untrusted input with quarantine |
 | Synthetic Brix layer | Not implemented | B0 fictional lead follow-up after S1R |
 | Graders | Loose associations, variable denominators, exceptions scored as zero | S5 strict versioned evidence graders |
 | Agent Lab | Unauthenticated loopback control plane | Q0 removes unsafe capabilities; S5W hardens the remaining control plane |
@@ -226,7 +226,7 @@ attestation remain release requirements rather than claimed results.
 Release descendant `R` may add only the regular
 `evidence/s4/v0.5.0.json` attestation. Its annotated tag authoritatively records
 whether S4 passed despite retaining this candidate text. Docs-only `D` then
-promotes status without moving the tag. S1R has not started and no benchmark
+promotes status without moving the tag. S1R is released as `v0.6.0`. No benchmark
 effect has been measured.
 
 ## S1R — typed and fail-closed runtime
