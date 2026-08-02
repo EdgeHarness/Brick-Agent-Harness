@@ -14,8 +14,42 @@ that the research instrument is valid or that any measured effect exists.
 
 ## [Unreleased]
 
-No unreleased changes. The next stage is B0, which begins only after a separate
-review decision.
+B0 is in progress. It is not released and no gate has passed.
+
+### Added
+
+- `domains/brix_followup_synthetic/services.py`, the deterministic services for
+  the fictional lead-follow-up slice. Every record is fictional, every address is
+  a reserved `.example` domain that cannot resolve, and the module imports nothing
+  capable of reaching a network — a test walks its import graph to assert that
+  rather than trusting the claim.
+- The division of labour is the substance of the stage. The model may list due
+  follow-ups, inspect an assigned lead, propose a follow-up and inspect its
+  proposals. It may not approve, dispatch, cross a tenant boundary, choose a
+  recipient, or bypass a policy. Those live in deterministic code, so a model that
+  asks for them is refused by the instrument rather than trusted not to ask. That
+  matters for the benchmark specifically: if a model could dispatch, a harness
+  that merely asked more persuasively would score higher, and the measured effect
+  would be persuasion rather than task completion.
+- **Approval binds a payload hash, not a proposal id.** Approving "proposal 3"
+  and then dispatching whatever proposal 3 now says would let a revision slip
+  through an approval granted for different content, so approval names the exact
+  bytes and dispatch revalidates the hash still matches. A revision supersedes an
+  earlier draft rather than editing it.
+- **An ambiguous provider timeout is not a failure.** It enters
+  `delivery_unknown`, which must be reconciled before any retry, because retrying
+  a send whose outcome is unknown is precisely how a duplicate delivery happens —
+  two messages to one client. Reconciliation asks the provider what actually
+  occurred and either marks delivery or returns the proposal to approved without
+  resending.
+- Cross-tenant refusals are deliberately indistinguishable from
+  unknown-record refusals: revealing that a lead exists in another tenant is
+  itself a cross-tenant leak.
+- Recipients derive from authoritative lead state, never from model input, so a
+  model cannot redirect a message by asking. Dispatch is idempotent under
+  concurrency: eight racing dispatches deliver exactly once, and eight racing
+  approvals grant once. The audit log is append-only and its accessor returns
+  copies, so history cannot be edited through it.
 
 ## [0.6.0] — 2026-08-02
 
