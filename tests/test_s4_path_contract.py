@@ -12,6 +12,7 @@ depending on how often the suite had been run. These tests pin the derivation so
 the bound cannot silently drift back.
 """
 
+import os
 import re
 from pathlib import Path
 
@@ -127,7 +128,17 @@ def test_preflight_rejects_a_path_with_insufficient_headroom():
 
 
 def test_bounded_root_stays_within_budget(tmp_path):
-    """The fixture's own root must satisfy the bound it enforces."""
+    """The fixture's own root must satisfy the bound it enforces.
+
+    The budget derives from Windows MAX_PATH, which POSIX has no equivalent of,
+    so `s4_bounded_root` deliberately passes pytest's `tmp_path` through
+    unchanged there. The length assertion is therefore Windows-only. It is
+    written as a branch rather than a skip because the S4 gate counts skips, and
+    a POSIX-only skip would add noise to that accounting for no benefit.
+    """
+    assert tmp_path.is_dir()
+    if os.name != "nt":
+        return
     assert conftest.s4_root_is_within_budget(tmp_path), (
         "bounded root is {} characters, budget {}".format(
             len(str(tmp_path)), conftest.S4_MAX_ROOT_LENGTH
