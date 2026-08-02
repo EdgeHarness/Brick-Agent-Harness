@@ -463,6 +463,16 @@ def to_prompt_doc(name, description, schema, indent="    "):
     return "\n".join(lines)
 
 
+def describe(schema):
+    """One-line human description of a value schema.
+
+    Public because a domain pack deriving legacy tool documentation must use the
+    same wording the prompt docs use; two descriptions of one schema would drift.
+    """
+    validate_schema(schema)
+    return _describe(schema)
+
+
 def _describe(schema):
     kind = schema["type"]
     parts = [kind]

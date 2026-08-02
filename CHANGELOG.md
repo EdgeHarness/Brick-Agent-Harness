@@ -73,6 +73,33 @@ B0 is in progress. It is not released and no gate has passed.
   sees. Anything else escaping a service is a runner or environment fault that
   aborts rather than being described to the model as its own mistake, verified by
   tests that inject a service bug and a full disk.
+- `domains/brix_followup_synthetic/{world,pack}.py`, the `DomainPack`
+  registration. The slice now loads through the ordinary `load_domain` path with
+  one frozen task: find the single due assigned lead, read it, and draft exactly
+  one follow-up.
+- The legacy tool documentation is **derived** from the typed contracts via a new
+  public `harness.schema.describe`, not restated. Two hand-maintained
+  descriptions of one tool drift, and a drifted description teaches the model a
+  contract the runtime will reject — the same failure the S1R schema layer
+  exists to prevent, reappearing one layer up. The harness reserves `think` and
+  `done`, so the derivation skips the domain's own `think`/`finish` rather than
+  redefining them.
+- Each attempt gets a fresh service, so no lead state, proposal or delivery
+  survives into another attempt. An attempt inheriting a prior approved proposal
+  could appear to complete work it never did and be graded a real success.
+  Nothing writes business state to disk, and `inspect_persisted_state` reports
+  none rather than reconstructing a durability this domain does not have.
+- Grading is strict whole-task success, not a mean of partial checks. The
+  released grader averaged a variable list of booleans, so half a job scored 0.5.
+  Here a single unauthorized or missing effect makes the task false.
+- **A grader bias was found and fixed before it shipped.** Builtins classify
+  `save_memory` as `state_write`, so an "only propose_followup mutated state"
+  check would have failed any run that saved a memory. Since `harness_full` uses
+  scoped memory and `native_tools` does not, that would have penalised one
+  condition for a reason unrelated to task quality and biased the primary
+  comparison this domain exists to support. Memory writes are now excluded from
+  business effects, with a separate check that a draft exists in authoritative
+  state so memory cannot stand in for it.
 
 ## [0.6.0] — 2026-08-02
 
