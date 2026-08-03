@@ -1,0 +1,148 @@
+{
+  "schema_version": "brick.s6.protocol/1",
+  "protocol_version": "1.0.0",
+  "primary_model": "qwen3.5:4b-q4_K_M",
+  "f0_binding": {
+    "release": "v0.4.0",
+    "run_id": "f0-20260801T164210Z-07054bec",
+    "attestation_path": "evidence/f0/v0.4.0.json",
+    "attestation_sha256": "76f43fbacb2bd122ad4595e2ba51e10f1901d09f22d7009527dc204de244a6e3",
+    "ollama_version": "0.32.5",
+    "primary_model_digest": "sha256:2a654d98e6fba55d452b7043684e9b57a947e393bbffa62485a7aac05ee4eefd",
+    "median_eval_tps": 22.263434312850233,
+    "degradation_fraction": 0.7
+  },
+  "transport": {
+    "endpoint": "http://127.0.0.1:11434",
+    "path": "/api/chat",
+    "stream": false,
+    "keep_alive": "10m",
+    "request_timeout_seconds": 600
+  },
+  "sampling": {
+    "think": false,
+    "temperature": 1.0,
+    "top_p": 1.0,
+    "top_k": 20,
+    "min_p": 0.0,
+    "presence_penalty": 2.0,
+    "repeat_penalty": 1.0,
+    "num_ctx": 8192
+  },
+  "opportunity_budget": {
+    "model_calls": 14,
+    "generated_tokens": 4096,
+    "generated_tokens_per_request": 700,
+    "shared_across_subepisodes": true
+  },
+  "base_seed": {
+    "algorithm": "sha256-prefix31-v1",
+    "inputs": ["protocol_sha256", "instance_id"],
+    "request_policy": "reuse_base_seed"
+  },
+  "observation": {
+    "maximum_characters": 2000,
+    "full_value_retained_in_action_evidence": true
+  },
+  "instrument_retry_limit": 1,
+  "conditions": [
+    {
+      "name": "native_tools",
+      "version": "1.0.0",
+      "mechanisms": [
+        "native_ollama_tools",
+        "typed_closed_validation",
+        "structured_model_error_feedback"
+      ]
+    },
+    {
+      "name": "harness_full",
+      "version": "1.0.0",
+      "mechanisms": [
+        "native_ollama_tools",
+        "typed_closed_validation",
+        "structured_model_error_feedback",
+        "native_think_plan_first",
+        "attempt_scoped_untrusted_memory_injection",
+        "known_alias_recovery",
+        "identical_mutation_suppression",
+        "bounded_observation_management",
+        "public_completion_guard"
+      ]
+    }
+  ],
+  "descriptive_conditions": [
+    {
+      "name": "raw_json",
+      "version": "1.0.0",
+      "runner": "raw_json_loop",
+      "mechanisms": [
+        "prose_json_tool_protocol",
+        "conservative_json_object_extraction",
+        "typed_closed_validation",
+        "structured_model_error_feedback"
+      ]
+    },
+    {
+      "name": "harness_no_plan",
+      "version": "1.0.0",
+      "runner": "native_tool_loop",
+      "mechanisms": [
+        "native_ollama_tools",
+        "typed_closed_validation",
+        "structured_model_error_feedback",
+        "attempt_scoped_untrusted_memory_injection",
+        "known_alias_recovery",
+        "identical_mutation_suppression",
+        "bounded_observation_management",
+        "public_completion_guard"
+      ]
+    },
+    {
+      "name": "harness_no_recovery",
+      "version": "1.0.0",
+      "runner": "native_tool_loop",
+      "mechanisms": [
+        "native_ollama_tools",
+        "typed_closed_validation",
+        "structured_model_error_feedback",
+        "native_think_plan_first",
+        "attempt_scoped_untrusted_memory_injection",
+        "bounded_observation_management",
+        "public_completion_guard"
+      ]
+    },
+    {
+      "name": "harness_no_completion_guard",
+      "version": "1.0.0",
+      "runner": "native_tool_loop",
+      "mechanisms": [
+        "native_ollama_tools",
+        "typed_closed_validation",
+        "structured_model_error_feedback",
+        "native_think_plan_first",
+        "attempt_scoped_untrusted_memory_injection",
+        "known_alias_recovery",
+        "identical_mutation_suppression",
+        "bounded_observation_management"
+      ]
+    },
+    {
+      "name": "harness_no_memory",
+      "version": "1.0.0",
+      "runner": "native_tool_loop",
+      "mechanisms": [
+        "native_ollama_tools",
+        "typed_closed_validation",
+        "structured_model_error_feedback",
+        "native_think_plan_first",
+        "attempt_scoped_memory_bridge_disabled",
+        "known_alias_recovery",
+        "identical_mutation_suppression",
+        "bounded_observation_management",
+        "public_completion_guard"
+      ]
+    }
+  ],
+  "retained_execution_enabled": false
+}

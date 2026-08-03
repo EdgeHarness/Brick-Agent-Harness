@@ -124,7 +124,7 @@ metamorphic cases for every scenario.
 | Free space on C: | ~878 GB |
 | Python | 3.13 ARM64, `%LOCALAPPDATA%\Programs\Python\Python313-arm64` |
 | Git | 2.55.0.windows.3 |
-| Ollama | 0.32.5 installed. The plan deliberately does **not** pre-pin a version: F0 selects and records the exact ARM64 build, digest and metadata. |
+| Ollama | 0.32.5 installed. F0 selected and attested this exact ARM64 runtime; the S6 protocol now pins its attestation hash, version, and model digest. |
 | Repository | `C:\Brick` |
 
 Everything F0 requires of the host is satisfied. Nothing else is verified,
@@ -132,16 +132,22 @@ because verifying it is F0's job.
 
 ## 3. Immediate next action
 
-The S6G boundary is complete: 341 cases across all five manifests replay
-exactly, all 341 semantic structures are distinct, no entity key or surface is
-reused anywhere, and structural templates do not cross splits. The complete native
-suite passes 808 with 3 intentional platform skips, and `v0.10.0` is published.
-No model run or effect estimate exists. Stop for review. The next stage is S6C
-condition and scheduler integration, and it begins only after a separate
-explicit decision.
+The S6C boundary is complete. `office-generators/1.0.2` reproduces all 341 cases
+without changing the frozen `1.0.0` seed allocation; every required effect is
+compiled into one fixed six-check grader. The exact F0-attested Qwen 4B digest,
+Ollama 0.32.5, native schemas, condition mechanisms, opportunity ledger,
+requests, responses, actions, state, artifacts, retry identity, and environment
+are bound into disposable attempt evidence. The complete native suite passes
+828 with 3 intentional platform skips, and `v0.11.0` is published. Disposable
+live checks exercised native tools, two-subepisode memory, raw JSON, and a real
+XLSX artifact; they are engineering records, not an effect estimate.
 
-Do not import or synchronize the moving `SMalshe/Brick` product tree into S4,
-S1R, B0, or a retained condition. `PROJECT_GUIDE.md` defines the convergence
+Stop for review. The next stage is D0/S7. It must implement score-masked timing,
+the role-aware equal-action sensitivity contract, frozen analysis code, and the
+runtime-only sample-size decision before any retained execution is unlocked.
+
+Do not import or synchronize the moving `SMalshe/Brick` product tree into the
+research instrument or a retained condition. `PROJECT_GUIDE.md` defines the convergence
 rule: future product work is identified by an immutable commit and enters
 through a versioned adapter and conformance suite. B0 remains a fictional
 no-network domain pack.

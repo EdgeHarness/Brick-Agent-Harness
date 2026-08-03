@@ -14,8 +14,72 @@ that the research instrument is valid or that any measured effect exists.
 
 ## [Unreleased]
 
-No unreleased changes. The next stage is S6C condition and scheduler integration,
-which begins only after a separate review decision.
+No unreleased changes. D0/S7 is the next stage and remains locked until a
+separate review decision.
+
+## [0.11.0] — 2026-08-03
+
+S6C fair-condition runtime, standalone disposable scheduler, telemetry, rules
+reference, and descriptive ablations. This release implements and tests the
+experiment instrument; it does not run D0, unlock retained execution, estimate a
+harness effect, or claim model improvement.
+
+### Added
+
+- One shared loopback Ollama `/api/chat` transport with exact request/response
+  validation, native assistant tool calls and `role=tool` observations, full raw
+  request/response evidence, per-request telemetry, and environment/runner/model
+  failure separation.
+- Closed typed contracts for all 14 generated-office tools. Native schemas and
+  runtime validation derive from the same contracts; the primary conditions
+  expose byte-identical schema order and content.
+- A non-resetting end-to-end opportunity ledger charging planning, driver and
+  completion requests before dispatch, with 14 calls, 4,096 generated tokens,
+  and 700 tokens per request.
+- An immutable seven-condition registry: `native_tools`, `harness_full`, the
+  `raw_json` lower bound, three predefined harness ablations, and the
+  no-memory-bridge ablation. Every condition binds a versioned mechanism digest.
+- Mechanism-gated harness planning, attempt-scoped untrusted memory,
+  explicit-alias recovery, identical-mutation suppression, bounded model-facing
+  observations with full evidence retention, and public completion review.
+- `bench/s6_run.py`, a standalone disposable balanced-wave scheduler with
+  AB/BA primary order, exact AttemptKeys, marker-last evidence, committed resume,
+  at most one environment/instrument retry, and a mechanical retained-run lock.
+- `bench/s6_preflight.py`, binding native Windows ARM64, Python/dependencies,
+  all manifests, schemas, the exact Ollama 0.32.5 runtime, the F0-attested Qwen
+  4B digest, implementation/domain hashes, and worktree cleanliness for gates.
+- A compiled six-check strict grader for all generated effect descriptors and a
+  deterministic model-free rules executor. `bench/s6_rules_reference.py`
+  produces a separately labeled architecture-selection summary.
+- Current-source design rationale in `bench/S6C_RESEARCH_BASIS.md`, distinguishing
+  official implementation sources from July 2026 preprints.
+- End-to-end scheduler tests proving same-seed environment retry, committed
+  resume without producer rerun, and no retry of a valid model failure. The
+  complete native Windows ARM64 offline suite passes 828 with 3 intentional
+  platform skips.
+
+### Changed
+
+- `office-generators/1.0.2` clarifies two prompt/oracle contracts discovered by
+  disposable transcript review: reminder messages must repeat every checklist
+  item, and preference-learning use episodes now state every oracle-critical
+  event value. The `1.0.0` seed namespace remains fixed, while generator version
+  and every affected content digest record the corrections.
+- The `think` contract permits up to 4,096 characters so the configured
+  700-token completion review cannot be rejected by an unrelated 1,000-character
+  ceiling.
+
+### Fixed
+
+- Atomic AttemptKeys no longer falsely record that their actual shared attempt
+  ledger is disabled.
+- Observation truncation now matches its declared mechanism: full native
+  observations remain visible to `native_tools`; only conditions declaring
+  bounded observation management receive a truncated model view.
+- Descriptive conditions selected on the CLI are now emitted by the scheduler;
+  a zero-cell selection can no longer masquerade as a successful run.
+- Correct partial state cannot pass after budget exhaustion, and corrupt grader
+  input remains a null runner/grader outcome rather than a model failure.
 
 ## [0.10.0] — 2026-08-03
 

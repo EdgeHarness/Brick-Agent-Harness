@@ -4,15 +4,17 @@ This directory contains the released **exploratory synthetic benchmark** and is
 being rebuilt into the instrument specified in
 [`../PROJECT_SETUP.md`](../PROJECT_SETUP.md).
 
-The latest release is `v0.10.0` (S6G independent task generators), preceded by
-`v0.9.0` (S5W), `v0.8.0` (S5), `v0.7.0` (B0), `v0.6.0` (S1R), `v0.5.0` (S4),
-and `v0.4.0` (F0/Q0).
+The latest release is `v0.11.0` (S6C fair-condition runtime and scheduler),
+preceded by `v0.10.0` (S6G), `v0.9.0` (S5W), `v0.8.0` (S5), `v0.7.0` (B0),
+`v0.6.0` (S1R), `v0.5.0` (S4), and `v0.4.0` (F0/Q0).
 The Lenovo F0 gate passed, establishing that this
 host can run the designed experiment. S4's production evidence store and
 attestor are released: the native gate passed with `overall_status` pass, 461
-passed, 0 failed and `s4_skipped` 0. The rest of the benchmark instrument
-remains unbuilt, and no committed result establishes that the harness improves a
-model.
+passed, 0 failed and `s4_skipped` 0. S6C now implements the generated-office
+compiler/grader, shared native transport, conditions, accounting, scheduler,
+preflight, telemetry, rules reference, and descriptive ablations. Retained
+execution remains disabled, and no committed result establishes that the
+harness improves a model.
 
 Annotated tags and bound evidence are release-authoritative; see the canonical
 `C`/`R`/`D` lifecycle in
@@ -270,8 +272,22 @@ access:
 python -m bench.generate_manifests --verify
 ```
 
-These are frozen benchmark inputs, not outcomes. S6C must still compile them
-into paired runnable conditions before any development or retained model run.
+These are frozen benchmark inputs, not outcomes. S6C compiles them into paired
+runnable primary conditions plus separately labeled descriptives. Retained
+execution remains mechanically blocked until S8/S9.
+
+Read-only native preflight and disposable engineering runs:
+
+```powershell
+python -m bench.s6_preflight
+python -m bench.s6_run --split development --max-cases 1 --allow-dirty
+python -m bench.s6_rules_reference --split development
+```
+
+Omit `--allow-dirty` for a gate candidate. `bench/s6_run.py` rejects the
+retained split regardless of CLI arguments in S6C. Its default conditions are
+only `native_tools` and `harness_full`; descriptive conditions must be selected
+explicitly with `--condition`.
 
 S5 graders use fixed versioned rubrics over immutable attempt evidence. Strict
 whole-task success is primary. Harmful, unauthorized, stale, missing, extra or
@@ -325,8 +341,9 @@ while rejection is also permitted. Unknown-name behavior is not a gate.
 This proves recognition and declared type for the exact production option map,
 not the numerical behavior of any sampler. Brick additionally owns the request
 contract: every request is validated against exact keys, types, finite values and
-frozen values before it reaches the network. The exact Ollama binary and model
-digests come from F0 rather than a hard-coded version.
+frozen values before it reaches the network. F0 selected the exact Ollama
+runtime and model digests; S6 now binds its passed attestation hash, Ollama
+0.32.5, and the exact primary model digest.
 
 ## Preparing the Lenovo host
 
@@ -547,6 +564,11 @@ Run descriptives only after sealing the primary:
 The default maximum is 662 model attempts. `rules_reference` is model-free and
 reported separately. Every secondary is descriptive: no confirmatory p-values,
 Holm tests, causal mechanism claim or “no effect” conclusion.
+
+The implementation and current-source rationale for S6C are recorded in
+[`S6C_RESEARCH_BASIS.md`](S6C_RESEARCH_BASIS.md). Sources inform design; only
+Brick's executable contracts, preflight, and immutable evidence decide whether
+the local instrument passes.
 The two no-memory cases each remain one ordered two-subepisode logical attempt;
 only the scoped memory bridge is disabled.
 

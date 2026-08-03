@@ -19,16 +19,19 @@ benchmark results, training corpora, adapters, or model weights are shipped.
 surfaces; it is not evidence of generalization or performance. The proposition
 that orchestration improves model tool use remains an untested hypothesis.
 
-The latest release is `v0.10.0` (S6G independent task generators), preceded by
-`v0.9.0` (S5W), `v0.8.0` (S5), `v0.7.0` (B0), `v0.6.0` (S1R), `v0.5.0` (S4),
-and `v0.4.0` (F0/Q0).
+The latest release is `v0.11.0` (S6C fair-condition runtime and scheduler),
+preceded by `v0.10.0` (S6G), `v0.9.0` (S5W), `v0.8.0` (S5), `v0.7.0` (B0),
+`v0.6.0` (S1R), `v0.5.0` (S4), and `v0.4.0` (F0/Q0).
 The required native-Windows Lenovo F0 evidence
 exists and the gate passed, establishing host and model feasibility only.
 Commit `f12dd71` contains the subsequent independent verifier correction and is
 pushed with required CI green. Native S4 acceptance, S1R, and B0 are released.
 S5 is released with strict versioned graders. S6G freezes 341 replayable,
-split-isolated fictional office instances across 11 logical families; it still
-contains no benchmark result. S6C condition and scheduler integration is next.
+split-isolated fictional office instances across 11 logical families. S6C
+compiles them into shared native-tool primary conditions, descriptive
+ablations, a raw-JSON lower bound, a model-free rules reference, and a
+restartable disposable scheduler. Retained execution remains mechanically
+disabled, D0/S7 is next, and no confirmatory effect estimate exists.
 The Mac is a source-development and
 offline-test host only.
 

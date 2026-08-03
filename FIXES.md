@@ -4,9 +4,9 @@ This file maps known implementation defects to the active release sequence in
 [`PROJECT_SETUP.md`](PROJECT_SETUP.md). It does not define a second gate
 taxonomy.
 
-The latest release is `v0.10.0` (S6G independent task generators), preceded by
-`v0.9.0` (S5W), `v0.8.0` (S5), `v0.7.0` (B0), `v0.6.0` (S1R), `v0.5.0` (S4),
-and `v0.4.0` (F0/Q0).
+The latest release is `v0.11.0` (S6C fair-condition runtime and scheduler),
+preceded by `v0.10.0` (S6G), `v0.9.0` (S5W), `v0.8.0` (S5), `v0.7.0` (B0),
+`v0.6.0` (S1R), `v0.5.0` (S4), and `v0.4.0` (F0/Q0).
 The native Lenovo evidence required for `v0.4.0` exists and
 the F0 gate passed. Its independent verifier correction is pushed as CI-green
 commit `f12dd71`. Native S4 acceptance, S1R, and B0 are released; the current
@@ -22,15 +22,15 @@ descendant `D` promotes status after the tag and is not part of `v0.5.0`.
 | Area | Released `v0.3.1` state | Active remediation |
 |---|---|---|
 | General filesystem/shell | Unsafe lexical overlay exposed by CLI and Agent Lab | Q0 removes all supported activation paths instead of attempting to harden arbitrary host access |
-| Attempt isolation/evidence | Reused task directories and non-atomic `results.json` | S4 released marker-last immutable physical bundles and rebuildable projections; S6C still must wire them into the scheduler |
+| Attempt isolation/evidence | Reused task directories and non-atomic `results.json` | **Closed through `v0.11.0`.** S4 marker-last immutable bundles are wired into the restartable S6C scheduler |
 | Runtime schemas/parser | Key-only validation, unsafe fuzzy repair, fail-open completion | **Closed in `v0.6.0`.** Executable schemas, explicit-alias-only repair with no inference, completion decided by authoritative state |
 | Memory | Shared append-only untrusted JSONL | **Closed in `v0.6.0`.** Tenant/subject/attempt scoped, versioned, expiring untrusted input with quarantine |
 | Synthetic Brix layer | Not implemented | **Closed in `v0.7.0`.** Fictional lead follow-up with fake records, a no-network fake provider, approval-gated delivery and reconciliation |
 | Graders | Loose associations, variable denominators, exceptions scored as zero | **Closed in `v0.8.0`.** Fixed versioned rubrics over copied evidence, with instrument failures null |
 | Agent Lab | Unauthenticated loopback control plane | Q0 removes unsafe capabilities; S5W hardens the remaining control plane |
 | Task instances | Twelve fixed prompts and shared order/state | **Closed in `v0.10.0`.** Versioned structural generators, canonical manifests, exact replay, and isolated splits |
-| Conditions/baselines | Prompt-JSON `raw` versus bundled legacy `harness` | S6C shared native transport, competent baseline, explicit harness, rules and descriptives |
-| Provenance/scheduler | Partial metadata and interactive long-run assumptions | S4/S6C immutable provenance and standalone restartable execution |
+| Conditions/baselines | Prompt-JSON `raw` versus bundled legacy `harness` | **Closed in `v0.11.0`.** Shared native primary transport, competent baseline, explicit harness, rules reference and descriptives |
+| Provenance/scheduler | Partial metadata and interactive long-run assumptions | **Closed through `v0.11.0`.** S4/S6C immutable provenance and standalone restartable disposable execution |
 | Protocol/statistics | No frozen valid retained protocol | D0/S7 fixed-family paired protocol and runtime-only sample rule |
 | Live evidence | No retained results | Lenovo F0, zero-invalid S8 sentinel, then primary-first S9 |
 
@@ -383,7 +383,9 @@ not separate model attempts, so the 440/662 totals remain valid.
 Development, validation, sentinel, retained and adversarial splits must replay
 from manifests and share neither entities nor structural templates.
 
-Implemented in `v0.10.0`. `office-generators/1.0.0` emits 2, 4, 1, 20, and 4
+Implemented in `v0.10.0`; prompt-contract corrections in S6C version the
+generator as `office-generators/1.0.2` while preserving the `1.0.0` seed
+namespace. It emits 2, 4, 1, 20, and 4
 cases per family for development, validation, sentinel, retained, and
 adversarial use respectively: 341 cases across 11 logical families. Every case
 has an exact 14-call/4096-generated-token budget. Canonical manifests bind full
@@ -392,8 +394,8 @@ structures and templates and rejects entity-key or entity-surface reuse anywhere
 in the suite. The retained
 manifest freezes 20 cases per family, including a fixed 12-case prefix for the
 predeclared fallback. `python -m bench.generate_manifests --verify` reproduces
-and compares every committed byte. This closes input generation only; no model
-outcome has been observed and S6C remains unstarted.
+and compares every committed byte. S6C compiles these inputs into the released
+conditions and graders; no confirmatory effect estimate has been observed.
 
 ## S6C — fair conditions and accounting
 
@@ -426,6 +428,17 @@ opportunities, memory and environment telemetry.
 
 If rules dominate a family, recommend deterministic execution for that family.
 Do not hide the result as strategically inconvenient.
+
+Implemented in `v0.11.0`. The primary conditions share one loopback native-tool
+transport, exact schema bytes/order, F0-attested model/runtime, deterministic
+seed derivation, validators, tasks, and 14-call/4,096-token ledger. Seven
+conditions have immutable mechanism digests. The standalone disposable
+scheduler balances primary order, commits full request/response/action/state and
+artifact evidence through S4, resumes committed work, retries only one
+environment/instrument failure, and rejects retained execution. The model-free
+reference strictly passes all 341 generated cases. The equal-action sensitivity
+still requires a role-aware budget contract in D0/S7; it is not approximated by
+an undifferentiated larger call ceiling.
 
 ## D0/S7 through S9 — protocol and retained execution
 

@@ -20,7 +20,13 @@ from harness.instances import (
 
 
 SUITE = "office-synthetic"
-GENERATOR_VERSION = "office-generators/1.0.0"
+GENERATOR_VERSION = "office-generators/1.0.2"
+# The patch releases clarify prompt/oracle contracts in remind_msg and
+# preference_learning without changing the allocated stochastic cases. Keeping
+# the 1.0.0 seed namespace prevents an unrelated reshuffle of axes, entities,
+# and dates while the generator version and every content digest still record
+# the corrections.
+SEED_NAMESPACE = "office-generators/1.0.0"
 FAMILY_VERSION = "1.0.0"
 
 FAMILIES = (
@@ -81,7 +87,7 @@ FORBIDDEN_EFFECTS = [
 
 
 def _seed(split, family, index):
-    payload = "%s|%s|%s|%d" % (GENERATOR_VERSION, split, family, index)
+    payload = "%s|%s|%s|%d" % (SEED_NAMESPACE, split, family, index)
     return int.from_bytes(hashlib.sha256(payload.encode("utf-8")).digest()[:8], "big") & ((1 << 63) - 1)
 
 
@@ -492,7 +498,8 @@ def _remind_msg(ctx):
         })
     prompt = (
         "Set one reminder for %s at %s for %s to submit this checklist: %s. Also send %s "
-        "one message saying the full checklist will be complete by that deadline. Preserve "
+        "one message that repeats every checklist item and says the full checklist will "
+        "be complete by that deadline. Preserve "
         "all existing reminders."
         % (date, time, owner["name"], ", ".join(checklist), recipient["name"])
     )
@@ -542,7 +549,13 @@ def _preference_learning(ctx):
         },
         {
             "id": "use",
-            "prompt": "Book a morning sync with %s tomorrow, applying every relevant preference I just gave you." % colleague["name"],
+            "prompt": (
+                "Book an event titled '%s' with %s tomorrow at the earliest start "
+                "time allowed by every relevant preference I just gave you, for "
+                "exactly the preferred duration. Invite only %s and set the location "
+                "exactly to 'Video'."
+                % (title, colleague["name"], colleague["email"])
+            ),
             "required_effects": [use_effect],
         },
     ]

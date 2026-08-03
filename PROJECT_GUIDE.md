@@ -8,9 +8,9 @@ history is recorded in [`CHANGELOG.md`](CHANGELOG.md).
 
 ## 1. Candidate status and release authority
 
-The latest release is `v0.10.0` (S6G independent task generators), preceded by
-`v0.9.0` (S5W), `v0.8.0` (S5), `v0.7.0` (B0), `v0.6.0` (S1R), `v0.5.0` (S4),
-and `v0.4.0` (F0/Q0). Brick
+The latest release is `v0.11.0` (S6C fair-condition runtime and scheduler),
+preceded by `v0.10.0` (S6G), `v0.9.0` (S5W), `v0.8.0` (S5), `v0.7.0` (B0),
+`v0.6.0` (S1R), `v0.5.0` (S4), and `v0.4.0` (F0/Q0). Brick
 is an experimental local agent-harness research scaffold with:
 
 - explicit runtime, registry, policy, hook, and domain-pack contracts;
@@ -27,8 +27,9 @@ F0/Q0 is released as `v0.4.0` and S4 as `v0.5.0`. The native Lenovo F0 gate
 passed, recording host and model feasibility; the native Windows ARM64 S4 gate
 passed from candidate `0b8f77d` with `overall_status` pass, 461 passed, 0 failed
 and `s4_skipped` 0. Both record instrument behaviour only. S1R and B0 are
-released. S5 is released as `v0.8.0`, S5W as `v0.9.0`, and S6G as `v0.10.0`.
-S6C through S9 are unstarted.
+released. S5 is released as `v0.8.0`, S5W as `v0.9.0`, S6G as `v0.10.0`, and
+S6C as `v0.11.0`. D0/S7 through S9 are unstarted; retained execution remains
+disabled and no confirmatory effect estimate exists.
 
 Annotated tags and their bound evidence are authoritative. The tagged S4 release
 commit `R` adds only `evidence/s4/v0.5.0.json` to tested candidate `C`; docs-only

@@ -7,7 +7,7 @@ the former `S0`–`S18`, `G0`–`G1`, `R1`–`R5`, and `P0`–`P4` execution tax
 Those names may remain in released changelog entries as historical descriptions,
 but they no longer authorize or order current work.
 
-The latest released version is `v0.10.0`. The native-Windows Lenovo F0 gate
+The latest released version is `v0.11.0`. The native-Windows Lenovo F0 gate
 passed, so `v0.4.0` records feasibility, and the native Windows ARM64 S4 gate
 passed from candidate `0b8f77d` with `overall_status` pass, 461 passed, 0 failed
 and `s4_skipped` 0, so `v0.5.0` records the production evidence store. Both
@@ -20,14 +20,19 @@ S5 is released as `v0.8.0`. Its acceptance matrix covers every released
 scenario and every required fixture class; candidate and tag CI are green.
 S5W is released as `v0.9.0`: its 17-test adversarial matrix covers the startup
 capability, Host/Origin, JSON/body, run/confirmation/reset, path/retention, and
-real process-tree gates. S6G is released as `v0.10.0`: its
-`office-generators/1.0.0` source deterministically reproduces 341 canonical
+real process-tree gates. S6G is released as `v0.10.0`; the S6C prompt-contract
+corrections version its generator as `office-generators/1.0.2`, which
+deterministically reproduces 341 canonical
 fictional instances across development, validation, sentinel, retained, and
 adversarial manifests; all 341 semantic structures are distinct and no entity
 key or entity surface repeats anywhere, and no structural template crosses a
-split. The complete
-native Windows ARM64 suite passes 808 with 3 platform-intentional skips. S6C
-through S9 are unstarted and no measured effect exists.
+split. S6C is released as `v0.11.0`: it provides the shared native transport,
+typed office contracts, compiled generated grader, mechanism-digested condition
+registry, opportunity ledger, restartable disposable scheduler, raw-JSON lower
+bound, descriptive ablations, telemetry, strict F0/runtime binding, and
+model-free rules reference. The complete native Windows ARM64 suite passes 828
+with 3 platform-intentional skips. D0/S7 through S9 are unstarted, retained
+execution is mechanically disabled, and no confirmatory effect estimate exists.
 
 Release identity is authoritative in annotated Git tags and their bound
 evidence, not in mutable current-status prose. S4 uses three commits/states:
@@ -41,8 +46,9 @@ that it did.
 
 The program targets three outputs, and they must not be conflated:
 
-1. a reusable generic harness instrument; S4, S1R, and S5 provide
-   major components, while retained-run integration remains S6C work;
+1. a reusable generic harness instrument; S4, S1R, S5, and S6C provide
+   the evidence, typed execution, grading, condition, accounting, and scheduler
+   components, while retained health policy and analysis remain later-stage work;
 2. a replaceable, entirely synthetic Brix lead-follow-up demonstration; B0
    implements and tests the service layer plus a model-facing draft task, while
    an end-to-end operator demonstration remains unfinished; and
