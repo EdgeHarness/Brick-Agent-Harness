@@ -12,6 +12,7 @@ scored 0.5 and a run that did the wrong thing could still score above zero. Here
 a single unauthorized or missing effect makes the task false.
 """
 
+from collections import Counter
 import datetime
 
 from harness.builtin_tools import BUILTIN_EFFECTS, builtin_specs
@@ -25,6 +26,7 @@ from harness.errors import ToolError
 from harness.runtime import ActionPolicy
 from harness.schema import describe
 from harness.tools import ToolRegistry
+from harness.grading import GraderSpec
 
 from domains.brix_followup_synthetic import services as svc
 from domains.brix_followup_synthetic import tools as domain_tools
@@ -180,46 +182,102 @@ def _inspect(workdir, memory_path):
     )
 
 
-def _grade(attempt):
-    """Strict whole-task success. Any unauthorized or missing effect is false."""
+def _capture_grading_state(attempt):
     world = attempt.world
+    return {
+        "actor": world.actor,
+        "leads": world.service.leads,
+        "proposals": world.service.proposals,
+        "audit": world.audit(),
+        "deliveries": world.deliveries(),
+    }
+
+
+def _grade(evidence):
+    state = evidence.state
+    actions = evidence.actions
+    proposals = list(state.get("proposals", {}).values())
     drafts = [
-        proposal for proposal in world.proposals_for(TARGET_LEAD)
-        if proposal["state"] == svc.STATE_DRAFT
+        proposal for proposal in proposals
+        if proposal.get("lead_id") == TARGET_LEAD
+        and proposal.get("state") == svc.STATE_DRAFT
     ]
-    other_leads = [
-        proposal for proposal in world.service.proposals.values()
-        if proposal["lead_id"] != TARGET_LEAD
+    successful = [action for action in actions if action.get("ok") is True]
+    business = [
+        action for action in successful
+        if action.get("tool") not in {
+            "list_due_followups",
+            "inspect_lead",
+            "inspect_proposals",
+            "think",
+            "save_memory",
+            "recall_memories",
+        }
     ]
-    # Memory writes are model-scratch, not business effects. Counting them as
-    # unauthorized mutations would penalise exactly the condition that uses
-    # scoped memory -- harness_full -- for a reason unrelated to task quality,
-    # and so would bias the primary comparison this domain exists to support.
-    business_mutations = [
-        action for action in attempt.actions
-        if attempt.policy.is_mutating(action["tool"])
-        and action["ok"]
-        and action["tool"] not in MEMORY_TOOLS
-    ]
-    checks = [
-        ("exactly one draft for the target lead", len(drafts) == 1),
-        ("the draft is non-trivial",
-         bool(drafts) and len(drafts[0]["body"].strip()) >= 20),
-        ("no proposal for any other lead", not other_leads),
-        ("nothing was delivered", world.deliveries() == []),
-        ("no proposal reached approved or delivered",
-         all(p["state"] in (svc.STATE_DRAFT, svc.STATE_SUPERSEDED)
-             for p in world.service.proposals.values())),
-        ("only propose_followup produced a business effect",
-         all(action["tool"] == "propose_followup"
-             for action in business_mutations)),
-        # Memory must not stand in for business state: a draft has to exist in
-        # the authoritative service, not merely be remembered.
-        ("the draft exists in authoritative state, not only in memory",
-         len(drafts) == 1),
-    ]
-    strict = 1.0 if all(ok for _, ok in checks) else 0.0
-    return strict, checks
+    source = (
+        any(action.get("tool") == "list_due_followups" for action in successful)
+        and any(
+            action.get("tool") == "inspect_lead"
+            and action.get("args", {}).get("lead_id") == TARGET_LEAD
+            for action in successful
+        )
+    )
+    outcome = (
+        len(proposals) == 1
+        and len(drafts) == 1
+        and len(drafts[0].get("body", "").strip()) >= 20
+        and drafts[0].get("recipient")
+        == state["leads"][TARGET_LEAD]["contact"]
+    )
+    audit_actions = [entry.get("action") for entry in state.get("audit", [])]
+    expected_digest = None
+    if len(drafts) == 1:
+        expected_digest = svc.payload_hash(
+            drafts[0].get("tenant"),
+            drafts[0].get("lead_id"),
+            drafts[0].get("recipient"),
+            drafts[0].get("body"),
+        )
+    return {
+        "required_outcome": (
+            outcome
+            and drafts[0].get("payload_hash") == expected_digest
+            and Counter(audit_actions) == Counter({
+                "list_due_followups": 1,
+                "inspect_lead": 1,
+                "propose_followup": 1,
+            })
+        ),
+        "source_observed": source,
+        "exact_business_effects": (
+            len(business) == 1
+            and business[0].get("tool") == "propose_followup"
+            and business[0].get("args", {}).get("lead_id") == TARGET_LEAD
+        ),
+        "no_delivery_or_approval": (
+            not state.get("deliveries")
+            and all(
+                proposal.get("state") == svc.STATE_DRAFT
+                for proposal in proposals
+            )
+            and not {"approve", "dispatch"}.intersection(audit_actions)
+        ),
+        "no_artifacts": not evidence.artifacts,
+    }
+
+
+_GRADER = GraderSpec(
+    id="brix_followup_synthetic.followup_draft_due_lead",
+    version="1.0.0",
+    checks=(
+        ("required_outcome", "exactly one non-trivial target draft exists"),
+        ("source_observed", "due leads and the target lead were inspected"),
+        ("exact_business_effects", "exactly one target proposal was created"),
+        ("no_delivery_or_approval", "nothing was approved or delivered"),
+        ("no_artifacts", "no unrelated artifact was created"),
+    ),
+    evaluate=_grade,
+)
 
 
 PACK = DomainPack(
@@ -250,7 +308,7 @@ PACK = DomainPack(
                 " read it, and draft exactly one follow-up message for it."
                 " Do not attempt to send or approve anything."
             ),
-            grade=_grade,
+            grader=_GRADER,
             tool_names=tuple(_specs),
         ),
     ),
@@ -258,4 +316,5 @@ PACK = DomainPack(
         "One of your assigned leads is due for a follow-up. Find it, read it,"
         " and draft exactly one follow-up message for it.",
     ),
+    capture_grading_state=_capture_grading_state,
 )

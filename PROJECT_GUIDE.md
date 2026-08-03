@@ -1,6 +1,6 @@
 # Project Guide
 
-Last reconciled with the local project tree: 1 August 2026.
+Last reconciled with the local project tree: 2 August 2026.
 
 The canonical execution plan is [`PROJECT_SETUP.md`](PROJECT_SETUP.md). This
 guide defines the durable evidence, architecture, and claim rules. Released
@@ -24,8 +24,9 @@ is an experimental local agent-harness research scaffold with:
 F0/Q0 is released as `v0.4.0` and S4 as `v0.5.0`. The native Lenovo F0 gate
 passed, recording host and model feasibility; the native Windows ARM64 S4 gate
 passed from candidate `0b8f77d` with `overall_status` pass, 461 passed, 0 failed
-and `s4_skipped` 0. Both record instrument behaviour only. S1R through S9 are
-unstarted.
+and `s4_skipped` 0. Both record instrument behaviour only. S1R and B0 are
+released. S5 is implemented in the current unreleased `v0.8.0` candidate;
+S5W through S9 are unstarted.
 
 Annotated tags and their bound evidence are authoritative. The tagged S4 release
 commit `R` adds only `evidence/s4/v0.5.0.json` to tested candidate `C`; docs-only

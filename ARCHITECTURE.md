@@ -16,13 +16,15 @@ Brick currently provides:
 - domain-aware CLI, benchmark, report and Agent Lab surfaces;
 - a candidate production marker-last evidence store and S4 attestor; and
 - experimental LoRA generators and training scripts, but no shipped corpus,
-  adapter or model.
+  adapter or model; and
+- a current S5 candidate with immutable-input, versioned strict graders for all
+  14 released task scenarios.
 
-The latest release is `v0.7.0` (B0 synthetic lead-follow-up slice), preceded by `v0.6.0` (S1R repaired runtime), `v0.5.0` (S4 evidence store) and `v0.4.0` (F0/Q0 feasibility). The required native Lenovo F0 evidence exists and the gate
+The latest release is `v0.7.0` (B0 synthetic lead-follow-up slice), preceded by `v0.6.0` (S1R repaired runtime), `v0.5.0` (S4 evidence store) and `v0.4.0` (F0/Q0 feasibility). The current tree is the unreleased S5 `v0.8.0` candidate. The required native Lenovo F0 evidence exists and the gate
 passed; its verifier correction is pushed as CI-green commit `f12dd71`. That
-establishes host and model feasibility only. `C` implements the `v0.5.0` S4
-store and attestor without claiming native acceptance, and no measured effect
-exists. S1R and every later stage remain unstarted.
+establishes host and model feasibility only. Native S4 acceptance, S1R, and B0
+are released. S5 has local acceptance coverage but no release authority until
+its candidate and release CI pass. No measured effect exists.
 
 The annotated tag and bound evidence are release-authoritative. Attestation-only
 descendant `R` intentionally retains this candidate-scoped wording; immediate
@@ -46,6 +48,7 @@ harness/
   runtime.py          RunConfig, RunHooks, ActionPolicy and AttemptContext
   domain.py           DomainPack/TaskSpec/PromptProfile contracts and loader
   evidence.py         candidate S4 marker-last evidence store
+  grading.py          immutable grading evidence and versioned grader contract
   storage.py          legacy and namespaced runtime-path selection
   builtin_tools.py    think/done tools shared by domain packs
   tools.py            ToolRegistry validation, execution and descriptions
@@ -54,8 +57,9 @@ harness/
   agent.py            raw and harness loops
 
 domains/
-  office_demo/        legacy office world, tools, prompt, tasks and graders
+  office_demo/        office world, tools, task metadata and strict graders
   counter_demo/       namespaced structural portability fixture
+  brix_followup_synthetic/ fictional lead-follow-up service and domain pack
 
 bench/
   run_bench.py        domain × model × condition × task runner

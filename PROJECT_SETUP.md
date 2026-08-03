@@ -16,8 +16,10 @@ semantic-value, memory, completion, truncation, timeout and executor tests all
 fail closed. B0 is released as `v0.7.0`: the fictional lead-follow-up slice
 passes tenant, approval, concurrency, expiry, idempotency, ambiguous-delivery,
 audit and no-network tests, and no generic package imports a Brix module.
-S5 through S9 are unstarted and no measured
-effect exists.
+S5 is implemented in the current unreleased `v0.8.0` candidate. Its local
+acceptance matrix covers every released scenario and every required fixture
+class; release still requires a clean candidate commit and required green CI.
+S5W through S9 are unstarted and no measured effect exists.
 
 Release identity is authoritative in annotated Git tags and their bound
 evidence, not in mutable current-status prose. S4 uses three commits/states:
@@ -29,12 +31,15 @@ retains `C`'s candidate-scoped wording; the tag and
 `evidence/s4/v0.5.0.json` are authoritative for whether S4 passed. They record
 that it did.
 
-The current milestone has two outputs:
+The program targets three outputs, and they must not be conflated:
 
-1. a valid, narrowly scoped research result about a generic agent harness; and
-2. a planned replaceable, entirely synthetic Brix lead-follow-up layer that,
-   after B0 is implemented and accepted, demonstrates the architecture without
-   using Brix systems or records.
+1. a reusable generic harness instrument; S4, S1R, and the S5 candidate provide
+   major components, while retained-run integration remains S6C work;
+2. a replaceable, entirely synthetic Brix lead-follow-up demonstration; B0
+   implements and tests the service layer plus a model-facing draft task, while
+   an end-to-end operator demonstration remains unfinished; and
+3. a valid, narrowly scoped same-model research result, which does not exist
+   until the retained S9 experiment passes every preceding gate.
 
 The Mac is limited to source work and offline tests. All live-model feasibility,
 sentinel, development-timing, and retained measurements run on the Lenovo Yoga

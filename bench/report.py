@@ -55,6 +55,13 @@ def validate_results(results):
             "caps",
             "tools",
             "score",
+            "strict_success",
+            "candidate_decision",
+            "grader_id",
+            "grader_version",
+            "grader_status",
+            "grader_error",
+            "runner_status",
             "checks",
             "finished",
             "parse_failures",
@@ -142,13 +149,14 @@ def validate_results(results):
         checks = record["checks"]
         if (
             not isinstance(checks, list)
-            or not checks
             or not all(
                 isinstance(check, list)
-                and len(check) == 2
+                and len(check) == 3
                 and isinstance(check[0], str)
                 and bool(check[0])
-                and type(check[1]) is bool
+                and isinstance(check[1], str)
+                and bool(check[1])
+                and type(check[2]) is bool
                 for check in checks
             )
         ):
@@ -166,15 +174,73 @@ def validate_results(results):
             raise ValueError(
                 f"benchmark result row {index} has an invalid error"
             )
-        score = record["score"]
+        if record["grader_status"] not in {"graded", "grader_error"}:
+            raise ValueError(
+                f"benchmark result row {index} has an invalid grader_status"
+            )
+        if record["grader_status"] == "graded":
+            if not checks or type(record["candidate_decision"]) is not bool:
+                raise ValueError(
+                    f"benchmark result row {index} has invalid graded output"
+                )
+            if record["grader_error"] is not None:
+                raise ValueError(
+                    f"benchmark result row {index} has inconsistent grader_error"
+                )
+        else:
+            if checks or record["candidate_decision"] is not None:
+                raise ValueError(
+                    f"benchmark result row {index} has invalid grader failure output"
+                )
+            if (
+                not isinstance(record["grader_error"], str)
+                or not record["grader_error"]
+            ):
+                raise ValueError(
+                    f"benchmark result row {index} is missing grader_error"
+                )
+        if record["runner_status"] not in {"completed", "runner_error"}:
+            raise ValueError(
+                f"benchmark result row {index} has an invalid runner_status"
+            )
+        if (record["runner_status"] == "completed") != (record["error"] is None):
+            raise ValueError(
+                f"benchmark result row {index} has inconsistent runner error"
+            )
         if (
-            isinstance(score, bool)
-            or not isinstance(score, (int, float))
-            or not math.isfinite(score)
-            or not 0 <= score <= 1
+            not isinstance(record["grader_id"], str)
+            or not record["grader_id"]
+            or not isinstance(record["grader_version"], str)
+            or not _SEMVER.fullmatch(record["grader_version"])
         ):
             raise ValueError(
-                f"benchmark result row {index} has an invalid score"
+                f"benchmark result row {index} has invalid grader identity"
+            )
+        candidate = record["candidate_decision"]
+        strict = record["strict_success"]
+        score = record["score"]
+        if candidate is not None and type(candidate) is not bool:
+            raise ValueError(
+                f"benchmark result row {index} has invalid candidate_decision"
+            )
+        if strict is not None and type(strict) is not bool:
+            raise ValueError(
+                f"benchmark result row {index} has invalid strict_success"
+            )
+        expected_strict = (
+            candidate
+            if record["grader_status"] == "graded"
+            and record["runner_status"] == "completed"
+            else None
+        )
+        if strict is not expected_strict:
+            raise ValueError(
+                f"benchmark result row {index} has inconsistent strict_success"
+            )
+        expected_score = None if strict is None else (1.0 if strict else 0.0)
+        if score != expected_score:
+            raise ValueError(
+                f"benchmark result row {index} has an invalid score projection"
             )
         wall = record["wall_seconds"]
         if (
@@ -230,6 +296,8 @@ def _pair_status(model, results):
             or left["caps"] != right["caps"]
         ):
             return False, "incompatible surfaces"
+        if left["strict_success"] is None or right["strict_success"] is None:
+            return False, "instrument-invalid pair"
     return True, ""
 
 
@@ -248,6 +316,7 @@ def summarize_dataset(domain, version, results):
             "score": 0.0,
             "n": 0,
             "perfect": 0,
+            "invalid": 0,
             "parse_failures": 0,
             "invalid_calls": 0,
             "tool_errors": 0,
@@ -262,9 +331,13 @@ def summarize_dataset(domain, version, results):
     for record in results:
         key = (record["model"], record["condition"])
         aggregate = overall[key]
-        aggregate["score"] += record["score"]
-        aggregate["n"] += 1
-        aggregate["perfect"] += record["score"] >= 0.999
+        valid = record["strict_success"] is not None
+        if valid:
+            aggregate["score"] += record["score"]
+            aggregate["n"] += 1
+            aggregate["perfect"] += int(record["strict_success"])
+        else:
+            aggregate["invalid"] += 1
         aggregate["parse_failures"] += record["parse_failures"]
         aggregate["invalid_calls"] += record["invalid_calls"]
         aggregate["tool_errors"] += record["tool_errors"]
@@ -276,8 +349,9 @@ def summarize_dataset(domain, version, results):
             item = per_capability[
                 (capability, record["model"], record["condition"])
             ]
-            item["score"] += record["score"]
-            item["n"] += 1
+            if valid:
+                item["score"] += record["score"]
+                item["n"] += 1
 
     lines = [
         f"# Domain dataset: `{domain}@{version}`",
@@ -308,6 +382,7 @@ def summarize_dataset(domain, version, results):
                     else None
                 ),
                 "perfect": aggregate["perfect"] if aggregate else 0,
+                "invalid": aggregate["invalid"] if aggregate else 0,
                 "n": aggregate["n"] if aggregate else 0,
                 "parse_failures": (
                     aggregate["parse_failures"] if aggregate else 0
@@ -330,15 +405,17 @@ def summarize_dataset(domain, version, results):
         paired, pair_note = _pair_status(model, results)
         raw_cell = (
             f"{raw_mean:.2f} "
-            f"({row['raw']['perfect']}/{row['raw']['n']})"
+            f"({row['raw']['perfect']}/{row['raw']['n']} valid; "
+            f"{row['raw']['invalid']} invalid)"
             if raw_mean is not None
-            else "-"
+            else f"- (0 valid; {row['raw']['invalid']} invalid)"
         )
         harness_cell = (
             f"{harness_mean:.2f} "
-            f"({row['harness']['perfect']}/{row['harness']['n']})"
+            f"({row['harness']['perfect']}/{row['harness']['n']} valid; "
+            f"{row['harness']['invalid']} invalid)"
             if harness_mean is not None
-            else "-"
+            else f"- (0 valid; {row['harness']['invalid']} invalid)"
         )
         delta_cell = (
             f"{harness_mean - raw_mean:+.2f}"

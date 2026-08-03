@@ -52,17 +52,25 @@ def _reject_duplicates(parser, values, label):
 
 
 def save_transcript(
-    path, episode, task, model, condition, score, checks, domain
+    path, episode, task, model, condition, outcome, domain, runner_status
 ):
+    score = outcome.strict_success if runner_status == "completed" else None
     lines = [
         f"# {task.id}  |  {domain.name}@{domain.version}  |  "
         f"{model}  |  {condition}",
-        f"**Score: {score:.2f}**  (finished: {episode.finished})",
+        "**Strict success: {}**  (grader: {}; runner: {}; finished: {})".format(
+            "null" if score is None else str(score).lower(),
+            outcome.grader_status,
+            runner_status,
+            episode.finished,
+        ),
         "",
         "| check | passed |",
         "|---|---|",
     ]
-    for description, ok in checks:
+    if outcome.error:
+        lines.extend(["", f"Grader error: `{outcome.error}`"])
+    for _check_id, description, ok in outcome.checks:
         lines.append(
             f"| {description} | {'PASS' if ok else 'FAIL'} |"
         )
@@ -188,13 +196,12 @@ def main(argv=None):
                     error = f"{type(exc).__name__}: {exc}"
                     episode.note("runner_error", error)
                     attempt.snapshot()
+                runner_status = "runner_error" if error else "completed"
                 wall = time.time() - started
-                try:
-                    score, checks = task.grade(attempt)
-                except Exception as exc:
-                    score, checks = 0.0, [
-                        (f"grader crashed: {exc}", False)
-                    ]
+                outcome = task.grader.grade_attempt(attempt, task.id)
+                strict_success = (
+                    outcome.strict_success if runner_status == "completed" else None
+                )
                 calls = llm.calls - initial_calls
                 record = {
                     "domain": domain.name,
@@ -206,10 +213,20 @@ def main(argv=None):
                     # Record the canonical registry order actually rendered in
                     # the prompt, not the pack author's selection order.
                     "tools": list(attempt.tools.names()),
-                    "score": round(score, 4),
+                    "grader_id": outcome.grader_id,
+                    "grader_version": outcome.grader_version,
+                    "grader_status": outcome.grader_status,
+                    "grader_error": outcome.error,
+                    "runner_status": runner_status,
+                    "candidate_decision": outcome.candidate_decision,
+                    "strict_success": strict_success,
+                    "score": (
+                        None if strict_success is None
+                        else 1.0 if strict_success else 0.0
+                    ),
                     "checks": [
-                        [description, bool(ok)]
-                        for description, ok in checks
+                        [check_id, description, ok]
+                        for check_id, description, ok in outcome.checks
                     ],
                     "finished": episode.finished,
                     "llm_calls": calls,
@@ -231,13 +248,14 @@ def main(argv=None):
                     task,
                     model,
                     condition,
-                    score,
-                    checks,
+                    outcome,
                     domain,
+                    runner_status,
                 )
                 print(
                     f"[{domain.name}@{domain.version} | {model} | "
-                    f"{condition}] {task.id}: score={score:.2f} "
+                    f"{condition}] {task.id}: strict_success="
+                    f"{strict_success!r} "
                     f"calls={calls} wall={wall:.0f}s"
                     + (f" ERROR={error}" if error else ""),
                     flush=True,

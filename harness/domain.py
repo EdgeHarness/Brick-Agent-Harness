@@ -10,6 +10,7 @@ from typing import Any, Callable, Tuple
 
 from .runtime import ActionPolicy
 from .tools import ToolRegistry
+from .grading import GraderSpec
 
 
 _DOMAIN_ID = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -58,7 +59,7 @@ class TaskSpec:
     id: str
     capabilities: Tuple[str, ...]
     prompt: str
-    grade: Callable[[Any], tuple]
+    grader: GraderSpec
     tool_names: Tuple[str, ...]
 
     def __post_init__(self):
@@ -80,9 +81,8 @@ class TaskSpec:
             raise ValueError("task capabilities must be nonempty strings")
         if not isinstance(self.prompt, str) or not self.prompt:
             raise ValueError("task prompt must be a nonempty string")
-        if not callable(self.grade):
-            raise TypeError("task grade must be callable")
-        _require_call_shape(self.grade, "task grade", object())
+        if not isinstance(self.grader, GraderSpec):
+            raise TypeError("task grader must be a GraderSpec")
         if not isinstance(self.tool_names, tuple) or not self.tool_names:
             raise ValueError("task tool_names must be a nonempty tuple")
         if not all(
@@ -94,6 +94,11 @@ class TaskSpec:
             raise ValueError(f"task {self.id!r} has duplicate tool names")
         if len(set(self.capabilities)) != len(self.capabilities):
             raise ValueError(f"task {self.id!r} has duplicate capabilities")
+
+    @property
+    def grade(self):
+        """Compatibility alias; new runtime code uses ``grader`` explicitly."""
+        return self.grader
 
 
 @dataclass(frozen=True)
@@ -145,6 +150,7 @@ class DomainPack:
     normalize_args: Callable[[str, dict, datetime.date], dict]
     present_state: Callable[..., dict]
     inspect_persisted_state: Callable[..., dict]
+    capture_grading_state: Callable[[Any], Any]
     tasks: Tuple[TaskSpec, ...] = ()
     presets: Tuple[str, ...] = ()
     runtime_layout: str = "namespaced_v1"
@@ -232,6 +238,7 @@ class DomainPack:
             (self.normalize_args, "normalize_args"),
             (self.present_state, "present_state"),
             (self.inspect_persisted_state, "inspect_persisted_state"),
+            (self.capture_grading_state, "capture_grading_state"),
         ):
             if not callable(value):
                 raise TypeError(f"{label} must be callable")
@@ -245,6 +252,7 @@ class DomainPack:
             (self.snapshot, "snapshot"),
             (self.prepare_attempt, "prepare_attempt"),
             (self.present_state, "present_state"),
+            (self.capture_grading_state, "capture_grading_state"),
         ):
             _require_call_shape(callback, label, object())
         _require_call_shape(

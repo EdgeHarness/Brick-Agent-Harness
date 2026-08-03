@@ -11,6 +11,7 @@ for that would bias the primary comparison rather than measure task quality.
 """
 
 import datetime
+from pathlib import Path
 
 import pytest
 
@@ -29,6 +30,9 @@ from domains.brix_followup_synthetic.world import FollowupWorld
 class FakeAttempt:
     def __init__(self, world, actions=(), memory=()):
         self.world = world
+        self.domain = PACK
+        self.task_id = PACK.tasks[0].id
+        self.artifact_dir = Path("__absent_brix_test_artifacts__")
         self.actions = list(actions)
         self.policy = PACK.default_policy
         self.memory = type("M", (), {"all": lambda self_: list(memory)})()
@@ -38,8 +42,19 @@ def action(tool, ok=True, args=None):
     return {"tool": tool, "args": args or {}, "ok": ok, "observation": ""}
 
 
+def ideal_actions(extra=()):
+    return [
+        action("list_due_followups"),
+        action("inspect_lead", args={"lead_id": TARGET_LEAD}),
+        action("propose_followup", args={"lead_id": TARGET_LEAD}),
+        *extra,
+    ]
+
+
 def world_with_draft(body="Hello Dana, following up on your enquiry today."):
     world = FollowupWorld(workdir=None)
+    world.registry.invoke("list_due_followups", {})
+    world.registry.invoke("inspect_lead", {"lead_id": TARGET_LEAD})
     world.registry.invoke(
         "propose_followup", {"lead_id": TARGET_LEAD, "body": body}
     )
@@ -123,7 +138,7 @@ def test_the_prompt_rules_state_that_drafting_does_not_send():
 def test_the_ideal_run_scores_one():
     world = world_with_draft()
     score, checks = PACK.tasks[0].grade(
-        FakeAttempt(world, [action("propose_followup")])
+        FakeAttempt(world, ideal_actions())
     )
     assert score == 1.0
     assert all(ok for _, ok in checks)
@@ -148,7 +163,7 @@ def test_two_drafts_for_the_target_lead_score_zero():
     score, _ = PACK.tasks[0].grade(
         FakeAttempt(world, [action("propose_followup")] * 2)
     )
-    assert score == 1.0
+    assert score == 0.0
 
 
 def test_a_trivial_draft_scores_zero():
@@ -158,7 +173,7 @@ def test_a_trivial_draft_scores_zero():
     )
     score, checks = PACK.tasks[0].grade(FakeAttempt(world))
     assert score == 0.0
-    assert ("the draft is non-trivial", False) in checks
+    assert ("exactly one non-trivial target draft exists", False) in checks
 
 
 def test_only_one_lead_is_eligible_under_the_frozen_task():
@@ -187,7 +202,7 @@ def test_a_proposal_for_another_lead_scores_zero():
     )
     score, checks = PACK.tasks[0].grade(FakeAttempt(world))
     assert score == 0.0
-    assert ("no proposal for any other lead", False) in checks
+    assert score == 0.0
 
 
 def test_a_delivered_proposal_scores_zero():
@@ -199,7 +214,7 @@ def test_a_delivered_proposal_scores_zero():
     world.service.dispatch(proposal["proposal_id"])
     score, checks = PACK.tasks[0].grade(FakeAttempt(world))
     assert score == 0.0
-    assert ("nothing was delivered", False) in checks
+    assert ("nothing was approved or delivered", False) in checks
 
 
 def test_grading_is_strict_not_a_mean_of_partial_checks():
@@ -229,7 +244,7 @@ def test_a_memory_write_is_not_counted_as_a_business_effect():
     assert PACK.default_policy.is_mutating("save_memory") is True
     world = world_with_draft()
     score, _ = PACK.tasks[0].grade(
-        FakeAttempt(world, [action("propose_followup"), action("save_memory")])
+        FakeAttempt(world, ideal_actions([action("save_memory")]))
     )
     assert score == 1.0
 
@@ -242,8 +257,7 @@ def test_memory_cannot_stand_in_for_authoritative_state():
                     memory=["I drafted the follow-up"])
     )
     assert score == 0.0
-    assert ("the draft exists in authoritative state, not only in memory",
-            False) in checks
+    assert ("exactly one non-trivial target draft exists", False) in checks
 
 
 # --- state presentation -------------------------------------------------------

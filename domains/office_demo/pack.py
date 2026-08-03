@@ -1,6 +1,5 @@
 """DomainPack for the repository's current fictional office."""
 import datetime
-import inspect
 import json
 import os
 
@@ -15,6 +14,7 @@ from harness.runtime import ActionPolicy
 from harness.tools import ToolRegistry
 
 from .tasks import TASKS
+from .strict_graders import GRADERS
 from .normalize import normalize_args
 from .tools import OFFICE_EFFECTS, office_specs
 from .world import World, fresh_calendar, fresh_emails
@@ -86,6 +86,17 @@ def _prepare_attempt(attempt):
     # Compatibility for office graders and UI code; AttemptContext remains the
     # owner of the list.
     attempt.world.actions = attempt.actions
+
+
+def _capture_grading_state(attempt):
+    world = attempt.world
+    return {
+        "emails": world.emails,
+        "events": world.events,
+        "sent_emails": world.sent_emails,
+        "messages": world.messages,
+        "reminders": world.reminders,
+    }
 
 
 def _file_rows(files_dir):
@@ -216,18 +227,11 @@ def _inspect_persisted_state(workdir, memory_path):
 
 
 def _task_spec(task):
-    grader = task["grade"]
-
-    def grade_attempt(attempt):
-        if "mem" in inspect.signature(grader).parameters:
-            return grader(attempt.world, mem=attempt.memory)
-        return grader(attempt.world)
-
     return TaskSpec(
         id=task["id"],
         capabilities=tuple(task["caps"]),
         prompt=task["prompt"],
-        grade=grade_attempt,
+        grader=GRADERS[task["id"]],
         # Preserve the historical benchmark surface exactly.  A future
         # version may narrow individual tasks without teaching generic bench
         # code about office capability labels.
@@ -255,6 +259,7 @@ PACK = DomainPack(
     normalize_args=normalize_args,
     present_state=_present_state,
     inspect_persisted_state=_inspect_persisted_state,
+    capture_grading_state=_capture_grading_state,
     tasks=tuple(_task_spec(task) for task in TASKS),
     presets=PRESETS,
     # Preserve existing ignored local workspace/memory/logs without copying or

@@ -5,7 +5,9 @@ implemented runtime has two domain packs:
 
 - `office_demo@0.1.0`, the legacy synthetic inbox, calendar, messaging,
   reminder, PPTX and XLSX fixture; and
-- `counter_demo@0.1.0`, a deliberately small structural portability fixture.
+- `counter_demo@0.1.0`, a deliberately small structural portability fixture;
+  and
+- `brix_followup_synthetic@0.1.0`, a fictional no-network lead-follow-up slice.
 
 The raw and scaffolded loops call a user-supplied local Ollama server. Office
 email, calendar, chat and reminder actions mutate simulated state only; Office
@@ -20,8 +22,10 @@ that orchestration improves model tool use remains an untested hypothesis.
 The latest release is `v0.7.0` (B0 synthetic lead-follow-up slice), preceded by `v0.6.0` (S1R repaired runtime), `v0.5.0` (S4 evidence store) and `v0.4.0` (F0/Q0 feasibility). The required native-Windows Lenovo F0 evidence
 exists and the gate passed, establishing host and model feasibility only.
 Commit `f12dd71` contains the subsequent independent verifier correction and is
-pushed with required CI green. Candidate `C` implements S4 but does not claim
-native acceptance. The Mac is a source-development and offline-test host only.
+pushed with required CI green. Native S4 acceptance, S1R, and B0 are released.
+The current tree is the unreleased S5 `v0.8.0` candidate with strict versioned
+graders; it contains no benchmark result. The Mac is a source-development and
+offline-test host only.
 
 Annotated tags and bound evidence are release-authoritative. The tagged S4
 release commit `R` adds only `evidence/s4/v0.5.0.json` and intentionally retains
@@ -56,7 +60,7 @@ changelog and current status after the tag; `D` is not part of `v0.5.0`.
 ## Layout
 
 ```text
-harness/            runtime contracts, agent loops and tool registry
+harness/            runtime, grading, agent-loop and tool-registry contracts
 domains/            versioned office and counter domain packs
 bench/              domain-aware tasks, graders, runner and report
 agents/             per-model configs and one shared CLI runner

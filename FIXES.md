@@ -6,8 +6,8 @@ taxonomy.
 
 The latest release is `v0.7.0` (B0 synthetic lead-follow-up slice), preceded by `v0.6.0` (S1R repaired runtime), `v0.5.0` (S4 evidence store) and `v0.4.0` (F0/Q0 feasibility). The native Lenovo evidence required for `v0.4.0` exists and
 the F0 gate passed. Its independent verifier correction is pushed as CI-green
-commit `f12dd71`. `C` implements the `v0.5.0` S4 candidate without claiming
-native acceptance. “Targeted” below means planned, implemented in a candidate,
+commit `f12dd71`. Native S4 acceptance, S1R, and B0 are released; the current
+tree is the unreleased S5 `v0.8.0` candidate. “Targeted” below means planned, implemented in a candidate,
 or in progress; it does not mean an exit gate passed.
 
 The annotated tag and bound evidence are release-authoritative. Attestation-only
@@ -19,11 +19,11 @@ descendant `D` promotes status after the tag and is not part of `v0.5.0`.
 | Area | Released `v0.3.1` state | Active remediation |
 |---|---|---|
 | General filesystem/shell | Unsafe lexical overlay exposed by CLI and Agent Lab | Q0 removes all supported activation paths instead of attempting to harden arbitrary host access |
-| Attempt isolation/evidence | Reused task directories and non-atomic `results.json` | S4 candidate implements marker-last immutable physical bundles and rebuildable projections; native acceptance remains pending |
+| Attempt isolation/evidence | Reused task directories and non-atomic `results.json` | S4 released marker-last immutable physical bundles and rebuildable projections; S6C still must wire them into the scheduler |
 | Runtime schemas/parser | Key-only validation, unsafe fuzzy repair, fail-open completion | **Closed in `v0.6.0`.** Executable schemas, explicit-alias-only repair with no inference, completion decided by authoritative state |
 | Memory | Shared append-only untrusted JSONL | **Closed in `v0.6.0`.** Tenant/subject/attempt scoped, versioned, expiring untrusted input with quarantine |
 | Synthetic Brix layer | Not implemented | **Closed in `v0.7.0`.** Fictional lead follow-up with fake records, a no-network fake provider, approval-gated delivery and reconciliation |
-| Graders | Loose associations, variable denominators, exceptions scored as zero | S5 strict versioned evidence graders |
+| Graders | Loose associations, variable denominators, exceptions scored as zero | Implemented in the S5 candidate: fixed versioned rubrics over copied evidence, with instrument failures null |
 | Agent Lab | Unauthenticated loopback control plane | Q0 removes unsafe capabilities; S5W hardens the remaining control plane |
 | Task instances | Twelve fixed prompts and shared order/state | S6G structural generators and isolated splits |
 | Conditions/baselines | Prompt-JSON `raw` versus bundled legacy `harness` | S6C shared native transport, competent baseline, explicit harness, rules and descriptives |
@@ -309,9 +309,13 @@ or deployment.
 
 ### Findings
 
-Released graders use substring filenames, loose spreadsheet and slide
+The `v0.7.0` graders used substring filenames, loose spreadsheet and slide
 associations, broad text substrings, conditional denominators, incomplete
 unwanted-action checks and shared memory. A grader exception becomes score zero.
+
+The current S5 candidate closes these findings with versioned fixed rubrics over
+copied evidence and an all-scenario fixture matrix. Release authority still
+depends on candidate and release CI.
 
 ### Required change
 

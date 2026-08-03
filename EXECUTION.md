@@ -16,18 +16,18 @@ of `CHANGELOG.md`, those win.
 3. `PROJECT_SETUP.md` — the stage you are about to work on
 4. `git log --oneline -5` and `CHANGELOG.md` `[Unreleased]` — ground truth
 
-## 2. State as of 1 August 2026
+## 2. State as of 2 August 2026
 
-**S4 is released as `v0.5.0`.** The native Windows ARM64 gate passed from
-candidate `0b8f77d`: `overall_status` pass, 461 passed, 0 failed, 3 skipped,
-`s4_skipped` 0, collected 464. JUnit report
+**Released:** `v0.7.0` (B0), preceded by `v0.6.0` (S1R), `v0.5.0` (S4), and
+`v0.4.0` (F0/Q0). The current worktree is the unreleased S5 `v0.8.0` candidate.
+S5 is not release-authoritative until the candidate commit and required CI are
+green.
+
+The native Windows ARM64 S4 gate passed from candidate `0b8f77d`:
+`overall_status` pass, 461 passed, 0 failed, 3 skipped, `s4_skipped` 0,
+collected 464. JUnit report
 `df2d8d1f3565f815148139ef1f91954a1b890deef1f02413cc12851952ba54aa` is attached
-to the release and bound by the annotated tag. **Next stage: S1R**, which begins
-only after a separate review decision.
-
-**Released:** `v0.5.0`, preceded by `v0.4.0`. **Offline suite at the released
-candidate:** 461 passed, 3 skipped on native Windows ARM64 with Developer Mode
-enabled; `s4_skipped` 0.
+to the release and bound by the annotated tag.
 
 **Done:** F0/Q0 and the independent F0 verifier correction. Q0 removed the
 general filesystem and PowerShell overlay, every legacy escape flag fails before
@@ -92,17 +92,12 @@ from raw responses and memory samples. Both the original and extracted release
 bundles pass the stronger verifier with their recorded hashes unchanged; the
 commit is pushed and required CI is green.
 
-**S4 candidate implemented, gate open at `C`:** `harness/evidence.py`
-implements the production marker-last store and `bench/s4_attest.py` implements
-its native attestor. Runnable local Windows cases pass. Three required S4
-symlink cases are blocked because Windows Developer Mode is disabled. A second,
-independent condition also gated the native run: the Windows platform tests
-inherited pytest's deep default root, so the junction case reached 250
-characters and failed `CreateDirectoryW`, whose limit is MAX_PATH - 12 = 248.
-That failure moved with the pytest counter and the user name, so the gate could
-silently flip. The S4 test root is now bounded and asserted.
-Candidate CI, a clean native Windows ARM64 run, and candidate-bound attestation
-were satisfied and `v0.5.0` is released.
+**S4 is released as `v0.5.0`:** `harness/evidence.py` implements the production
+marker-last store and `bench/s4_attest.py` implements its native attestor.
+Candidate CI, a clean native Windows ARM64 run with all required symlink cases,
+and candidate-bound attestation were satisfied. The earlier deep pytest-root
+failure remains useful history: the bounded S4 root removed its dependence on
+username and pytest counter length before the retained native run.
 
 **S1R is released as `v0.6.0`.** Every item in its exit gate has passing tests:
 parser 33, schema 50, semantic-value 6, memory 36, completion 35, truncation 7,
@@ -111,7 +106,13 @@ timeout 3, executor 31.
 **B0 is released as `v0.7.0`.** Gate coverage: tenant 8, approval 13,
 concurrency 2, expiry 3, idempotency 2, ambiguous-delivery 7, audit 4,
 no-network 3, plus a generic-package purity scan over 55 files in 7 package
-roots. S5 has not started.
+roots.
+
+The S5 candidate binds semantic-versioned strict graders to all 14 released
+scenarios. Grading inputs are immutable byte copies, rubric denominators are
+fixed, and runner/grader failures remain null. Its generated fixture matrix
+covers positive, minimally wrong, harmful, stale, missing, extra, corrupt, and
+metamorphic cases for every scenario.
 `v0.4.0` and the S4 candidate record no benchmark effect.
 
 **Benchmark host, verified eligible:**
@@ -133,30 +134,17 @@ because verifying it is F0's job.
 
 ## 3. Immediate next action
 
-Finish S4 without broadening the stage:
+Finish S5 without beginning S5W:
 
-1. Complete review, tests, documentation, and release metadata in candidate
-   commit `C`; make the worktree clean, push `C`, and require the Linux/Python
-   matrix and remote CI to pass.
-2. On the native Windows ARM64 Lenovo, enable the symlink capability through
-   Windows Developer Mode only with explicit operator approval. Run the
-   canonical S4 runner from clean pushed `C`; all platform-applicable S4 tests,
-   including the three symlink cases, must run with zero required S4 skips.
-3. Verify and retain the native record, then add
-   regular file `evidence/s4/v0.5.0.json` as the only change in release
-   descendant `R`.
-4. Require green CI for `R`, verify the candidate/release binding, then tag and
-   release `v0.5.0`. Stop for review before starting S1R.
-5. Immediately create docs-only descendant `D` from tagged `R`; promote the
-   staged changelog with the actual release date and update current-status
-   prose. Review `R..D` as modifications only to already-tracked Markdown,
-   push `D`, and do not move the `v0.5.0` tag from `R`.
-
-Do not substitute the earlier local run for the clean candidate run, describe a
-skipped required symlink case as a pass, or add implementation changes to `R`.
-Any behavioral change after native execution requires a new candidate and a
-complete S4 rerun. `D` may change no code, tests, workflow, dependency,
-protocol, task, prompt, or evidence byte.
+1. Run the complete offline suite and the all-scenario S5 fixture matrix from a
+   controlled native Windows temp root. Record exact counts only from that run.
+2. Confirm the retained F0 and S4 working-tree bytes equal their committed blobs
+   and contain no CR bytes under the LF attribute.
+3. Review the candidate diff for fixed rubrics, null failure semantics,
+   domain-neutral core code, and absence of benchmark outcomes.
+4. Commit and push the S5 candidate; require Linux Python 3.9–3.13 and Windows
+   x64 CI green. Tag and release `v0.8.0` only after those checks pass.
+5. Stop for review. Do not begin S5W in the same stage.
 
 Do not import or synchronize the moving `SMalshe/Brick` product tree into S4,
 S1R, B0, or a retained condition. `PROJECT_GUIDE.md` defines the convergence

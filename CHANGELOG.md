@@ -14,8 +14,40 @@ that the research instrument is valid or that any measured effect exists.
 
 ## [Unreleased]
 
-No unreleased changes. The next stage is S5, which begins only after a separate
-review decision.
+S5 strict outcome graders, staged for `v0.8.0`. This is instrument work, not a
+benchmark result; no harness effect has been measured. The complete native
+Windows ARM64 offline suite passes with 775 passed and 3 platform-intentional
+skips; the S5-specific matrix contributes 29 passing tests.
+
+### Added
+
+- `harness/grading.py`: canonical copied grading state, action, memory, and
+  artifact evidence; portable artifact traversal; named semantic-versioned
+  grader specifications; fixed diagnostic rubrics; and explicit
+  `graded`/`grader_error` outcomes.
+- Strict `1.0.0` graders for all 12 office scenarios, the counter fixture, and
+  the synthetic Brix draft scenario. The office graders enforce exact artifact
+  names, row/column and slide/value association, required source reads, exact
+  business effects, and unchanged unrelated authoritative state.
+- An all-scenario S5 acceptance matrix covering positive, minimally wrong,
+  harmful, stale, missing, extra, corrupt, and metamorphic fixtures. Corrupt
+  inputs produce `grader_error` and `strict_success=null`.
+- `.gitattributes` pins retained JSON evidence to LF so Windows
+  `core.autocrlf` cannot invalidate canonical attestation bytes.
+
+### Changed
+
+- `TaskSpec` binds a `GraderSpec`; `DomainPack` must expose the exact hidden
+  state copied for grading. The permissive live-world office callbacks are no
+  longer present in executable task metadata.
+- The exploratory runner records grader identity/version, grader status,
+  runner status, candidate decision, and strict success separately. A runner or
+  grader failure is null, never score zero. The report excludes invalid rows and
+  refuses to form a paired delta through an instrument-invalid cell.
+- The Brix draft grader now rejects a second proposal revision. One live draft
+  no longer hides the extra superseded proposal/effect.
+- Status documentation is reconciled with the released `v0.4.0` through
+  `v0.7.0` chain and the current unreleased S5 candidate.
 
 ## [0.7.0] — 2026-08-02
 

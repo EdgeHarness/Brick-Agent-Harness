@@ -78,23 +78,19 @@ instances, adversarial variants or defined population. Email, calendar,
 messaging and reminder effects are simulated. `.pptx` and `.xlsx` artifacts are
 real local files.
 
-## Released scoring and validity defects
+## v0.7 exploratory validity defects and S5 corrections
 
-The released grader emits variable lists of boolean component checks and reports
-their mean. That is not a valid strict-success measure.
+The `v0.7.0` exploratory path used variable component lists and their mean. The
+current unreleased S5 candidate replaces that scoring surface with fixed,
+versioned, all-or-nothing graders over copied evidence. Exact filenames,
+row/column and slide/value association, required source reads, extra effects,
+and null grader/runner failures are enforced by the S5 acceptance matrix.
 
 Known defects include:
 
 - task directories are reused, so stale Office files can influence a rerun;
 - resume can erase shared memory before checking completed dependencies;
 - unrelated tasks share memory and fixed order;
-- missing artifacts can change the denominator;
-- filenames use substring matching;
-- spreadsheet values need not share the correct row/column association;
-- slide titles, regions and values need not be structurally associated;
-- broad substrings can satisfy source or confirmation checks;
-- extra unwanted actions often go unpenalized;
-- a grader exception becomes model score zero;
 - `results.json` is rewritten non-atomically without a writer lock;
 - records omit complete task, grader, prompt, model, runtime, code, hardware and
   ordering provenance;

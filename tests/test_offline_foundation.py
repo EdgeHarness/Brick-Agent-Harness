@@ -128,7 +128,6 @@ def test_sensitive_and_runtime_artifacts_are_not_tracked():
         ):
             offenders.append(path)
     assert offenders == []
-
     # This is deliberately a narrow high-confidence credential scan, not a
     # substitute for publication review or a dedicated secret-scanning tool.
     credential_patterns = (
@@ -159,6 +158,15 @@ def test_sensitive_and_runtime_artifacts_are_not_tracked():
         if any(pattern.search(blob) for pattern in credential_patterns):
             content_offenders.append(relative)
     assert content_offenders == []
+
+
+def test_retained_json_is_lf_pinned_and_contains_no_carriage_returns():
+    attributes = (PROJECT_ROOT / ".gitattributes").read_text(encoding="utf-8")
+    assert "evidence/**/*.json text eol=lf" in attributes
+    retained = sorted((PROJECT_ROOT / "evidence").glob("**/*.json"))
+    assert retained
+    for path in retained:
+        assert b"\r" not in path.read_bytes(), path
 
 
 def test_public_launchers_do_not_embed_the_original_machine_path():

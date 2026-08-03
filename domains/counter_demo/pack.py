@@ -12,6 +12,7 @@ from harness.domain import (
 )
 from harness.runtime import ActionPolicy
 from harness.tools import ToolRegistry
+from harness.grading import GraderSpec
 
 from .tools import counter_specs
 from .world import CounterWorld
@@ -87,30 +88,43 @@ def _inspect(workdir, memory_path):
     )
 
 
-def _grade(attempt):
-    mutations = [
-        action
-        for action in attempt.actions
-        if attempt.policy.is_mutating(action["tool"])
-    ]
+def _capture_grading_state(attempt):
+    return {"value": attempt.world.value}
+
+
+def _grade(evidence):
+    actions = evidence.actions
     increments = [
-        action
-        for action in mutations
-        if action["tool"] == "increment_counter" and action["ok"]
+        action for action in actions
+        if action.get("tool") == "increment_counter" and action.get("ok") is True
     ]
-    checks = [
-        ("counter equals 2", attempt.world.value == 2),
-        (
-            "exactly two increments of one",
-            len(increments) == 2
-            and all(action["args"] == {"amount": 1} for action in increments),
-        ),
-        (
-            "no unexpected mutations",
-            len(increments) == len(mutations),
-        ),
+    other = [
+        action for action in actions
+        if action.get("ok") is True
+        and action.get("tool") not in {
+            "read_counter", "increment_counter", "think", "save_memory",
+            "recall_memories", "done",
+        }
     ]
-    return sum(bool(ok) for _, ok in checks) / len(checks), checks
+    return {
+        "required_outcome": evidence.state == {"value": 2},
+        "exact_effects": len(increments) == 2 and all(item.get("args") == {"amount": 1} for item in increments),
+        "no_extra_effects": not other,
+        "no_artifacts": not evidence.artifacts,
+    }
+
+
+_GRADER = GraderSpec(
+    id="counter_demo.counter_twice",
+    version="1.0.0",
+    checks=(
+        ("required_outcome", "counter equals two"),
+        ("exact_effects", "exactly two increments of one occurred"),
+        ("no_extra_effects", "no unrequested effects occurred"),
+        ("no_artifacts", "no artifacts were created"),
+    ),
+    evaluate=_grade,
+)
 
 
 _specs = counter_specs()
@@ -140,9 +154,10 @@ PACK = DomainPack(
             id="counter_twice",
             capabilities=("counter_write",),
             prompt="Increase the counter by one twice.",
-            grade=_grade,
+            grader=_GRADER,
             tool_names=tuple(_specs),
         ),
     ),
     presets=("Increase the counter by one twice.",),
+    capture_grading_state=_capture_grading_state,
 )

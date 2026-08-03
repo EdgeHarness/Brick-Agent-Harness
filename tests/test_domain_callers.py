@@ -55,7 +55,14 @@ def result_row(
         "caps": [capability],
         "tools": tools or ["done"],
         "score": 1.0,
-        "checks": [["expected outcome", True]],
+        "strict_success": True,
+        "candidate_decision": True,
+        "grader_id": f"{domain}.{task}",
+        "grader_version": "1.0.0",
+        "grader_status": "graded",
+        "grader_error": None,
+        "runner_status": "completed",
+        "checks": [["expected_outcome", "expected outcome", True]],
         "finished": True,
         "parse_failures": 0,
         "invalid_calls": 0,
@@ -343,6 +350,29 @@ def test_report_rejects_duplicate_identity_and_incompatible_delta():
         "reason": "incompatible surfaces",
         "delta": None,
     }
+
+
+def test_report_preserves_grader_failure_as_null_and_refuses_the_pair():
+    raw = result_row("counter_demo", "0.1.0", "raw")
+    harness = result_row("counter_demo", "0.1.0", "harness")
+    harness.update(
+        grader_status="grader_error",
+        grader_error="GradingError: corrupt state",
+        candidate_decision=None,
+        strict_success=None,
+        score=None,
+        checks=[],
+    )
+    markdown, summary = report.build_report([raw, harness])
+    comparison = summary["datasets"]["counter_demo@0.1.0"][
+        "overall"
+    ]["model"]["comparison"]
+    assert comparison == {
+        "paired": False,
+        "reason": "instrument-invalid pair",
+        "delta": None,
+    }
+    assert "instrument-invalid pair" in markdown
 
 
 @pytest.mark.parametrize(
