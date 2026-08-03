@@ -421,6 +421,7 @@ def test_preflight_fingerprints_every_executable_s6_dependency():
         "bench/s6_run.py",
         "bench/s6_preflight.py",
         "bench/s6_rules_reference.py",
+        "bench/manifests/office-v1/development-exposure-v0.11.0.json",
     }
     assert set(s6_preflight.DOMAIN_PATHS) == {
         "domains/office_demo/generators.py",
@@ -696,9 +697,8 @@ def test_learning_resets_conversation_but_injects_attempt_scoped_memory(tmp_path
 
 def test_rules_reference_strictly_passes_every_frozen_generated_case():
     count = 0
-    for path in sorted(MANIFESTS.glob("*.json")):
-        if path.name == "manifest-lock.json":
-            continue
+    for split in ("development", "validation", "sentinel", "retained", "adversarial"):
+        path = MANIFESTS / (split + ".json")
         for instance in load_canonical_json(path)["instances"]:
             with tempfile.TemporaryDirectory() as directory:
                 outcome = build_grader(instance).grade_evidence(
@@ -706,7 +706,7 @@ def test_rules_reference_strictly_passes_every_frozen_generated_case():
                 )
             assert outcome.strict_success is True, instance["content"]["id"]
             count += 1
-    assert count == 341
+    assert count == 352
 
 
 def test_rules_reference_runner_reports_real_development_counts():
@@ -716,8 +716,8 @@ def test_rules_reference_runner_reports_real_development_counts():
         "development",
     )
     assert summary["run_kind"] == "model_free_architecture_reference"
-    assert summary["case_count"] == 22
-    assert summary["strict_successes"] == 22
+    assert summary["case_count"] == 88
+    assert summary["strict_successes"] == 88
     assert summary["all_strict"] is True
     assert len(summary["implementation_sha256"]) == 64
 
@@ -730,9 +730,8 @@ def _one(family):
 
 
 def test_oracle_critical_generated_values_are_explicit_in_corrected_prompts():
-    for path in sorted(MANIFESTS.glob("*.json")):
-        if path.name == "manifest-lock.json":
-            continue
+    for split in ("development", "validation", "sentinel", "retained", "adversarial"):
+        path = MANIFESTS / (split + ".json")
         for instance in load_canonical_json(path)["instances"]:
             content = instance["content"]
             if content["family"] == "remind_msg":

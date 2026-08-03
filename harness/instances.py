@@ -21,6 +21,7 @@ from .evidence import canonical_json_bytes
 INSTANCE_SCHEMA = "brick.task-instance/1"
 MANIFEST_SCHEMA = "brick.task-manifest/1"
 LOCK_SCHEMA = "brick.manifest-lock/1"
+EXPOSURE_SCHEMA = "brick.development-exposure/1"
 SPLITS = ("development", "validation", "sentinel", "retained", "adversarial")
 MAX_CANONICAL_FILE_BYTES = 64 * 1024 * 1024
 
@@ -372,6 +373,128 @@ def review_split_overlap(manifests):
     }
 
 
+def validate_development_exposure(value):
+    """Validate the immutable record of score-visible S6C development cases."""
+
+    _exact_keys(
+        value,
+        {"schema_version", "source_release", "source_commit", "runs", "instances"},
+        "development exposure",
+    )
+    if value["schema_version"] != EXPOSURE_SCHEMA:
+        raise InstanceContractError("unsupported development-exposure schema")
+    if value["source_release"] != "v0.11.0":
+        raise InstanceContractError("development exposure must bind v0.11.0")
+    if value["source_commit"] != "9740ffa7e8e7104b74797a035d7d21eda8dfec0d":
+        raise InstanceContractError("development exposure source commit differs")
+    runs = value["runs"]
+    instances = value["instances"]
+    if not isinstance(runs, list) or len(runs) != 10:
+        raise InstanceContractError("development exposure must record ten live runs")
+    if not isinstance(instances, list) or len(instances) != 4:
+        raise InstanceContractError("development exposure must record four unique cases")
+
+    run_ids = []
+    referenced = []
+    for index, run in enumerate(runs):
+        _exact_keys(run, {"run_id", "instance_id"}, "exposure run")
+        run_ids.append(_text(run["run_id"], "run_id", identifier=True))
+        referenced.append(_text(run["instance_id"], "instance_id", identifier=True))
+    if run_ids != sorted(run_ids) or len(set(run_ids)) != len(run_ids):
+        raise InstanceContractError("exposure run ids must be sorted and unique")
+
+    instance_ids = []
+    for index, record in enumerate(instances):
+        _exact_keys(
+            record,
+            {
+                "instance_id", "content_sha256", "structure_sha256",
+                "entity_keys", "entity_surfaces",
+            },
+            "exposure instance",
+        )
+        instance_ids.append(
+            _text(record["instance_id"], "instance_id", identifier=True)
+        )
+        for field in ("content_sha256", "structure_sha256"):
+            if not isinstance(record[field], str) or not _SHA256.fullmatch(record[field]):
+                raise InstanceContractError("exposure %s is invalid" % field)
+        keys = _string_list(record["entity_keys"], "entity_keys", nonempty=True)
+        surfaces = _string_list(
+            record["entity_surfaces"], "entity_surfaces", nonempty=True,
+        )
+        if keys != sorted(keys) or any(key != key.casefold() for key in keys):
+            raise InstanceContractError("exposure entity keys must be sorted and folded")
+        if surfaces != sorted(surfaces) or any(
+            surface != surface.casefold() for surface in surfaces
+        ):
+            raise InstanceContractError(
+                "exposure entity surfaces must be sorted and folded"
+            )
+    if instance_ids != sorted(instance_ids) or len(set(instance_ids)) != len(instance_ids):
+        raise InstanceContractError("exposure instance ids must be sorted and unique")
+    if set(referenced) != set(instance_ids):
+        raise InstanceContractError("exposure runs and instances do not agree")
+    return value
+
+
+def review_development_exposure(exposure, development_manifest):
+    """Reject any D0 input that reuses score-visible development material."""
+
+    validate_development_exposure(exposure)
+    validate_manifest(development_manifest)
+    if development_manifest["split"] != "development":
+        raise InstanceContractError("exposure review requires the development manifest")
+    exposed_ids = {item["instance_id"] for item in exposure["instances"]}
+    exposed_contents = {item["content_sha256"] for item in exposure["instances"]}
+    exposed_structures = {item["structure_sha256"] for item in exposure["instances"]}
+    exposed_keys = {
+        key for item in exposure["instances"] for key in item["entity_keys"]
+    }
+    exposed_surfaces = {
+        surface
+        for item in exposure["instances"]
+        for surface in item["entity_surfaces"]
+    }
+    for instance in development_manifest["instances"]:
+        content = instance["content"]
+        comparisons = (
+            (content["id"] in exposed_ids, "instance id"),
+            (instance["content_sha256"] in exposed_contents, "content digest"),
+            (content["structure_sha256"] in exposed_structures, "structure digest"),
+            (
+                bool({key.casefold() for key in content["entity_keys"]} & exposed_keys),
+                "entity key",
+            ),
+            (
+                bool(
+                    {
+                        unicodedata.normalize("NFC", surface).casefold()
+                        for entity in content["entities"].values()
+                        for surface in entity.values()
+                        if isinstance(surface, str) and surface
+                    }
+                    & exposed_surfaces
+                ),
+                "entity surface",
+            ),
+        )
+        for reused, label in comparisons:
+            if reused:
+                raise InstanceContractError(
+                    "D0 development input reuses exposed %s: %s"
+                    % (label, content["id"])
+                )
+    return {
+        "schema_version": "brick.development-exposure-review/1",
+        "passed": True,
+        "source_release": exposure["source_release"],
+        "exposed_runs": len(exposure["runs"]),
+        "exposed_instances": len(exposure["instances"]),
+        "development_instances": len(development_manifest["instances"]),
+    }
+
+
 def canonical_file_bytes(value):
     return canonical_json_bytes(value, allow_float=False, newline=True)
 
@@ -435,6 +558,7 @@ __all__ = [
     "INSTANCE_SCHEMA",
     "MANIFEST_SCHEMA",
     "LOCK_SCHEMA",
+    "EXPOSURE_SCHEMA",
     "MAX_CANONICAL_FILE_BYTES",
     "SPLITS",
     "InstanceContractError",
@@ -444,9 +568,11 @@ __all__ = [
     "load_canonical_json",
     "make_manifest",
     "replace_canonical_json",
+    "review_development_exposure",
     "review_split_overlap",
     "sha256_bytes",
     "structure_sha256",
     "validate_instance",
+    "validate_development_exposure",
     "validate_manifest",
 ]

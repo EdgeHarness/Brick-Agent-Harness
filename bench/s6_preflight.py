@@ -17,7 +17,11 @@ import sys
 
 import requests
 
-from bench.generate_manifests import verify as verify_manifests
+from bench.generate_manifests import (
+    EXPOSURE_NAME,
+    EXPOSURE_SHA256,
+    verify as verify_manifests,
+)
 from domains.office_demo.contracts import build_registry
 from harness.evidence import canonical_json_bytes
 from harness.experiment import protocol_sha256
@@ -45,6 +49,7 @@ IMPLEMENTATION_PATHS = (
     "bench/s6_run.py",
     "bench/s6_preflight.py",
     "bench/s6_rules_reference.py",
+    "bench/manifests/office-v1/" + EXPOSURE_NAME,
 )
 
 DOMAIN_PATHS = (
@@ -204,6 +209,7 @@ def collect(protocol_path=DEFAULT_PROTOCOL, require_clean=False):
         "manifest_lock_sha256": hashlib.sha256(
             canonical_json_bytes(manifest_lock)
         ).hexdigest(),
+        "development_exposure_sha256": EXPOSURE_SHA256,
         "f0_attestation_sha256": protocol["f0_binding"]["attestation_sha256"],
     }
     return {

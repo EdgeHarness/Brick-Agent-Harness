@@ -132,17 +132,19 @@ because verifying it is F0's job.
 
 ## 3. Immediate next action
 
-The S6C boundary is complete. `office-generators/1.0.2` reproduces all 341 cases
-without changing the frozen `1.0.0` seed allocation; every required effect is
-compiled into one fixed six-check grader. The exact F0-attested Qwen 4B digest,
+The S6C boundary and pre-D0 integrity repair are complete.
+`office-generators/1.1.0` reproduces 352 unique cases under a fresh seed
+namespace. D0-A and reserved D0-B each contain 44 paired cases, have identical
+declared semantic-axis marginals, and share no semantic structure. A canonical
+ledger binds the ten disposable runs and rejects reuse of all four exposed
+development instances across five identity channels. The exact F0-attested Qwen 4B digest,
 Ollama 0.32.5, native schemas, condition mechanisms, opportunity ledger,
 requests, responses, actions, state, artifacts, retry identity, and environment
-are bound into disposable attempt evidence. The complete native suite passes
-828 with 3 intentional platform skips, and `v0.11.0` is published. Disposable
+are bound into disposable attempt evidence. `v0.11.1` is published. Disposable
 live checks exercised native tools, two-subepisode memory, raw JSON, and a real
 XLSX artifact; they are engineering records, not an effect estimate.
 
-Stop for review. The next stage is D0/S7. It must implement score-masked timing,
+Stop for review. D0 has not run. The next stage is D0/S7. It must implement score-masked timing,
 the role-aware equal-action sensitivity contract, frozen analysis code, and the
 runtime-only sample-size decision before any retained execution is unlocked.
 
@@ -257,7 +259,7 @@ Delta = (1 / 11) * sum(family_mean(harness_success - native_success))
 
 The families are `pptx_basic`, `pptx_from_email`, `xlsx_basic`,
 `xlsx_from_email`, `email_reply`, `cal_add`, `cal_freeslot`, `cal_brief`,
-`remind_msg`, `learn_store_use`, and `multi_offsite`.
+`remind_msg`, `preference_learning`, and `multi_offsite`.
 
 The rejected alternative was a preregistered structural subset, for example
 families requiring three or more dependent tool calls where a later write

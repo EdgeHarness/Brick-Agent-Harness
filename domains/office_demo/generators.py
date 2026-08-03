@@ -20,13 +20,12 @@ from harness.instances import (
 
 
 SUITE = "office-synthetic"
-GENERATOR_VERSION = "office-generators/1.0.2"
-# The patch releases clarify prompt/oracle contracts in remind_msg and
-# preference_learning without changing the allocated stochastic cases. Keeping
-# the 1.0.0 seed namespace prevents an unrelated reshuffle of axes, entities,
-# and dates while the generator version and every content digest still record
-# the corrections.
-SEED_NAMESPACE = "office-generators/1.0.0"
+GENERATOR_VERSION = "office-generators/1.1.0"
+# D0 must not reuse the v0.11.0 development cases whose live disposable
+# outcomes were visible during instrument construction.  The new namespace is
+# intentionally versioned with the allocation change so every fictional entity
+# and surface is fresh as well as every development instance identity.
+SEED_NAMESPACE = "office-generators/1.1.0"
 FAMILY_VERSION = "1.0.0"
 
 FAMILIES = (
@@ -43,27 +42,26 @@ FAMILIES = (
     "multi_offsite",
 )
 
-# D0's 44 paired condition cells require two development cases per family.
-# Retained contains
-# the preregistered 20-case default; the fallback freezes its first 12.  The
-# remaining sizes are an S6G protocol choice: four validation cases exercise
-# the generator/compiler surface, one sentinel case exercises each family, and
-# four adversarial cases cover ambiguity/conflict boundaries without entering
-# the confirmatory retained estimand.
-SPLIT_SIZES = {
-    "development": 2,
-    "validation": 4,
-    "sentinel": 1,
-    "retained": 20,
-    "adversarial": 4,
+# The 32 semantic shapes are allocated exactly once per family.  Development
+# contains two preallocated, marginally matched four-case cohorts: d0a is the
+# initial score-masked timing run and d0b is reserved for the one permitted
+# direction-blind correction rerun.  The first twelve retained ordinals are a
+# balanced frozen prefix for the runtime-only fallback.
+D0_COHORT_ORDINALS = {
+    "d0a": (4, 9, 18, 31),
+    "d0b": (7, 10, 17, 28),
 }
-_OFFSETS = {
-    "development": 0,
-    "validation": 2,
-    "sentinel": 6,
-    "retained": 7,
-    "adversarial": 27,
+SPLIT_ORDINALS = {
+    "development": D0_COHORT_ORDINALS["d0a"] + D0_COHORT_ORDINALS["d0b"],
+    "validation": (0,),
+    "sentinel": (16,),
+    "retained": (
+        1, 2, 3, 5, 11, 12, 20, 23, 24, 26, 29, 30,
+        6, 13, 14, 15, 19, 21, 22, 25,
+    ),
+    "adversarial": (8, 27),
 }
+SPLIT_SIZES = {split: len(SPLIT_ORDINALS[split]) for split in SPLITS}
 
 _SPLIT_STEMS = {
     "development": "Demerin",
@@ -86,13 +84,23 @@ FORBIDDEN_EFFECTS = [
 ]
 
 
-def _seed(split, family, index):
-    payload = "%s|%s|%s|%d" % (SEED_NAMESPACE, split, family, index)
+def _case_identity(split, index):
+    if split != "development":
+        return split, index, _SPLIT_STEMS[split]
+    cohort = "d0a" if index < 4 else "d0b"
+    local_index = index if cohort == "d0a" else index - 4
+    return "development.%s" % cohort, local_index, "Demerin%s" % cohort.upper()
+
+
+def _seed(case_namespace, family, index, ordinal):
+    payload = "%s|%s|%s|%d|%d" % (
+        SEED_NAMESPACE, case_namespace, family, index, ordinal,
+    )
     return int.from_bytes(hashlib.sha256(payload.encode("utf-8")).digest()[:8], "big") & ((1 << 63) - 1)
 
 
 def _axes(ordinal):
-    """Thirty-two semantic shapes; S6G consumes the first thirty-one."""
+    """The frozen 32-shape semantic allocation used exactly once per family."""
     return {
         "workload": 3 + (ordinal % 4),
         "distractor_count": (ordinal // 4) % 4,
@@ -115,12 +123,16 @@ def _base_state():
 
 
 class _Context:
-    def __init__(self, split, family, index, ordinal, seed):
+    def __init__(
+        self, split, family, index, ordinal, seed, case_namespace, entity_stem,
+    ):
         self.split = split
         self.family = family
         self.index = index
         self.ordinal = ordinal
         self.seed = seed
+        self.case_namespace = case_namespace
+        self.entity_stem = entity_stem
         self.random = random.Random(seed)
         self.entities = {}
         self.axes = _axes(ordinal)
@@ -131,7 +143,7 @@ class _Context:
 
     def entity(self, role, number=0, kind="person"):
         key = "%s.%s.%02d.%s.%d" % (
-            self.split,
+            self.case_namespace,
             self.family.replace("_", "-"),
             self.index,
             role.replace("_", "-"),
@@ -139,7 +151,7 @@ class _Context:
         )
         family_token = self.family.replace("_", " ").title().replace(" ", "")
         token = "%s%s%02d%02d" % (
-            _SPLIT_STEMS[self.split], family_token, self.index, number
+            self.entity_stem, family_token, self.index, number
         )
         if kind == "person":
             given = _GIVEN[(self.seed + number * 7 + len(role)) % len(_GIVEN)]
@@ -691,9 +703,12 @@ def generate_instance(split, family, index):
         raise ValueError("unknown family %r" % family)
     if isinstance(index, bool) or not isinstance(index, int) or not 0 <= index < SPLIT_SIZES[split]:
         raise ValueError("index is outside the frozen split size")
-    ordinal = _OFFSETS[split] + index
-    seed = _seed(split, family, index)
-    ctx = _Context(split, family, index, ordinal, seed)
+    ordinal = SPLIT_ORDINALS[split][index]
+    case_namespace, local_index, entity_stem = _case_identity(split, index)
+    seed = _seed(case_namespace, family, local_index, ordinal)
+    ctx = _Context(
+        split, family, local_index, ordinal, seed, case_namespace, entity_stem,
+    )
     prompt, episodes, initial_state, effects = _BUILDERS[family](ctx)
     structure = {
         "family": family,
@@ -705,7 +720,9 @@ def generate_instance(split, family, index):
     structure_digest = structure_sha256(structure)
     from .pack import PACK  # Lazy import avoids changing the released pack surface.
     content = {
-        "id": "%s.%s.%02d" % (split, family.replace("_", "-"), index),
+        "id": "%s.%s.%02d" % (
+            case_namespace, family.replace("_", "-"), local_index,
+        ),
         "domain": PACK.name,
         "domain_version": PACK.version,
         "family": family,

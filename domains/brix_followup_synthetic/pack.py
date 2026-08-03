@@ -34,13 +34,16 @@ from domains.brix_followup_synthetic.world import FollowupWorld
 
 
 DOMAIN_NAME = "brix_followup_synthetic"
-DOMAIN_VERSION = "0.1.0"
+DOMAIN_VERSION = "0.1.1"
 
 # The lead the frozen task targets: assigned to amy, open, and due on `today`.
 TARGET_LEAD = "lead_1001"
 
 # Harness-level scratch. Writing a note is not a business effect.
 MEMORY_TOOLS = frozenset({"save_memory"})
+_READ_AUDIT_ACTIONS = frozenset(
+    {"list_due_followups", "inspect_lead", "inspect_proposals"}
+)
 
 _EXAMPLES = {
     "list_due_followups": {},
@@ -230,6 +233,9 @@ def _grade(evidence):
         == state["leads"][TARGET_LEAD]["contact"]
     )
     audit_actions = [entry.get("action") for entry in state.get("audit", [])]
+    audit_writes = Counter(
+        action for action in audit_actions if action not in _READ_AUDIT_ACTIONS
+    )
     expected_digest = None
     if len(drafts) == 1:
         expected_digest = svc.payload_hash(
@@ -242,17 +248,13 @@ def _grade(evidence):
         "required_outcome": (
             outcome
             and drafts[0].get("payload_hash") == expected_digest
-            and Counter(audit_actions) == Counter({
-                "list_due_followups": 1,
-                "inspect_lead": 1,
-                "propose_followup": 1,
-            })
         ),
         "source_observed": source,
         "exact_business_effects": (
             len(business) == 1
             and business[0].get("tool") == "propose_followup"
             and business[0].get("args", {}).get("lead_id") == TARGET_LEAD
+            and audit_writes == Counter({"propose_followup": 1})
         ),
         "no_delivery_or_approval": (
             not state.get("deliveries")
@@ -268,7 +270,7 @@ def _grade(evidence):
 
 _GRADER = GraderSpec(
     id="brix_followup_synthetic.followup_draft_due_lead",
-    version="1.0.0",
+    version="1.0.1",
     checks=(
         ("required_outcome", "exactly one non-trivial target draft exists"),
         ("source_observed", "due leads and the target lead were inspected"),

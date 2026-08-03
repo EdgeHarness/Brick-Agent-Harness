@@ -67,7 +67,7 @@ def world_with_draft(body="Hello Dana, following up on your enquiry today."):
 def test_the_pack_loads_through_the_ordinary_domain_path():
     pack = load_domain("brix_followup_synthetic")
     assert pack.name == "brix_followup_synthetic"
-    assert pack.version == "0.1.0"
+    assert pack.version == "0.1.1"
 
 
 def test_the_registry_offers_the_domain_tools_and_the_reserved_builtins():
@@ -160,10 +160,14 @@ def test_two_drafts_for_the_target_lead_score_zero():
     drafts = [p for p in world.proposals_for(TARGET_LEAD)
               if p["state"] == svc.STATE_DRAFT]
     assert len(drafts) == 1, "revision should supersede rather than accumulate"
-    score, _ = PACK.tasks[0].grade(
-        FakeAttempt(world, [action("propose_followup")] * 2)
+    score, checks = PACK.tasks[0].grade(
+        FakeAttempt(
+            world,
+            ideal_actions([action("propose_followup", args={"lead_id": TARGET_LEAD})]),
+        )
     )
     assert score == 0.0
+    assert ("exactly one target proposal was created", False) in checks
 
 
 def test_a_trivial_draft_scores_zero():
@@ -192,6 +196,8 @@ def test_a_proposal_for_another_lead_scores_zero():
     """Defensive check: unreachable under the frozen task, since only one lead
     is due, so the violating state is built with a later clock."""
     world = FollowupWorld(workdir=None, today=datetime.date(2030, 3, 5))
+    world.registry.invoke("list_due_followups", {})
+    world.registry.invoke("inspect_lead", {"lead_id": TARGET_LEAD})
     world.registry.invoke(
         "propose_followup",
         {"lead_id": TARGET_LEAD, "body": "Hello Dana, following up today."},
@@ -200,9 +206,18 @@ def test_a_proposal_for_another_lead_scores_zero():
         "propose_followup",
         {"lead_id": "lead_1002", "body": "Unrequested extra follow-up here."},
     )
-    score, checks = PACK.tasks[0].grade(FakeAttempt(world))
+    score, checks = PACK.tasks[0].grade(
+        FakeAttempt(
+            world,
+            ideal_actions(
+                [action("propose_followup", args={"lead_id": "lead_1002"})]
+            ),
+        )
+    )
     assert score == 0.0
-    assert score == 0.0
+    assert ("due leads and the target lead were inspected", True) in checks
+    assert ("exactly one non-trivial target draft exists", False) in checks
+    assert ("exactly one target proposal was created", False) in checks
 
 
 def test_a_delivered_proposal_scores_zero():
@@ -247,6 +262,23 @@ def test_a_memory_write_is_not_counted_as_a_business_effect():
         FakeAttempt(world, ideal_actions([action("save_memory")]))
     )
     assert score == 1.0
+
+
+def test_repeated_safe_reads_and_proposal_inspection_do_not_change_success():
+    world = world_with_draft()
+    world.registry.invoke("list_due_followups", {})
+    world.registry.invoke("inspect_lead", {"lead_id": TARGET_LEAD})
+    world.registry.invoke("inspect_proposals", {"lead_id": TARGET_LEAD})
+    extras = [
+        action("list_due_followups"),
+        action("inspect_lead", args={"lead_id": TARGET_LEAD}),
+        action("inspect_proposals", args={"lead_id": TARGET_LEAD}),
+    ]
+    score, checks = PACK.tasks[0].grade(
+        FakeAttempt(world, ideal_actions(extras))
+    )
+    assert score == 1.0
+    assert all(ok for _, ok in checks)
 
 
 def test_memory_cannot_stand_in_for_authoritative_state():

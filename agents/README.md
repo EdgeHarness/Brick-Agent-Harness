@@ -18,8 +18,8 @@ None participates in the retained protocol. The confirmatory candidate is
 Qwen3.5 4B, resolved by immutable digest after Lenovo F0. Qwen3.5 2B and 9B are
 descriptive system replications only.
 
-The latest release is `v0.11.0` (S6C fair-condition runtime and scheduler),
-preceded by `v0.10.0` (S6G), `v0.9.0` (S5W), `v0.8.0` (S5), `v0.7.0` (B0),
+The latest release is `v0.11.1` (pre-D0 integrity repair), preceded by
+`v0.11.0` (S6C), `v0.10.0` (S6G), `v0.9.0` (S5W), `v0.8.0` (S5), `v0.7.0` (B0),
 `v0.6.0` (S1R), `v0.5.0` (S4), and `v0.4.0` (F0/Q0).
 The native Lenovo F0 feasibility gate passed;
 that records host feasibility only and is not a benchmark result. Annotated tags

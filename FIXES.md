@@ -4,8 +4,8 @@ This file maps known implementation defects to the active release sequence in
 [`PROJECT_SETUP.md`](PROJECT_SETUP.md). It does not define a second gate
 taxonomy.
 
-The latest release is `v0.11.0` (S6C fair-condition runtime and scheduler),
-preceded by `v0.10.0` (S6G), `v0.9.0` (S5W), `v0.8.0` (S5), `v0.7.0` (B0),
+The latest release is `v0.11.1` (pre-D0 integrity repair), preceded by
+`v0.11.0` (S6C), `v0.10.0` (S6G), `v0.9.0` (S5W), `v0.8.0` (S5), `v0.7.0` (B0),
 `v0.6.0` (S1R), `v0.5.0` (S4), and `v0.4.0` (F0/Q0).
 The native Lenovo evidence required for `v0.4.0` exists and
 the F0 gate passed. Its independent verifier correction is pushed as CI-green
@@ -383,11 +383,10 @@ not separate model attempts, so the 440/662 totals remain valid.
 Development, validation, sentinel, retained and adversarial splits must replay
 from manifests and share neither entities nor structural templates.
 
-Implemented in `v0.10.0`; prompt-contract corrections in S6C version the
-generator as `office-generators/1.0.2` while preserving the `1.0.0` seed
-namespace. It emits 2, 4, 1, 20, and 4
+Implemented in `v0.10.0`; the pre-D0 repair versions the generator as
+`office-generators/1.1.0` with a new seed namespace. It emits 8, 1, 1, 20, and 2
 cases per family for development, validation, sentinel, retained, and
-adversarial use respectively: 341 cases across 11 logical families. Every case
+adversarial use respectively: 352 cases across 11 logical families. Every case
 has an exact 14-call/4096-generated-token budget. Canonical manifests bind full
 content and semantic structure hashes; the overlap review rejects reused IDs,
 structures and templates and rejects entity-key or entity-surface reuse anywhere
@@ -436,7 +435,7 @@ conditions have immutable mechanism digests. The standalone disposable
 scheduler balances primary order, commits full request/response/action/state and
 artifact evidence through S4, resumes committed work, retries only one
 environment/instrument failure, and rejects retained execution. The model-free
-reference strictly passes all 341 generated cases. The equal-action sensitivity
+reference strictly passes all 352 generated cases. The equal-action sensitivity
 still requires a role-aware budget contract in D0/S7; it is not approximated by
 an undifferentiated larger call ceiling.
 

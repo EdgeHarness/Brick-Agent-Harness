@@ -7,7 +7,7 @@ the former `S0`–`S18`, `G0`–`G1`, `R1`–`R5`, and `P0`–`P4` execution tax
 Those names may remain in released changelog entries as historical descriptions,
 but they no longer authorize or order current work.
 
-The latest released version is `v0.11.0`. The native-Windows Lenovo F0 gate
+The latest released version is `v0.11.1`. The native-Windows Lenovo F0 gate
 passed, so `v0.4.0` records feasibility, and the native Windows ARM64 S4 gate
 passed from candidate `0b8f77d` with `overall_status` pass, 461 passed, 0 failed
 and `s4_skipped` 0, so `v0.5.0` records the production evidence store. Both
@@ -20,18 +20,18 @@ S5 is released as `v0.8.0`. Its acceptance matrix covers every released
 scenario and every required fixture class; candidate and tag CI are green.
 S5W is released as `v0.9.0`: its 17-test adversarial matrix covers the startup
 capability, Host/Origin, JSON/body, run/confirmation/reset, path/retention, and
-real process-tree gates. S6G is released as `v0.10.0`; the S6C prompt-contract
-corrections version its generator as `office-generators/1.0.2`, which
-deterministically reproduces 341 canonical
-fictional instances across development, validation, sentinel, retained, and
-adversarial manifests; all 341 semantic structures are distinct and no entity
-key or entity surface repeats anywhere, and no structural template crosses a
-split. S6C is released as `v0.11.0`: it provides the shared native transport,
+real process-tree gates. S6G is released as `v0.10.0`; S6C is released as
+`v0.11.0` with the shared native transport,
 typed office contracts, compiled generated grader, mechanism-digested condition
 registry, opportunity ledger, restartable disposable scheduler, raw-JSON lower
 bound, descriptive ablations, telemetry, strict F0/runtime binding, and
-model-free rules reference. The complete native Windows ARM64 suite passes 828
-with 3 platform-intentional skips. D0/S7 through S9 are unstarted, retained
+model-free rules reference. The `v0.11.1` pre-D0 integrity repair versions the
+generator as `office-generators/1.1.0`, reproducing 352 canonical fictional
+instances with 352 distinct semantic structures and no repeated entity key or
+surface. It provides fresh, balanced D0-A and D0-B cohorts of 44 paired cases
+each, binds the ten disposable runs/four exposed instances in a canonical
+ledger, and corrects the Brix domain/grader to `0.1.1`/`1.0.1`. D0/S7 through
+S9 are unstarted, retained
 execution is mechanically disabled, and no confirmatory effect estimate exists.
 
 Release identity is authoritative in annotated Git tags and their bound
@@ -92,6 +92,7 @@ with Snapdragon X Elite, 32 GB RAM, and native Windows 11 ARM64.
 | S5W | `v0.9.0` | Harden the local Agent Lab control plane. | Token, origin, content-type, body-limit, run-bound confirmation, reset, path, stop, and orphan-process tests pass on Windows and POSIX. |
 | S6G | `v0.10.0` | Independent versioned generators and split manifests. | Development, validation, sentinel, retained, and adversarial instances replay exactly and pass structural-overlap review. |
 | S6C | `v0.11.0` | Shared native-tool transport, condition registry, opportunity ledger, standalone scheduler, telemetry, rules reference, and descriptive ablations. | Primary conditions share the exact model transport, schemas, validators, tasks, and budgets; every condition has an immutable mechanism digest. |
+| Pre-D0 | `v0.11.1` | Fresh balanced D0 cohorts, immutable exposure accounting, and corrected Brix grading. | Each D0 cohort has 44 pairs/88 primary attempts with matched marginals and disjoint structures; all exposed-material reuse channels fail closed; all 352 rules-reference cases pass strictly. |
 | D0/S7 | `v0.12.0` | Score-masked development timing run and frozen protocol, manifests, exclusions, order, analysis, and sample size. | Only instrumentation and resource fields were visible during D0; all retained inputs hash-match the tag before retained outcomes are inspected. |
 | S8 | `v0.13.x` | Disposable sentinel across every retained condition. | There are zero instrument-invalid sentinel cells. Any instrument change creates a patch release and requires a complete sentinel rerun. |
 | S9 | `v0.14.0` | Sealed primary experiment, bounded descriptive work, immutable evidence bundle, final report, and reproduction command. | A clean checkout reproduces all reported records, tables, intervals, and conclusions from validated committed bundles. |

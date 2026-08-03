@@ -40,8 +40,9 @@ per-session protocol. Read it before starting work.
 
 ## Current position
 
-Latest release is `v0.11.0` (S6C fair-condition runtime and scheduler),
-preceded by `v0.10.0` (S6G), `v0.9.0` (S5W), `v0.8.0` (S5), `v0.7.0` (B0),
+Latest release is `v0.11.1` (pre-D0 integrity repair), preceded by `v0.11.0`
+(S6C fair-condition runtime and scheduler), `v0.10.0` (S6G), `v0.9.0`
+(S5W), `v0.8.0` (S5), `v0.7.0` (B0),
 `v0.6.0` (S1R), `v0.5.0` (S4), and `v0.4.0` (F0/Q0). **The native-Lenovo F0 gate passed** from
 candidate `6402bf5`, run `f0-20260801T164210Z-07054bec`, with all three models
 eligible — 4B at 22.26 tok/s against a 5 tok/s floor, 2B at 45.02, 9B at 12.37
@@ -94,16 +95,15 @@ failure yields a null outcome. Candidate and tag CI passed on Linux Python
 3.9–3.13 and Windows x64 Python 3.13. The legacy exploratory runner records runner,
 grader, candidate-decision, and strict-success axes separately.
 
-S5W is released as `v0.9.0`. S6G is released as `v0.10.0`; S6C prompt-contract
-corrections version the generator as `office-generators/1.0.2`, reproducing five
-canonical manifests containing 341
-fictional cases across 11 logical families. The split audit finds 341 distinct
-semantic structures and rejects reused structural templates, entity keys, or
-entity surface values anywhere in the suite. The complete native suite passes
-828 with 3 intentional platform skips. S6C is released as `v0.11.0` with the
+S5W is released as `v0.9.0`. S6G is released as `v0.10.0`. S6C is released as
+`v0.11.0` with the
 shared native transport, exact opportunity ledger, seven mechanism-digested
 conditions, standalone disposable scheduler, compiled grader, rules reference,
-and strict preflight. Retained execution is disabled; D0/S7 is next and no
+and strict preflight. The `v0.11.1` repair versions the generator as
+`office-generators/1.1.0`: 352 cases and structures, including two fresh,
+balanced 44-pair D0 cohorts, with exposed disposable material rejected across
+five identity channels. It also versions the corrected Brix domain/grader as
+`0.1.1`/`1.0.1`. Retained execution is disabled; D0 has not run and no
 confirmatory model result exists.
 
 For S4, release state is authoritative in the annotated tag and bound evidence.
@@ -165,6 +165,7 @@ carry a `domain` for exactly this reason.
 | S5W | `v0.9.0` | Agent Lab local control-plane hardening |
 | S6G | `v0.10.0` | Independent versioned task generators and split manifests |
 | S6C | `v0.11.0` | Shared native transport, condition registry, scheduler, telemetry |
+| Pre-D0 | `v0.11.1` | Fresh balanced D0 cohorts, exposure ledger, corrected Brix grader |
 | D0/S7 | `v0.12.0` | Score-masked timing run, then frozen protocol and analysis |
 | S8 | `v0.13.x` | Disposable sentinel across every retained condition |
 | S9 | `v0.14.0` | Sealed retained experiment, evidence bundle, final report |

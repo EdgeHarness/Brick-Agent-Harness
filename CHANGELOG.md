@@ -17,6 +17,48 @@ that the research instrument is valid or that any measured effect exists.
 No unreleased changes. D0/S7 is the next stage and remains locked until a
 separate review decision.
 
+## [0.11.1] — 2026-08-03
+
+Pre-D0 integrity repair. This release replaces undersized and exposed
+development inputs, binds their exposure history, and corrects the synthetic
+Brix grader. It does not run D0, reveal an efficacy score, or unlock retained
+execution. The complete native Windows ARM64 offline suite passes 836 tests
+with 3 platform-intentional skips.
+
+### Added
+
+- Two fresh, named development cohorts, D0-A and reserved D0-B, with 44 paired
+  cases per cohort and therefore 88 primary attempts each. Their workload,
+  distractor, and constraint-profile marginals match within every family, while
+  their semantic structures are disjoint and their AB/BA orders are balanced.
+- A canonical `brick.development-exposure/1` ledger binding all ten prior
+  disposable runs and the four unique score-visible development instances.
+  Manifest verification and preflight bind its exact SHA-256 and reject reuse
+  by instance ID, content digest, structure digest, entity key, or normalized
+  entity surface.
+- Regression gates for exposure-ledger tampering, all five reuse channels, the
+  balanced retained fallback, and repeated safe Brix reads.
+
+### Changed
+
+- `office-generators/1.1.0` uses a fresh seed namespace and allocates all 32
+  genuine semantic shapes per family exactly once: 88 development, 11
+  validation, 11 sentinel, 220 retained, and 22 adversarial cases. All 352
+  structures, 816 entity keys, and 1,472 normalized entity surfaces are unique.
+- The synthetic Brix domain and grader are versioned as `0.1.1` and `1.0.1`.
+  Outcome grading now depends on authoritative final draft state and payload
+  binding; repeated safe reads are permitted; action evidence and non-read
+  audit writes must agree on exactly one target proposal.
+
+### Fixed
+
+- The old development manifest represented only 22 pairs/44 attempts despite
+  the preregistered D0 requirement of 44 pairs/88 attempts, and four `.00`
+  instances had already produced visible disposable outcomes.
+- Brix proposal revisions and extra-lead proposals now fail their intended
+  named exact-effect checks, while repeated due-list, lead, and proposal reads
+  no longer cause false failures.
+
 ## [0.11.0] — 2026-08-03
 
 S6C fair-condition runtime, standalone disposable scheduler, telemetry, rules

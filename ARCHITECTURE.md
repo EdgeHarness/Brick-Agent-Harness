@@ -25,14 +25,15 @@ Brick currently provides:
   opportunity ledger, compiled generated grader, mechanism registry,
   standalone disposable scheduler, model-free rules reference, and preflight.
 
-The latest release is `v0.11.0` (S6C fair-condition runtime and scheduler),
-preceded by `v0.10.0` (S6G), `v0.9.0` (S5W), `v0.8.0` (S5), `v0.7.0` (B0),
+The latest release is `v0.11.1` (pre-D0 integrity repair), preceded by
+`v0.11.0` (S6C fair-condition runtime and scheduler), `v0.10.0` (S6G),
+`v0.9.0` (S5W), `v0.8.0` (S5), `v0.7.0` (B0),
 `v0.6.0` (S1R), `v0.5.0` (S4), and `v0.4.0` (F0/Q0).
 The required native Lenovo F0 evidence exists and the gate
 passed; its verifier correction is pushed as CI-green commit `f12dd71`. That
 establishes host and model feasibility only. Native S4 acceptance, S1R, B0, S5,
-S5W, S6G, and S6C are released. Retained execution remains disabled and no
-confirmatory effect estimate exists.
+S5W, S6G, S6C, and the pre-D0 repair are released. Retained execution remains
+disabled, D0 has not run, and no confirmatory effect estimate exists.
 
 The annotated tag and bound evidence are release-authoritative. Attestation-only
 descendant `R` intentionally retains this candidate-scoped wording; immediate

@@ -8,16 +8,27 @@ was called to create or verify these files.
 
 | Split | Cases/family | Total | Purpose |
 |---|---:|---:|---|
-| development | 2 | 22 | The preregistered D0 timing set: 22 paired cases × 2 conditions = 44 condition cells. |
-| validation | 4 | 44 | Generator, instance-loader, condition, and grader integration checks before sentinel. |
+| development | 8 | 88 | Two fresh D0 cohorts (`d0a` and reserved `d0b`), each 44 paired cases × 2 primary conditions = 88 attempts. |
+| validation | 1 | 11 | Generator, instance-loader, condition, and grader integration checks before sentinel. |
 | sentinel | 1 | 11 | One disposable end-to-end instrument cell per family and condition in S8. |
 | retained | 20 | 220 | The preregistered primary default; if D0 triggers the runtime-only fallback, the first 12 frozen IDs per family are used. |
-| adversarial | 4 | 44 | Non-primary ambiguity, distractor, ordering, and policy-boundary checks. |
+| adversarial | 2 | 22 | Non-primary ambiguity, distractor, ordering, and policy-boundary checks. |
 
-The development and retained sizes come from the existing protocol. Validation,
-sentinel, and adversarial sizes are S6G design choices frozen here before S6C
-or any live efficacy run. Changing a size, generator, prompt, structure, entity,
-effect, or instance requires a new generator version and regenerated lock.
+The 32 genuine structures per family are allocated without cosmetic duplication:
+`d0a=[4,9,18,31]`, `d0b=[7,10,17,28]`, `validation=[0]`,
+`sentinel=[16]`, `adversarial=[8,27]`, and
+`retained=[1,2,3,5,11,12,20,23,24,26,29,30,6,13,14,15,19,21,22,25]`.
+Each D0 cohort has identical workload, distractor, and constraint-profile
+marginals but no shared semantic structure. The first 12 retained ordinals are
+the frozen, balanced fallback. Changing a size, allocation, generator, prompt,
+structure, entity, effect, or instance requires a new generator version and
+regenerated lock.
+
+`development-exposure-v0.11.0.json` canonically records the ten disposable
+runs and four unique development cases whose outcomes were visible before this
+repair. Its independent SHA-256 binding is checked by manifest verification and
+preflight. A D0 manifest fails closed if it reuses an exposed case ID, content
+digest, semantic-structure digest, entity key, or normalized entity surface.
 
 ## What “independent” means here
 
@@ -52,7 +63,8 @@ python -m bench.generate_manifests --verify
 Verification regenerates every case from source, compares canonical bytes,
 checks every content digest and manifest count, reruns domain semantic checks,
 reruns the five-way structure/entity overlap review, and verifies
-`manifest-lock.json`. Regeneration is an explicit versioned operation:
+`manifest-lock.json` plus the exposure ledger. Regeneration is an explicit
+versioned operation:
 
 ```bash
 python -m bench.generate_manifests --write
