@@ -54,6 +54,8 @@ from webui.control import (  # noqa: E402
     new_capability,
     portable_leaf,
     read_json_object,
+    redact,
+    regular_entries_under,
     regular_path_under,
     reset_directory,
     require_bool,
@@ -64,6 +66,7 @@ from webui.control import (  # noqa: E402
     validate_host,
     validate_mutation_origin,
     trusted_directory_under,
+    validate_regular_tree_under,
 )
 
 
@@ -204,6 +207,24 @@ def agent_list():
         files_dir = str(paths.artifacts)
         logs_dir = str(paths.logs)
         mem_path = str(paths.memory)
+        validate_regular_tree_under(folder, paths.root, must_exist=False)
+        file_count = 0
+        if os.path.isdir(files_dir):
+            file_count = len(regular_entries_under(files_dir, limit=5_000))
+        run_count = 0
+        if os.path.isdir(logs_dir):
+            run_count = len(
+                regular_entries_under(logs_dir, prefix="run_", suffix=".json")
+            )
+        memory_count = 0
+        if os.path.isfile(mem_path):
+            trusted_directory_under(folder, os.path.dirname(mem_path))
+            safe_memory = regular_path_under(
+                os.path.dirname(mem_path), os.path.basename(mem_path),
+                maximum_bytes=MAX_LOG_FILE_BYTES,
+            )
+            with open(safe_memory, encoding="utf-8") as stream:
+                memory_count = sum(1 for _ in stream)
         speed, blurb = SPEED_HINT.get(name, ("", ""))
         out.append({
             "id": name,
@@ -216,11 +237,9 @@ def agent_list():
             "speed": speed,
             "blurb": blurb,
             "installed": tag_installed(cfg["model"], tags),
-            "files": len(os.listdir(files_dir)) if os.path.isdir(files_dir) else 0,
-            "runs": len([f for f in os.listdir(logs_dir) if f.startswith("run_")])
-                    if os.path.isdir(logs_dir) else 0,
-            "memories": sum(1 for _ in open(mem_path, encoding="utf-8"))
-                        if os.path.isfile(mem_path) else 0,
+            "files": file_count,
+            "runs": run_count,
+            "memories": memory_count,
         })
     presets = out[0]["presets"] if out else []
     return {"agents": out, "domains": available_domains(),
@@ -241,18 +260,16 @@ def workspace(agent, domain_name=None):
     folder = agent_dir(agent)
     domain = _agent_domain(agent, domain_name)
     paths = agent_runtime_paths(folder, domain)
-    trusted_directory_under(folder, paths.root, must_exist=False)
+    validate_regular_tree_under(folder, paths.root, must_exist=False)
     state = domain.inspect(paths.workspace, paths.memory)
 
     logs = []
     if os.path.isdir(paths.logs):
-        for name in sorted(os.listdir(paths.logs), reverse=True):
-            if name.startswith("run_") and name.endswith(".json"):
-                logs.append({
-                    "name": name,
-                    "mtime": os.path.getmtime(os.path.join(paths.logs, name)),
-                })
-    state["logs"] = logs[:25]
+        for mtime_ns, name, _size in regular_entries_under(
+            paths.logs, prefix="run_", suffix=".json", limit=25
+        ):
+            logs.append({"name": name, "mtime": mtime_ns / 1_000_000_000})
+    state["logs"] = logs
     state["folder"] = str(paths.root)
     return state
 
@@ -483,8 +500,14 @@ class Runs:
             run.status = "finished" if code == 0 else "failed"
         if code not in (0, -15) and run.status != "stopped":
             tail = "".join(stderr)[-1500:].strip()
-            run.add({"t": "error", "message": f"the run exited with code {code}",
-                     "trace": tail})
+            if tail:
+                safe_tail = redact(tail)
+                sys.stderr.write(
+                    f"Agent Lab runner {run.id} exited with code {code}: "
+                    f"{safe_tail}\n"
+                )
+                sys.stderr.flush()
+            run.add({"t": "error", "message": f"the run exited with code {code}"})
         run.add({"t": "closed", "status": run.status, "code": code})
 
     def with_idle(self, operation):
@@ -842,9 +865,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.push({"t": "closed", "status": "done"})
         except (BrokenPipeError, ConnectionResetError):
             pass
-        except Exception as e:
+        except Exception as exc:
+            detail = redact(f"{type(exc).__name__}: {exc}")
+            sys.stderr.write(f"Agent Lab model pull failed: {detail}\n")
+            sys.stderr.flush()
             try:
-                self.push({"t": "error", "message": f"{type(e).__name__}: {e}"})
+                self.push({"t": "error", "message": "model pull failed"})
             except OSError:
                 pass
 
@@ -875,6 +901,43 @@ def bind_server(start=DEFAULT_PORT):
     raise last_error
 
 
+def serve_until_stopped(server):
+    """Serve and always close the active process tree and listening socket."""
+    interrupted = False
+    serve_error = None
+    serve_traceback = None
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        interrupted = True
+    except BaseException as exc:  # Preserve the serving failure after cleanup.
+        serve_error = exc
+        serve_traceback = exc.__traceback__
+    cleanup_error = None
+    try:
+        current = server.runs.current
+        if current and current.proc.poll() is None:
+            current.stop()
+    except Exception as exc:
+        cleanup_error = exc
+        detail = redact(f"{type(exc).__name__}: {exc}")
+        sys.stderr.write(f"Agent Lab run cleanup failed: {detail}\n")
+        sys.stderr.flush()
+    try:
+        server.server_close()
+    except Exception as exc:
+        if cleanup_error is None:
+            cleanup_error = exc
+        detail = redact(f"{type(exc).__name__}: {exc}")
+        sys.stderr.write(f"Agent Lab socket cleanup failed: {detail}\n")
+        sys.stderr.flush()
+    if serve_error is not None:
+        raise serve_error.with_traceback(serve_traceback)
+    if cleanup_error is not None:
+        raise RuntimeError("Agent Lab cleanup did not complete") from cleanup_error
+    return interrupted
+
+
 def main():
     sys.path.insert(0, PROJECT)
     requested_port = int(os.environ.get("AGENT_LAB_PORT", DEFAULT_PORT))
@@ -891,14 +954,8 @@ def main():
     print("\n  Ctrl-C to stop.\n")
     if os.environ.get("AGENT_LAB_NO_BROWSER") != "1":
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        if server.runs.current:
-            server.runs.current.stop()
+    if serve_until_stopped(server):
         print("\n  stopped.\n")
-    finally:
-        server.server_close()
 
 
 if __name__ == "__main__":

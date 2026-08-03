@@ -4,8 +4,9 @@ This directory contains the released **exploratory synthetic benchmark** and is
 being rebuilt into the instrument specified in
 [`../PROJECT_SETUP.md`](../PROJECT_SETUP.md).
 
-The latest release is `v0.9.0` (S5W Agent Lab hardening), preceded by `v0.8.0`
-(S5), `v0.7.0` (B0), `v0.6.0` (S1R), `v0.5.0` (S4), and `v0.4.0` (F0/Q0).
+The latest release is `v0.10.0` (S6G independent task generators), preceded by
+`v0.9.0` (S5W), `v0.8.0` (S5), `v0.7.0` (B0), `v0.6.0` (S1R), `v0.5.0` (S4),
+and `v0.4.0` (F0/Q0).
 The Lenovo F0 gate passed, establishing that this
 host can run the designed experiment. S4's production evidence store and
 attestor are released: the native gate passed with `overall_status` pass, 461
@@ -246,7 +247,7 @@ that it modifies only already-tracked Markdown. Do not move `v0.5.0` from `R`;
 
 ## Target tasks and graders
 
-S6G creates 11 fixed scenario-family generator distributions, combining the
+S6G provides 11 fixed scenario-family generator distributions, combining the
 dependent learning episodes into one family. Instances vary structure, policy,
 state, valid action sequence, wording, entities, dates, conflicts and
 distractors. Seed-only or entity-renaming variants are rejected as independent
@@ -258,8 +259,19 @@ subepisodes. They share one isolated memory scope and one
 failure in either makes the case null. The subepisodes are not counted as two
 model attempts, so the stated primary and secondary totals remain unchanged.
 
-Development, validation, sentinel, retained and adversarial manifests replay
-exactly and share neither entities nor structural templates.
+The checked-in development, validation, sentinel, retained, and adversarial
+manifests contain 22, 44, 11, 220, and 44 cases respectively. They replay
+exactly and share no instance IDs, semantic structures, or structural templates;
+no entity key or entity surface value repeats anywhere in the suite. Verify
+them without model or network
+access:
+
+```powershell
+python -m bench.generate_manifests --verify
+```
+
+These are frozen benchmark inputs, not outcomes. S6C must still compile them
+into paired runnable conditions before any development or retained model run.
 
 S5 graders use fixed versioned rubrics over immutable attempt evidence. Strict
 whole-task success is primary. Harmful, unauthorized, stale, missing, extra or

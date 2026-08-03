@@ -14,8 +14,49 @@ that the research instrument is valid or that any measured effect exists.
 
 ## [Unreleased]
 
-No unreleased changes. The next stage is S6G independent task generation, which
-begins only after a separate review decision.
+No unreleased changes. The next stage is S6C condition and scheduler integration,
+which begins only after a separate review decision.
+
+## [0.10.0] — 2026-08-03
+
+S6G independent task generators and replayable split manifests. This release
+freezes benchmark inputs; it does not run a model, measure a harness effect, or
+claim a research result. The complete native Windows ARM64 offline suite passes
+with 808 passed and 3 platform-intentional skips.
+
+### Added
+
+- Exact canonical `brick.task-instance/1`, `brick.task-manifest/1`, and
+  `brick.manifest-lock/1` contracts with content and semantic-structure hashes,
+  portable identifiers, bounded integer opportunity budgets, atomic writes,
+  and fail-closed canonical loading.
+- `office-generators/1.0.0`, covering 11 logical office task families and
+  generating 341 fictional cases: 22 development, 44 validation, 11 sentinel,
+  220 retained, and 44 adversarial.
+- A split-overlap review that rejects reused instance IDs, semantic structures,
+  structural template IDs, entity keys, or entity surface values anywhere in
+  the suite. Seeds vary
+  surface realization only and never define an independent case.
+- Checked-in manifests and lock file under `bench/manifests/office-v1`, plus a
+  write/verify CLI that regenerates all files and compares exact canonical
+  bytes.
+- Generator regression tests for exact replay, committed-file verification,
+  semantic validation, tampering, noncanonical input, reseeded copies,
+  cross-split entity reuse, and the frozen 12-per-family retained fallback.
+
+### Fixed
+
+- Agent Lab now stops the active process tree and closes the server socket on
+  unexpected serving failures, and it reports cleanup failures instead of
+  silently claiming success.
+- Detailed runner exceptions and stderr no longer cross the browser boundary;
+  clients receive generic failures while local stderr retains redacted
+  diagnostics.
+- Runtime tree and log enumeration now rejects linked/reparse or irregular
+  roots and descendants and enforces member and byte ceilings before reads.
+- GitHub Actions now uses the maintained Node 24 releases of
+  `actions/checkout@v6` and `actions/setup-python@v6` without widening workflow
+  permissions.
 
 ## [0.9.0] â€” 2026-08-03
 

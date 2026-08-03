@@ -46,6 +46,14 @@ def emit(event, **fields):
     sys.stdout.flush()
 
 
+def emit_run_failure():
+    """Keep redacted diagnostics local and emit only a browser-safe failure."""
+    detail = redact(traceback.format_exc())
+    sys.stderr.write(str(detail) + ("" if str(detail).endswith("\n") else "\n"))
+    sys.stderr.flush()
+    emit("error", message="the agent run failed")
+
+
 def resolve_agent_folder(agent):
     if not isinstance(agent, str) or not _AGENT_ID.fullmatch(agent):
         raise ValueError(f"invalid configured-agent id {agent!r}")
@@ -226,12 +234,10 @@ def main(argv=None):
 
     try:
         episode = run_harness(llm, args.task, attempt)
-    except Exception as exc:
-        emit(
-            "error",
-            message=f"{type(exc).__name__}: {exc}",
-            trace=traceback.format_exc(),
-        )
+    except Exception:
+        # Detailed diagnostics stay on the local terminal.  The stdout JSONL
+        # stream is browser-visible and therefore carries only a generic error.
+        emit_run_failure()
         raise SystemExit(1)
 
     os.makedirs(log_dir, exist_ok=True)

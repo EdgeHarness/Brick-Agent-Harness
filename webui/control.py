@@ -35,6 +35,8 @@ MAX_ARTIFACT_BYTES = 20 * 1024 * 1024
 MAX_PREVIEW_BYTES = 10 * 1024 * 1024
 MAX_ARCHIVE_EXPANDED_BYTES = 50 * 1024 * 1024
 MAX_ARCHIVE_MEMBERS = 2_000
+MAX_WORKSPACE_MEMBERS = 5_000
+MAX_WORKSPACE_BYTES = 100 * 1024 * 1024
 CONFIRMATION_TIMEOUT_SECONDS = 120
 
 _SECRET_KEY = re.compile(
@@ -193,6 +195,7 @@ def regular_path_under(root, leaf, *, maximum_bytes=None):
     """Resolve one leaf below a trusted root and reject links/reparse points."""
     leaf = portable_leaf(leaf)
     root = os.path.abspath(os.fspath(root))
+    trusted_directory_under(root, root)
     path = os.path.abspath(os.path.join(root, leaf))
     try:
         if os.path.commonpath((root, path)) != root:
@@ -217,6 +220,14 @@ def trusted_directory_under(root, target, *, must_exist=True):
     root = os.path.abspath(os.fspath(root))
     target = os.path.abspath(os.fspath(target))
     try:
+        root_info = os.lstat(root)
+    except FileNotFoundError:
+        raise RequestError(400, "trusted root does not exist")
+    if stat.S_ISLNK(root_info.st_mode) or _is_reparse(root_info):
+        raise RequestError(400, "linked or reparse-point roots are not allowed")
+    if not stat.S_ISDIR(root_info.st_mode):
+        raise RequestError(400, "trusted root is not a directory")
+    try:
         relative = os.path.relpath(target, root)
         if relative == os.pardir or relative.startswith(os.pardir + os.sep):
             raise RequestError(400, "directory is outside its allowed root")
@@ -236,6 +247,82 @@ def trusted_directory_under(root, target, *, must_exist=True):
         if not stat.S_ISDIR(info.st_mode):
             raise RequestError(400, "path component is not a directory")
     return target
+
+
+def validate_regular_tree_under(
+    root,
+    target,
+    *,
+    must_exist=True,
+    maximum_members=MAX_WORKSPACE_MEMBERS,
+    maximum_bytes=MAX_WORKSPACE_BYTES,
+):
+    """Reject links, reparse points, irregular files, and oversized read trees.
+
+    Agent Lab domain inspectors are legacy callbacks that receive paths rather
+    than already-open file handles.  Validate the complete tree immediately
+    before invoking one so a linked state, memory, or artifact cannot redirect
+    an authenticated browser read outside the configured-agent directory.
+    """
+    target = trusted_directory_under(root, target, must_exist=must_exist)
+    if not os.path.exists(target):
+        return target
+    members = 0
+    total_bytes = 0
+    pending = [target]
+    while pending:
+        directory = pending.pop()
+        try:
+            entries = list(os.scandir(directory))
+        except OSError as exc:
+            raise RequestError(400, "workspace tree cannot be inspected") from exc
+        for entry in entries:
+            members += 1
+            if members > maximum_members:
+                raise RequestError(413, "workspace tree has too many members")
+            try:
+                info = entry.stat(follow_symlinks=False)
+            except OSError as exc:
+                raise RequestError(400, "workspace member cannot be inspected") from exc
+            if stat.S_ISLNK(info.st_mode) or _is_reparse(info):
+                raise RequestError(400, "linked or reparse-point workspace members are not allowed")
+            if stat.S_ISDIR(info.st_mode):
+                pending.append(entry.path)
+            elif stat.S_ISREG(info.st_mode):
+                total_bytes += info.st_size
+                if total_bytes > maximum_bytes:
+                    raise RequestError(413, "workspace tree is too large")
+            else:
+                raise RequestError(400, "irregular workspace members are not allowed")
+    return target
+
+
+def regular_entries_under(root, *, prefix="", suffix="", limit=MAX_LOG_FILES):
+    """Return newest regular direct children without following directory links."""
+    trusted_directory_under(root, root)
+    entries = []
+    try:
+        children = os.scandir(root)
+    except OSError as exc:
+        raise RequestError(400, "directory cannot be inspected") from exc
+    with children:
+        for entry in children:
+            if prefix and not entry.name.startswith(prefix):
+                continue
+            if suffix and not entry.name.endswith(suffix):
+                continue
+            try:
+                info = entry.stat(follow_symlinks=False)
+            except OSError:
+                continue
+            if (
+                stat.S_ISREG(info.st_mode)
+                and not stat.S_ISLNK(info.st_mode)
+                and not _is_reparse(info)
+            ):
+                entries.append((info.st_mtime_ns, entry.name, info.st_size))
+    entries.sort(reverse=True)
+    return entries[:limit]
 
 
 def reset_directory(root, target):

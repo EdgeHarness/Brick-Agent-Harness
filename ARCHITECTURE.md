@@ -18,14 +18,17 @@ Brick currently provides:
 - experimental LoRA generators and training scripts, but no shipped corpus,
   adapter or model; and
 - released S5 immutable-input, versioned strict graders for all
-  14 released task scenarios.
+  14 released task scenarios; and
+- released S6G domain-neutral instance/manifest contracts and versioned office
+  generators for five isolated, exactly replayable input splits.
 
-The latest release is `v0.9.0` (S5W Agent Lab hardening), preceded by `v0.8.0`
-(S5), `v0.7.0` (B0), `v0.6.0` (S1R), `v0.5.0` (S4), and `v0.4.0` (F0/Q0).
+The latest release is `v0.10.0` (S6G independent task generators), preceded by
+`v0.9.0` (S5W), `v0.8.0` (S5), `v0.7.0` (B0), `v0.6.0` (S1R), `v0.5.0` (S4),
+and `v0.4.0` (F0/Q0).
 The required native Lenovo F0 evidence exists and the gate
 passed; its verifier correction is pushed as CI-green commit `f12dd71`. That
-establishes host and model feasibility only. Native S4 acceptance, S1R, and B0
-and S5 are released. No measured effect exists.
+establishes host and model feasibility only. Native S4 acceptance, S1R, B0, S5,
+S5W, and S6G are released. No measured effect exists.
 
 The annotated tag and bound evidence are release-authoritative. Attestation-only
 descendant `R` intentionally retains this candidate-scoped wording; immediate
@@ -50,6 +53,7 @@ harness/
   domain.py           DomainPack/TaskSpec/PromptProfile contracts and loader
   evidence.py         candidate S4 marker-last evidence store
   grading.py          immutable grading evidence and versioned grader contract
+  instances.py        canonical generated-instance and split-manifest contracts
   storage.py          legacy and namespaced runtime-path selection
   builtin_tools.py    think/done tools shared by domain packs
   tools.py            ToolRegistry validation, execution and descriptions
@@ -58,12 +62,14 @@ harness/
   agent.py            raw and harness loops
 
 domains/
-  office_demo/        office world, tools, task metadata and strict graders
+  office_demo/        office world, tools, graders and versioned S6G generators
   counter_demo/       namespaced structural portability fixture
   brix_followup_synthetic/ fictional lead-follow-up service and domain pack
 
 bench/
   run_bench.py        domain × model × condition × task runner
+  generate_manifests.py exact S6G regeneration and replay verification
+  manifests/          checked-in generated input manifests and lock
   report.py           domain/version-aware descriptive aggregation
   s4_attest.py        candidate S4 native-run attestor and verifier
   tasks.py|grade.py   office_demo compatibility re-exports

@@ -132,10 +132,12 @@ because verifying it is F0's job.
 
 ## 3. Immediate next action
 
-The S5W boundary is complete: its 17-test adversarial matrix and real Windows
-process-tree teardown pass; the complete native suite passes 792 with 3
-intentional platform skips; and `v0.9.0` is published. Stop for review. The next
-stage is S6G independent task generation, and it begins only after a separate
+The S6G boundary is complete: 341 cases across all five manifests replay
+exactly, all 341 semantic structures are distinct, no entity key or surface is
+reused anywhere, and structural templates do not cross splits. The complete native
+suite passes 808 with 3 intentional platform skips, and `v0.10.0` is published.
+No model run or effect estimate exists. Stop for review. The next stage is S6C
+condition and scheduler integration, and it begins only after a separate
 explicit decision.
 
 Do not import or synchronize the moving `SMalshe/Brick` product tree into S4,

@@ -15,6 +15,7 @@ from types import SimpleNamespace
 import pytest
 
 from webui import control
+from webui import runner as lab_runner
 from webui import server as lab
 from harness import agent as agent_loop
 from harness.runtime import ActionPolicy, RunHooks
@@ -319,6 +320,125 @@ def test_regular_path_refuses_traversal_and_links(tmp_path):
         return
     with pytest.raises(control.RequestError, match="linked"):
         control.trusted_directory_under(root, linked_dir)
+
+
+def test_workspace_tree_refuses_linked_members_and_is_bounded(tmp_path):
+    root = tmp_path / "root"
+    workspace = root / "workspace"
+    outside = tmp_path / "outside.txt"
+    workspace.mkdir(parents=True)
+    outside.write_text("private", encoding="utf-8")
+    (workspace / "state.json").write_text("{}", encoding="utf-8")
+    assert control.validate_regular_tree_under(root, workspace) == str(workspace)
+
+    link = workspace / "linked.json"
+    try:
+        link.symlink_to(outside)
+    except (NotImplementedError, OSError):
+        pytest.skip("this host cannot create the symlink needed for the gate")
+    with pytest.raises(control.RequestError, match="linked"):
+        control.validate_regular_tree_under(root, workspace)
+    link.unlink()
+
+    with pytest.raises(control.RequestError, match="too many"):
+        control.validate_regular_tree_under(root, workspace, maximum_members=0)
+
+
+def test_trusted_root_itself_cannot_be_a_link(tmp_path):
+    real = tmp_path / "real"
+    linked = tmp_path / "linked"
+    real.mkdir()
+    try:
+        linked.symlink_to(real, target_is_directory=True)
+    except (NotImplementedError, OSError):
+        pytest.skip("this host cannot create the symlink needed for the gate")
+    with pytest.raises(control.RequestError, match="roots"):
+        control.trusted_directory_under(linked, linked)
+
+
+def test_server_cleanup_stops_live_run_on_unexpected_serve_failure():
+    stopped = []
+    closed = []
+    failure = RuntimeError("serve failed")
+    fake = SimpleNamespace(
+        runs=SimpleNamespace(
+            current=SimpleNamespace(
+                proc=SimpleNamespace(poll=lambda: None),
+                stop=lambda: stopped.append(True),
+            )
+        ),
+        serve_forever=lambda: (_ for _ in ()).throw(failure),
+        server_close=lambda: closed.append(True),
+    )
+    with pytest.raises(RuntimeError, match="serve failed"):
+        lab.serve_until_stopped(fake)
+    assert stopped == [True]
+    assert closed == [True]
+
+
+def test_server_cleanup_failure_is_not_silently_reported_as_success(capsys):
+    closed = []
+    fake = SimpleNamespace(
+        runs=SimpleNamespace(
+            current=SimpleNamespace(
+                proc=SimpleNamespace(poll=lambda: None),
+                stop=lambda: (_ for _ in ()).throw(RuntimeError("Bearer secret")),
+            )
+        ),
+        serve_forever=lambda: None,
+        server_close=lambda: closed.append(True),
+    )
+    with pytest.raises(RuntimeError, match="cleanup did not complete"):
+        lab.serve_until_stopped(fake)
+    assert closed == [True]
+    assert "secret" not in capsys.readouterr().err
+
+
+def test_runner_stderr_is_not_relayed_to_browser(capsys):
+    class FakeProcess:
+        stderr = io.StringIO("Authorization: Bearer very-secret\nprivate traceback\n")
+        stdout = io.StringIO("")
+
+        @staticmethod
+        def wait():
+            return 7
+
+    events = []
+    run = SimpleNamespace(
+        id="run-a",
+        proc=FakeProcess(),
+        process_tree=SimpleNamespace(close=lambda: None),
+        confirmations=SimpleNamespace(clear=lambda: None),
+        status="running",
+        add=lambda event: events.append(event),
+    )
+    lab.Runs()._pump(run)
+    assert events == [
+        {"t": "error", "message": "the run exited with code 7"},
+        {"t": "closed", "status": "failed", "code": 7},
+    ]
+    local = capsys.readouterr().err
+    assert "private traceback" in local
+    assert "very-secret" not in local
+
+
+def test_runner_exception_event_is_generic_and_local_trace_is_redacted(
+    monkeypatch, capsys
+):
+    events = []
+    monkeypatch.setattr(
+        lab_runner,
+        "emit",
+        lambda event, **fields: events.append({"t": event, **fields}),
+    )
+    try:
+        raise RuntimeError("Bearer browser-must-not-see")
+    except RuntimeError:
+        lab_runner.emit_run_failure()
+    assert events == [{"t": "error", "message": "the agent run failed"}]
+    local = capsys.readouterr().err
+    assert "RuntimeError" in local
+    assert "browser-must-not-see" not in local
 
 
 def _pid_exists(pid):

@@ -601,11 +601,6 @@ function onEnd(e) {
 function onError(e) {
   const card = addCard('note bad');
   card.append(el('div', 'tag', 'error'), el('div', 'note-text', e.message));
-  if (e.trace) {
-    const pre = el('pre', 'raw');
-    pre.textContent = e.trace;
-    card.append(pre);
-  }
 }
 
 function onConfirmation(e) {

@@ -4,8 +4,9 @@ This file maps known implementation defects to the active release sequence in
 [`PROJECT_SETUP.md`](PROJECT_SETUP.md). It does not define a second gate
 taxonomy.
 
-The latest release is `v0.9.0` (S5W Agent Lab hardening), preceded by `v0.8.0`
-(S5), `v0.7.0` (B0), `v0.6.0` (S1R), `v0.5.0` (S4), and `v0.4.0` (F0/Q0).
+The latest release is `v0.10.0` (S6G independent task generators), preceded by
+`v0.9.0` (S5W), `v0.8.0` (S5), `v0.7.0` (B0), `v0.6.0` (S1R), `v0.5.0` (S4),
+and `v0.4.0` (F0/Q0).
 The native Lenovo evidence required for `v0.4.0` exists and
 the F0 gate passed. Its independent verifier correction is pushed as CI-green
 commit `f12dd71`. Native S4 acceptance, S1R, and B0 are released; the current
@@ -27,7 +28,7 @@ descendant `D` promotes status after the tag and is not part of `v0.5.0`.
 | Synthetic Brix layer | Not implemented | **Closed in `v0.7.0`.** Fictional lead follow-up with fake records, a no-network fake provider, approval-gated delivery and reconciliation |
 | Graders | Loose associations, variable denominators, exceptions scored as zero | **Closed in `v0.8.0`.** Fixed versioned rubrics over copied evidence, with instrument failures null |
 | Agent Lab | Unauthenticated loopback control plane | Q0 removes unsafe capabilities; S5W hardens the remaining control plane |
-| Task instances | Twelve fixed prompts and shared order/state | S6G structural generators and isolated splits |
+| Task instances | Twelve fixed prompts and shared order/state | **Closed in `v0.10.0`.** Versioned structural generators, canonical manifests, exact replay, and isolated splits |
 | Conditions/baselines | Prompt-JSON `raw` versus bundled legacy `harness` | S6C shared native transport, competent baseline, explicit harness, rules and descriptives |
 | Provenance/scheduler | Partial metadata and interactive long-run assumptions | S4/S6C immutable provenance and standalone restartable execution |
 | Protocol/statistics | No frozen valid retained protocol | D0/S7 fixed-family paired protocol and runtime-only sample rule |
@@ -381,6 +382,18 @@ not separate model attempts, so the 440/662 totals remain valid.
 
 Development, validation, sentinel, retained and adversarial splits must replay
 from manifests and share neither entities nor structural templates.
+
+Implemented in `v0.10.0`. `office-generators/1.0.0` emits 2, 4, 1, 20, and 4
+cases per family for development, validation, sentinel, retained, and
+adversarial use respectively: 341 cases across 11 logical families. Every case
+has an exact 14-call/4096-generated-token budget. Canonical manifests bind full
+content and semantic structure hashes; the overlap review rejects reused IDs,
+structures and templates and rejects entity-key or entity-surface reuse anywhere
+in the suite. The retained
+manifest freezes 20 cases per family, including a fixed 12-case prefix for the
+predeclared fallback. `python -m bench.generate_manifests --verify` reproduces
+and compares every committed byte. This closes input generation only; no model
+outcome has been observed and S6C remains unstarted.
 
 ## S6C — fair conditions and accounting
 

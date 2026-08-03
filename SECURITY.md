@@ -6,9 +6,10 @@ Brick is an experimental research scaffold. It is not approved for production,
 private Brix data, authoritative business systems, or unattended external side
 effects.
 
-The latest release is `v0.9.0` (S5W Agent Lab control-plane hardening), preceded
-by `v0.8.0` (S5), `v0.7.0` (B0), `v0.6.0` (S1R), `v0.5.0` (S4), and `v0.4.0`
-(F0/Q0). The native-Windows Lenovo F0, S4, and S5W gates passed.
+The latest release is `v0.10.0` (S6G independent task generators), preceded by
+`v0.9.0` (S5W), `v0.8.0` (S5), `v0.7.0` (B0), `v0.6.0` (S1R), `v0.5.0` (S4),
+and `v0.4.0` (F0/Q0). The native-Windows Lenovo F0, S4, S5W, and S6G gates
+passed.
 Annotated tags and bound evidence are release-authoritative; the tagged S4
 release commit intentionally retains candidate prose until immediate docs-only
 descendant `D` promotes status. No release is approved for real Brix data.
