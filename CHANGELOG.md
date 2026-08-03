@@ -39,7 +39,8 @@ with 808 passed and 3 platform-intentional skips.
   surface realization only and never define an independent case.
 - Checked-in manifests and lock file under `bench/manifests/office-v1`, plus a
   write/verify CLI that regenerates all files and compares exact canonical
-  bytes.
+  bytes. Repository attributes pin those canonical JSON files to LF on every
+  supported checkout.
 - Generator regression tests for exact replay, committed-file verification,
   semantic validation, tampering, noncanonical input, reseeded copies,
   cross-split entity reuse, and the frozen 12-per-family retained fallback.
