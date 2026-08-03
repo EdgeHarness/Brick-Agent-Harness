@@ -841,6 +841,14 @@ deterministic workflow for that family.
 
 ## D0/S7 — frozen research protocol
 
+The current source contains the pre-run S7 enforcement layer: deferred D0
+grading, a score-masked operator summary, exact reconstruction of every attempt
+identity, a marker-last runtime-only sample decision, a direction-blind
+floor/ceiling audit, role-aware equal-action accounting, and pinned analysis.
+This implementation is not evidence that D0 passed. D0 remains unexecuted until
+the exact clean candidate receives required CI, and retained execution remains
+disabled.
+
 ### Primary question and estimand
 
 > For the 11 fixed synthetic Brick task-family generator distributions, does

@@ -14,8 +14,36 @@ that the research instrument is valid or that any measured effect exists.
 
 ## [Unreleased]
 
-No unreleased changes. D0/S7 is the next stage and remains locked until a
-separate review decision.
+S7 implementation candidate. D0 has not run in this source state, no efficacy
+result exists, and retained execution remains mechanically disabled.
+
+### Added
+
+- A fail-closed `brick.s7.protocol/1` binding the 44-pair D0-A cohort, reserved
+  D0-B boundary, runtime-only 20-versus-12 sample-size rule, direction-blind
+  floor/ceiling gate, pinned NumPy analysis, and role-aware sensitivity budget.
+- A D0-only runner that defers grading and omits success from its operator
+  summary, plus immutable marker-last runtime-decision and floor/ceiling-audit
+  artifacts.
+- The exact paired sign-flip diagnostic, equal-family estimand, 20,000-draw
+  within-family PCG64 bootstrap, family and leave-one-family-out effects, and
+  the three-part positive-claim gate.
+- Executable regressions for complete 88-attempt scheduling, full attempt-key
+  reconstruction, efficacy rejection, artifact tampering, non-transferable
+  role budgets, exact small-sample p-values, and a golden first-100-resample
+  stream digest.
+
+### Changed
+
+- Fresh development inputs can no longer run through the ordinary immediately
+  scored S6 command; only the score-masked S7 entry point can schedule D0-A.
+- Attempt opportunity identities can represent nested role-specific ceilings.
+  The primary ledger is unchanged; the descriptive equal-action sensitivity
+  gives both conditions the same driver allowance and separately caps harness
+  planning/completion overhead without cross-role borrowing.
+- CI installs the analysis dependency only on frozen Python 3.13 lanes. The
+  reusable harness continues to support and test Python 3.9 through 3.13
+  without NumPy as a core dependency.
 
 ## [0.11.1] — 2026-08-03
 

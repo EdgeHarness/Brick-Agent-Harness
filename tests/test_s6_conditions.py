@@ -421,6 +421,15 @@ def test_preflight_fingerprints_every_executable_s6_dependency():
         "bench/s6_run.py",
         "bench/s6_preflight.py",
         "bench/s6_rules_reference.py",
+        "bench/s7_analysis.py",
+        "bench/s7_artifacts.py",
+        "bench/s7_contract.py",
+        "bench/s7_decision.py",
+        "bench/s7_floor_audit.py",
+        "bench/s7_preflight.py",
+        "bench/s7_protocol.json",
+        "bench/s7_run.py",
+        "requirements-analysis.txt",
         "bench/manifests/office-v1/development-exposure-v0.11.0.json",
     }
     assert set(s6_preflight.DOMAIN_PATHS) == {
@@ -442,7 +451,7 @@ def _scheduler_args(tmp_path, instance_id, run_id):
         protocol=ROOT / "bench" / "s6_protocol.json",
         manifests=MANIFESTS,
         runs_root=tmp_path,
-        split="development",
+        split="validation",
         instance_id=instance_id,
         condition=["native_tools"],
         max_cases=None,
@@ -723,7 +732,9 @@ def test_rules_reference_runner_reports_real_development_counts():
 
 
 def _one(family):
-    manifest = load_canonical_json(MANIFESTS / "development.json")
+    # Fresh development material is reserved for masked D0 execution. Runtime
+    # unit tests exercise the single-case validation split instead.
+    manifest = load_canonical_json(MANIFESTS / "validation.json")
     return next(
         item for item in manifest["instances"] if item["content"]["family"] == family
     )

@@ -415,15 +415,22 @@ class AttemptKey:
         normalized_budget = _normalize_identity_json(
             opportunity_budget, "opportunity_budget"
         )
-        for budget_value in normalized_budget.values():
+        def validate_budget(value):
+            if isinstance(value, dict):
+                if not value:
+                    raise ValueError("opportunity_budget mappings cannot be empty")
+                for nested in value.values():
+                    validate_budget(nested)
+                return
             if (
-                isinstance(budget_value, bool)
-                or not isinstance(budget_value, int)
-                or budget_value < 0
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or value < 0
             ):
                 raise ValueError(
                     "opportunity_budget values must be nonnegative integers"
                 )
+        validate_budget(normalized_budget)
         document = {
             "schema_version": ATTEMPT_KEY_SCHEMA,
             "domain": {

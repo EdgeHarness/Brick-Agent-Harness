@@ -34,8 +34,13 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-lock.txt
 
-      - name: Install pinned test environment
+      - name: Install pinned test environment (Python 3.9-3.12)
+        if: matrix.python-version != '3.13'
         run: python -m pip install --disable-pip-version-check -r requirements-test.txt
+
+      - name: Install pinned analysis environment (Python 3.13)
+        if: matrix.python-version == '3.13'
+        run: python -m pip install --disable-pip-version-check -r requirements-analysis.txt
 
       - name: Run offline tests
         env:
@@ -58,8 +63,8 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-lock.txt
 
-      - name: Install pinned test environment
-        run: python -m pip install --disable-pip-version-check -r requirements-test.txt
+      - name: Install pinned analysis environment
+        run: python -m pip install --disable-pip-version-check -r requirements-analysis.txt
 
       - name: Run offline tests
         env:
@@ -84,8 +89,8 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-lock.txt
 
-      - name: Install pinned test environment
-        run: python -m pip install --disable-pip-version-check -r requirements-test.txt
+      - name: Install pinned analysis environment
+        run: python -m pip install --disable-pip-version-check -r requirements-analysis.txt
 
       - name: Run supporting offline tests
         env:

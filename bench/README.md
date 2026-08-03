@@ -549,6 +549,50 @@ diagnostic `p < 0.05`, and bootstrap 95% lower bound above zero. Golden tests pi
 draw indices, p-values, quantile behavior and endpoints. Claims remain limited to
 the frozen generators.
 
+### D0-A execution boundary
+
+D0 must run only from a clean commit whose required CI is green. Install the
+separate analysis environment first; NumPy is deliberately not a dependency of
+the reusable harness core:
+
+```powershell
+python -m pip install -r requirements-analysis.txt
+python -m bench.s7_preflight
+python -m bench.s7_run --run-id s7-d0a-YYYYMMDDTHHMMSSZ
+```
+
+The run command schedules exactly 44 D0-A pairs/88 primary attempts and cannot
+select one instance, truncate the cohort, grade an attempt, or run D0-B. Its
+console summary excludes success. Do not inspect final state, actions, model
+responses, or reconstruct outcomes while the runtime decision is pending.
+
+After all 88 logical cells are instrument-valid, commit the runtime-only sample
+decision to a new directory:
+
+```powershell
+python -m bench.s7_decision `
+  --runs-root C:\BrickRuns\s7 `
+  --run-id s7-d0a-YYYYMMDDTHHMMSSZ `
+  --output C:\BrickRuns\s7-decisions\s7-d0a-YYYYMMDDTHHMMSSZ
+```
+
+Only after that marker-last decision verifies may the direction-blind audit
+grade D0 in memory:
+
+```powershell
+python -m bench.s7_floor_audit `
+  --runs-root C:\BrickRuns\s7 `
+  --run-id s7-d0a-YYYYMMDDTHHMMSSZ `
+  --decision C:\BrickRuns\s7-decisions\s7-d0a-YYYYMMDDTHHMMSSZ `
+  --output C:\BrickRuns\s7-audits\s7-d0a-YYYYMMDDTHHMMSSZ
+```
+
+The audit emits only eight-condition-combined successes per family. A floor or
+ceiling flag forbids the S7 freeze and requires a separately versioned,
+direction-blind correction review; `bench.s7_run` mechanically rejects D0-B in
+the current release. An audit with no flags permits protocol freeze. Neither
+path unlocks retained execution.
+
 ## Descriptive matrix
 
 Run descriptives only after sealing the primary:
@@ -570,6 +614,8 @@ The implementation and current-source rationale for S6C are recorded in
 [`S6C_RESEARCH_BASIS.md`](S6C_RESEARCH_BASIS.md). Sources inform design; only
 Brick's executable contracts, preflight, and immutable evidence decide whether
 the local instrument passes.
+The S7 integrity rationale and primary sources are recorded in
+[`S7_RESEARCH_BASIS.md`](S7_RESEARCH_BASIS.md).
 The two no-memory cases each remain one ordered two-subepisode logical attempt;
 only the scoped memory bridge is disabled.
 

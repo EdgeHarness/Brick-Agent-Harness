@@ -127,7 +127,7 @@ class ConditionSpec:
 class OpportunityLedger:
     """One non-resetting ledger shared by every subepisode in an attempt."""
 
-    def __init__(self, model_calls, generated_tokens, per_request):
+    def __init__(self, model_calls, generated_tokens, per_request, role_budgets=None):
         for value, label in (
             (model_calls, "model_calls"),
             (generated_tokens, "generated_tokens"),
@@ -141,6 +141,31 @@ class OpportunityLedger:
         self.calls = 0
         self.generated_tokens = 0
         self.call_roles = {}
+        self.role_generated_tokens = {}
+        self._active_role = None
+        if role_budgets is not None:
+            if not isinstance(role_budgets, dict) or not role_budgets:
+                raise ValueError("role_budgets must be a non-empty mapping")
+            normalized = {}
+            for role, values in role_budgets.items():
+                if not isinstance(role, str) or not role:
+                    raise ValueError("role-budget names must be non-empty strings")
+                if not isinstance(values, dict) or set(values) != {
+                    "model_calls", "generated_tokens",
+                    "generated_tokens_per_request",
+                }:
+                    raise ValueError("role-budget keys differ")
+                for key, value in values.items():
+                    if type(value) is not int or value < 1:
+                        raise ValueError("role budget %s.%s is invalid" % (role, key))
+                normalized[role] = dict(values)
+            if sum(value["model_calls"] for value in normalized.values()) != model_calls:
+                raise ValueError("role call budgets must sum to the attempt budget")
+            if sum(value["generated_tokens"] for value in normalized.values()) != generated_tokens:
+                raise ValueError("role token budgets must sum to the attempt budget")
+            self.role_budgets = normalized
+        else:
+            self.role_budgets = None
 
     @property
     def remaining_calls(self):
@@ -151,13 +176,38 @@ class OpportunityLedger:
         return self.maximum_tokens - self.generated_tokens
 
     def begin_request(self, role):
+        if self._active_role is not None:
+            raise ExperimentError("a prior model request has not been accounted")
         if self.remaining_calls <= 0 or self.remaining_tokens <= 0:
             raise BudgetExhausted("attempt opportunity budget exhausted")
+        request_limit = min(self.per_request, self.remaining_tokens)
+        if self.role_budgets is not None:
+            if role not in self.role_budgets:
+                raise BudgetExhausted("model role has no opportunity budget")
+            role_budget = self.role_budgets[role]
+            role_calls = self.call_roles.get(role, 0)
+            role_tokens = self.role_generated_tokens.get(role, 0)
+            if (
+                role_calls >= role_budget["model_calls"]
+                or role_tokens >= role_budget["generated_tokens"]
+            ):
+                raise BudgetExhausted("model role opportunity budget exhausted")
+            request_limit = min(
+                request_limit,
+                role_budget["generated_tokens_per_request"],
+                role_budget["generated_tokens"] - role_tokens,
+            )
         self.calls += 1
         self.call_roles[role] = self.call_roles.get(role, 0) + 1
-        return min(self.per_request, self.remaining_tokens)
+        self._active_role = role
+        return request_limit
 
-    def finish_request(self, generated_tokens, requested_limit):
+    def finish_request(self, generated_tokens, requested_limit, role=None):
+        active_role = self._active_role
+        if active_role is None:
+            raise ExperimentError("no model request is awaiting accounting")
+        if role is not None and role != active_role:
+            raise ExperimentError("model response role differs from its request")
         if (
             type(generated_tokens) is not int
             or generated_tokens < 0
@@ -167,11 +217,20 @@ class OpportunityLedger:
                 "response generated-token count violates its request limit"
             )
         self.generated_tokens += generated_tokens
+        self.role_generated_tokens[active_role] = (
+            self.role_generated_tokens.get(active_role, 0) + generated_tokens
+        )
+        self._active_role = None
         if self.generated_tokens > self.maximum_tokens:
             raise ExperimentError("generated-token ledger exceeded its ceiling")
+        if self.role_budgets is not None and (
+            self.role_generated_tokens[active_role]
+            > self.role_budgets[active_role]["generated_tokens"]
+        ):
+            raise ExperimentError("generated-token role ledger exceeded its ceiling")
 
     def as_record(self):
-        return {
+        record = {
             "model_calls": self.calls,
             "generated_tokens": self.generated_tokens,
             "maximum_model_calls": self.maximum_calls,
@@ -179,6 +238,15 @@ class OpportunityLedger:
             "generated_tokens_per_request": self.per_request,
             "call_roles": dict(sorted(self.call_roles.items())),
         }
+        if self.role_budgets is not None:
+            record["role_budgets"] = {
+                role: dict(sorted(value.items()))
+                for role, value in sorted(self.role_budgets.items())
+            }
+            record["role_generated_tokens"] = dict(
+                sorted(self.role_generated_tokens.items())
+            )
+        return record
 
 
 class AttemptMemory:
@@ -364,16 +432,24 @@ def validate_protocol(protocol):
         if type(sampling[key]) is not int or sampling[key] < 1:
             raise ValueError("S6 sampling value %s is invalid" % key)
     budget = protocol["opportunity_budget"]
-    if set(budget) != {
+    if set(budget) not in ({
         "model_calls", "generated_tokens", "generated_tokens_per_request",
         "shared_across_subepisodes",
-    }:
+    }, {
+        "model_calls", "generated_tokens", "generated_tokens_per_request",
+        "shared_across_subepisodes", "role_budgets",
+    }):
         raise ValueError("S6 opportunity-budget keys differ")
     for key in ("model_calls", "generated_tokens", "generated_tokens_per_request"):
         if type(budget[key]) is not int or budget[key] < 1:
             raise ValueError("S6 opportunity budget %s is invalid" % key)
     if budget["shared_across_subepisodes"] is not True:
         raise ValueError("S6 subepisodes must share one opportunity ledger")
+    if "role_budgets" in budget:
+        OpportunityLedger(
+            budget["model_calls"], budget["generated_tokens"],
+            budget["generated_tokens_per_request"], budget["role_budgets"],
+        )
     if set(protocol["base_seed"]) != {"algorithm", "inputs", "request_policy"}:
         raise ValueError("S6 seed contract keys differ")
     if protocol["base_seed"] != {
@@ -635,6 +711,7 @@ def run_raw_json_attempt(
         budget["model_calls"],
         budget["generated_tokens"],
         budget["generated_tokens_per_request"],
+        budget.get("role_budgets"),
     )
     native_tools = registry.native_schemas()
     requests_log = []
@@ -684,7 +761,7 @@ def run_raw_json_attempt(
                 message, native_calls = _validate_response(
                     response, model, request_limit
                 )
-                ledger.finish_request(response["eval_count"], request_limit)
+                ledger.finish_request(response["eval_count"], request_limit, "driver")
             except ExperimentError as exc:
                 execution_status = "runner_error"
                 failure_origin = "runner"
@@ -827,6 +904,7 @@ def run_attempt(
         budget["model_calls"],
         budget["generated_tokens"],
         budget["generated_tokens_per_request"],
+        budget.get("role_budgets"),
     )
     native_tools = registry.native_schemas()
     requests_log = []
@@ -888,7 +966,9 @@ def run_attempt(
             wall = time.monotonic() - started
             try:
                 message, calls = _validate_response(response, model, request_limit)
-                ledger.finish_request(response["eval_count"], request_limit)
+                ledger.finish_request(
+                    response["eval_count"], request_limit, role_name
+                )
             except ExperimentError as exc:
                 execution_status = "runner_error"
                 failure_origin = "runner"

@@ -8,6 +8,7 @@ D0 and S8 freeze later-stage operational policy.
 
 import argparse
 import copy
+from dataclasses import dataclass
 import datetime
 import hashlib
 import json
@@ -52,6 +53,32 @@ ROOT = HERE.parent
 DEFAULT_PROTOCOL = HERE / "s6_protocol.json"
 DEFAULT_MANIFESTS = HERE / "manifests" / "office-v1"
 DEFAULT_RUNS = ROOT / "results-dev-s6c"
+
+
+@dataclass(frozen=True)
+class RunPolicy:
+    """Internal execution boundary; S7 constructs the only D0 policy."""
+
+    run_kind: str = "disposable_s6c_validation"
+    grading_mode: str = "immediate"
+    score_masked: bool = False
+    cohort: object = None
+    instance_prefix: object = None
+    protocol_binding: object = None
+    required_conditions: object = None
+    summary_schema: str = "brick.s6.run-summary/1"
+
+    def __post_init__(self):
+        if self.grading_mode not in {"immediate", "deferred"}:
+            raise ValueError("unsupported grading mode")
+        if self.score_masked != (self.grading_mode == "deferred"):
+            raise ValueError("deferred grading and score masking must agree")
+        if self.cohort is not None and self.cohort not in {"d0a", "d0b"}:
+            raise ValueError("unsupported development cohort")
+        if self.required_conditions is not None:
+            object.__setattr__(
+                self, "required_conditions", tuple(self.required_conditions)
+            )
 
 
 def _sha256(value, allow_float=False):
@@ -131,6 +158,12 @@ def _attempt_key(
             "shared_across_subepisodes": int(
                 protocol["opportunity_budget"]["shared_across_subepisodes"]
             ),
+            **(
+                {"role_budgets": copy.deepcopy(
+                    protocol["opportunity_budget"]["role_budgets"]
+                )}
+                if "role_budgets" in protocol["opportunity_budget"] else {}
+            ),
         },
         prompt_sha256=_prompt_sha256(condition, content),
         tool_schema_sha256=environment["tool_schema_sha256"],
@@ -190,7 +223,7 @@ def _grade_document(outcome):
     }
 
 
-def _producer(instance, condition, protocol, transport):
+def _producer(instance, condition, protocol, transport, grading_mode="immediate"):
     content = instance["content"]
 
     def produce(writer):
@@ -229,7 +262,10 @@ def _producer(instance, condition, protocol, transport):
                 path for path in sorted(Path(world.files_dir).iterdir()) if path.is_file()
             ]
             grader_outcome = None
-            if runtime["failure_origin"] in {"none", "model"}:
+            if (
+                grading_mode == "immediate"
+                and runtime["failure_origin"] in {"none", "model"}
+            ):
                 evidence = GradingEvidence.from_values(
                     domain=content["domain"],
                     domain_version=content["domain_version"],
@@ -362,13 +398,15 @@ def _condition_order(primary_order, selected_conditions):
     return tuple(primary + descriptive)
 
 
-def run(args):
+def _run(args, policy, preflight=None):
+    if not isinstance(policy, RunPolicy):
+        raise TypeError("policy must be a RunPolicy")
     protocol = json.loads(args.protocol.read_text(encoding="utf-8"))
     if args.split == "retained" or protocol.get("retained_execution_enabled") is not False:
         raise RuntimeError(
             "S6C mechanically forbids retained execution; retained unlock belongs to S8/S9"
         )
-    preflight = s6_preflight.collect(
+    preflight = preflight or s6_preflight.collect(
         args.protocol, require_clean=not args.allow_dirty
     )
     environment = preflight["environment"]
@@ -378,6 +416,13 @@ def run(args):
     manifest = load_canonical_json(args.manifests / (args.split + ".json"))
     validate_manifest(manifest)
     instances = manifest["instances"]
+    if policy.instance_prefix is not None:
+        instances = [
+            item for item in instances
+            if item["content"]["id"].startswith(policy.instance_prefix)
+        ]
+        if not instances:
+            raise ValueError("execution policy selected no instances")
     if args.instance_id:
         instances = [
             item for item in instances if item["content"]["id"] == args.instance_id
@@ -394,6 +439,11 @@ def run(args):
         raise ValueError("condition selection contains duplicates")
     if any(name not in conditions for name in selected_conditions):
         raise ValueError("unknown condition selection")
+    if (
+        policy.required_conditions is not None
+        and selected_conditions != policy.required_conditions
+    ):
+        raise ValueError("execution policy requires exact condition selection")
     run_id = args.run_id or (
         "s6c-%s-%s" % (
             args.split,
@@ -402,7 +452,7 @@ def run(args):
     )
     metadata = {
         "schema_version": "brick.s6.run-metadata/1",
-        "run_kind": "disposable_s6c_validation",
+        "run_kind": policy.run_kind,
         "split": args.split,
         "protocol": protocol,
         "environment": environment,
@@ -427,6 +477,13 @@ def run(args):
         ],
         "retained": False,
     }
+    if policy.score_masked:
+        metadata.update({
+            "cohort": policy.cohort,
+            "grading_mode": policy.grading_mode,
+            "score_masked": True,
+            "protocol_binding": policy.protocol_binding,
+        })
     store = EvidenceStore.create_run(args.runs_root, run_id, metadata)
     transport = OllamaTransport(
         protocol["transport"]["endpoint"],
@@ -444,7 +501,10 @@ def run(args):
                 )
                 resolution = store.execute_or_resume(
                     key,
-                    _producer(instance, condition, protocol, transport),
+                    _producer(
+                        instance, condition, protocol, transport,
+                        grading_mode=policy.grading_mode,
+                    ),
                 )
                 if resolution.state != "committed":
                     raise RuntimeError(
@@ -453,18 +513,18 @@ def run(args):
                 final = resolution.record
                 if final["failure_origin"] not in {"runner", "environment"}:
                     break
-            cells.append(
-                {
-                    "wave": wave,
-                    "family": family,
-                    "instance_id": instance["content"]["id"],
-                    "condition": name,
-                    "logical_hash": final["logical_hash"],
-                    "execution_status": final["execution_status"],
-                    "failure_origin": final["failure_origin"],
-                    "strict_success": final["strict_success"],
-                }
-            )
+            cell = {
+                "wave": wave,
+                "family": family,
+                "instance_id": instance["content"]["id"],
+                "condition": name,
+                "logical_hash": final["logical_hash"],
+                "execution_status": final["execution_status"],
+                "failure_origin": final["failure_origin"],
+            }
+            if not policy.score_masked:
+                cell["strict_success"] = final["strict_success"]
+            cells.append(cell)
             print(
                 json.dumps(
                     {"event": "cell_complete", **cells[-1]},
@@ -481,13 +541,22 @@ def run(args):
         )
     store.read_committed()
     summary = {
-        "schema_version": "brick.s6.run-summary/1",
+        "schema_version": policy.summary_schema,
         "run_id": run_id,
         "cells": cells,
         "committed_attempts": len(store.read_committed()["records"]),
     }
     print(json.dumps(summary, ensure_ascii=False, sort_keys=True), flush=True)
     return summary
+
+
+def run(args):
+    if args.split == "development":
+        raise RuntimeError(
+            "fresh development cohorts are reserved for score-masked S7; "
+            "use bench.s7_run"
+        )
+    return _run(args, RunPolicy())
 
 
 def main(argv=None):

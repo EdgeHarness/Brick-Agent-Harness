@@ -1,0 +1,65 @@
+{
+  "schema_version": "brick.s7.protocol/1",
+  "protocol_version": "1.0.0",
+  "base_protocol_path": "bench/s6_protocol.json",
+  "base_protocol_sha256": "da876e4b5a71889f4b2fc5ce5e245e81faeda1ef07f3c247ab9c4d61c32b0073",
+  "d0": {
+    "initial_cohort": "d0a",
+    "correction_cohort": "d0b",
+    "families": 11,
+    "pairs_per_family": 4,
+    "pairs_per_cohort": 44,
+    "primary_attempts_per_cohort": 88,
+    "conditions": ["native_tools", "harness_full"],
+    "grading_mode": "deferred",
+    "operator_projection_excludes": [
+      "candidate_decision",
+      "checks",
+      "condition_success",
+      "directional_discordance",
+      "family_effect",
+      "strict_success"
+    ],
+    "runtime_decision": {
+      "valid_failure_origins": ["none", "model"],
+      "statistic": "median_valid_attempt_wall_seconds",
+      "retained_primary_attempts": 440,
+      "safety_factor_numerator": 5,
+      "safety_factor_denominator": 4,
+      "threshold_seconds": 172800,
+      "default_cases_per_family": 20,
+      "fallback_cases_per_family": 12
+    },
+    "floor_ceiling_audit": {
+      "combined_outcomes_per_family": 8,
+      "floor_maximum_successes": 1,
+      "ceiling_minimum_successes": 7,
+      "correction_limit": 1,
+      "direction_blind": true
+    }
+  },
+  "analysis": {
+    "python_minor": "3.13",
+    "numpy_version": "2.5.1",
+    "bit_generator": "PCG64",
+    "seed": 20260729,
+    "bootstrap_draws": 20000,
+    "quantiles": ["0.025", "0.975"],
+    "quantile_method": "linear",
+    "hyndman_fan_type": 7,
+    "ordering": "draw-major-family-major-instance-id"
+  },
+  "equal_action_sensitivity": {
+    "driver": {
+      "model_calls": 14,
+      "generated_tokens": 4096,
+      "generated_tokens_per_request": 700
+    },
+    "overhead_per_subepisode": {
+      "plan_calls": 1,
+      "completion_calls": 1,
+      "generated_tokens_per_request": 700
+    }
+  },
+  "retained_execution_enabled": false
+}

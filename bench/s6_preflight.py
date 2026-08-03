@@ -49,6 +49,15 @@ IMPLEMENTATION_PATHS = (
     "bench/s6_run.py",
     "bench/s6_preflight.py",
     "bench/s6_rules_reference.py",
+    "bench/s7_analysis.py",
+    "bench/s7_artifacts.py",
+    "bench/s7_contract.py",
+    "bench/s7_decision.py",
+    "bench/s7_floor_audit.py",
+    "bench/s7_preflight.py",
+    "bench/s7_protocol.json",
+    "bench/s7_run.py",
+    "requirements-analysis.txt",
     "bench/manifests/office-v1/" + EXPOSURE_NAME,
 )
 
