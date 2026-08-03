@@ -19,12 +19,12 @@ benchmark results, training corpora, adapters, or model weights are shipped.
 surfaces; it is not evidence of generalization or performance. The proposition
 that orchestration improves model tool use remains an untested hypothesis.
 
-The latest release is `v0.7.0` (B0 synthetic lead-follow-up slice), preceded by `v0.6.0` (S1R repaired runtime), `v0.5.0` (S4 evidence store) and `v0.4.0` (F0/Q0 feasibility). The required native-Windows Lenovo F0 evidence
+The latest release is `v0.8.0` (S5 strict versioned graders), preceded by `v0.7.0` (B0 synthetic lead-follow-up slice), `v0.6.0` (S1R repaired runtime), `v0.5.0` (S4 evidence store) and `v0.4.0` (F0/Q0 feasibility). The required native-Windows Lenovo F0 evidence
 exists and the gate passed, establishing host and model feasibility only.
 Commit `f12dd71` contains the subsequent independent verifier correction and is
 pushed with required CI green. Native S4 acceptance, S1R, and B0 are released.
-The current tree is the unreleased S5 `v0.8.0` candidate with strict versioned
-graders; it contains no benchmark result. The Mac is a source-development and
+S5 is released with strict versioned graders; it contains no benchmark result.
+The Mac is a source-development and
 offline-test host only.
 
 Annotated tags and bound evidence are release-authoritative. The tagged S4

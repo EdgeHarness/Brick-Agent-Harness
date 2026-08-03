@@ -18,10 +18,8 @@ of `CHANGELOG.md`, those win.
 
 ## 2. State as of 2 August 2026
 
-**Released:** `v0.7.0` (B0), preceded by `v0.6.0` (S1R), `v0.5.0` (S4), and
-`v0.4.0` (F0/Q0). The current worktree is the unreleased S5 `v0.8.0` candidate.
-S5 is not release-authoritative until the candidate commit and required CI are
-green.
+**Released:** `v0.8.0` (S5), preceded by `v0.7.0` (B0), `v0.6.0` (S1R),
+`v0.5.0` (S4), and `v0.4.0` (F0/Q0). Candidate and tag CI are green.
 
 The native Windows ARM64 S4 gate passed from candidate `0b8f77d`:
 `overall_status` pass, 461 passed, 0 failed, 3 skipped, `s4_skipped` 0,
@@ -108,7 +106,7 @@ concurrency 2, expiry 3, idempotency 2, ambiguous-delivery 7, audit 4,
 no-network 3, plus a generic-package purity scan over 55 files in 7 package
 roots.
 
-The S5 candidate binds semantic-versioned strict graders to all 14 released
+S5 binds semantic-versioned strict graders to all 14 released
 scenarios. Grading inputs are immutable byte copies, rubric denominators are
 fixed, and runner/grader failures remain null. Its generated fixture matrix
 covers positive, minimally wrong, harmful, stale, missing, extra, corrupt, and
@@ -134,17 +132,10 @@ because verifying it is F0's job.
 
 ## 3. Immediate next action
 
-Finish S5 without beginning S5W:
-
-1. Run the complete offline suite and the all-scenario S5 fixture matrix from a
-   controlled native Windows temp root. Record exact counts only from that run.
-2. Confirm the retained F0 and S4 working-tree bytes equal their committed blobs
-   and contain no CR bytes under the LF attribute.
-3. Review the candidate diff for fixed rubrics, null failure semantics,
-   domain-neutral core code, and absence of benchmark outcomes.
-4. Commit and push the S5 candidate; require Linux Python 3.9–3.13 and Windows
-   x64 CI green. Tag and release `v0.8.0` only after those checks pass.
-5. Stop for review. Do not begin S5W in the same stage.
+The S5 boundary is complete: native tests passed 775 with 3 intentional platform
+skips; retained F0/S4 blobs remained byte-identical; candidate and tag CI passed;
+and `v0.8.0` is published. Stop for review. The next stage is S5W Agent Lab
+hardening, and it begins only after a separate explicit decision.
 
 Do not import or synchronize the moving `SMalshe/Brick` product tree into S4,
 S1R, B0, or a retained condition. `PROJECT_GUIDE.md` defines the convergence

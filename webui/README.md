@@ -4,7 +4,7 @@ Agent Lab is a loopback browser interface for observing Brick's synthetic
 development agents. It is not a production service, security boundary,
 multi-user application, Brix deployment, or retained benchmark scheduler.
 
-The latest release is `v0.7.0` (B0 synthetic lead-follow-up slice), preceded by `v0.6.0` (S1R repaired runtime), `v0.5.0` (S4 evidence store) and `v0.4.0` (F0/Q0 feasibility).
+The latest release is `v0.8.0` (S5 strict versioned graders), preceded by `v0.7.0` (B0), `v0.6.0` (S1R), `v0.5.0` (S4) and `v0.4.0` (F0/Q0).
 Annotated tags and bound evidence are release-authoritative; see the
 `C`/`R`/`D` lifecycle in [`../PROJECT_SETUP.md`](../PROJECT_SETUP.md).
 

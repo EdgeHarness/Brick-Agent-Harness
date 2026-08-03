@@ -18,7 +18,7 @@ None participates in the retained protocol. The confirmatory candidate is
 Qwen3.5 4B, resolved by immutable digest after Lenovo F0. Qwen3.5 2B and 9B are
 descriptive system replications only.
 
-The latest release is `v0.7.0` (B0 synthetic lead-follow-up slice), preceded by `v0.6.0` (S1R repaired runtime), `v0.5.0` (S4 evidence store) and `v0.4.0` (F0/Q0 feasibility). The native Lenovo F0 feasibility gate passed;
+The latest release is `v0.8.0` (S5 strict versioned graders), preceded by `v0.7.0` (B0), `v0.6.0` (S1R), `v0.5.0` (S4) and `v0.4.0` (F0/Q0). The native Lenovo F0 feasibility gate passed;
 that records host feasibility only and is not a benchmark result. Annotated tags
 and bound evidence are release-authoritative; see the `C`/`R`/`D` lifecycle in
 [`../PROJECT_SETUP.md`](../PROJECT_SETUP.md).

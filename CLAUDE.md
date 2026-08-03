@@ -40,8 +40,8 @@ per-session protocol. Read it before starting work.
 
 ## Current position
 
-Latest release is `v0.7.0` (B0 synthetic lead-follow-up slice), preceded by
-`v0.6.0` (S1R), `v0.5.0` (S4), and `v0.4.0` (F0/Q0). **The native-Lenovo F0 gate passed** from
+Latest release is `v0.8.0` (S5 strict versioned graders), preceded by `v0.7.0`
+(B0), `v0.6.0` (S1R), `v0.5.0` (S4), and `v0.4.0` (F0/Q0). **The native-Lenovo F0 gate passed** from
 candidate `6402bf5`, run `f0-20260801T164210Z-07054bec`, with all three models
 eligible — 4B at 22.26 tok/s against a 5 tok/s floor, 2B at 45.02, 9B at 12.37
 against a 3 tok/s floor — and inference attested to a native ARM64
@@ -85,12 +85,12 @@ choose a recipient or bypass policy, because those capabilities are not offered
 at all. Passing it demonstrates replaceable layering only; it does not make the
 workflow Brix-approved or deployed.
 
-S5 is implemented in the current `v0.8.0` candidate but is not released until
-the candidate commit and required CI are green. Every task binds a named,
+S5 is released as `v0.8.0`. Every task binds a named,
 semantic-versioned deterministic grader. Graders consume copied canonical state,
 actions, memory, and artifact bytes rather than live mutable worlds. Their check
 sets are fixed; strict success is all-or-nothing; corrupt evidence or grader
-failure yields a null outcome. The legacy exploratory runner now records runner,
+failure yields a null outcome. Candidate and tag CI passed on Linux Python
+3.9–3.13 and Windows x64 Python 3.13. The legacy exploratory runner records runner,
 grader, candidate-decision, and strict-success axes separately.
 
 For S4, release state is authoritative in the annotated tag and bound evidence.

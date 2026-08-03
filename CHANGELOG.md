@@ -14,7 +14,12 @@ that the research instrument is valid or that any measured effect exists.
 
 ## [Unreleased]
 
-S5 strict outcome graders, staged for `v0.8.0`. This is instrument work, not a
+No unreleased changes. The next stage is S5W, which begins only after a separate
+review decision.
+
+## [0.8.0] — 2026-08-02
+
+S5 strict outcome graders. This is instrument work, not a
 benchmark result; no harness effect has been measured. The complete native
 Windows ARM64 offline suite passes with 775 passed and 3 platform-intentional
 skips; the S5-specific matrix contributes 29 passing tests.
@@ -47,7 +52,7 @@ skips; the S5-specific matrix contributes 29 passing tests.
 - The Brix draft grader now rejects a second proposal revision. One live draft
   no longer hides the extra superseded proposal/effect.
 - Status documentation is reconciled with the released `v0.4.0` through
-  `v0.7.0` chain and the current unreleased S5 candidate.
+  `v0.8.0` chain.
 
 ## [0.7.0] — 2026-08-02
 
