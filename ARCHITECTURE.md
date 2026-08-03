@@ -20,7 +20,9 @@ Brick currently provides:
 - released S5 immutable-input, versioned strict graders for all
   14 released task scenarios.
 
-The latest release is `v0.8.0` (S5 strict versioned graders), preceded by `v0.7.0` (B0 synthetic lead-follow-up slice), `v0.6.0` (S1R repaired runtime), `v0.5.0` (S4 evidence store) and `v0.4.0` (F0/Q0 feasibility). The required native Lenovo F0 evidence exists and the gate
+The latest release is `v0.9.0` (S5W Agent Lab hardening), preceded by `v0.8.0`
+(S5), `v0.7.0` (B0), `v0.6.0` (S1R), `v0.5.0` (S4), and `v0.4.0` (F0/Q0).
+The required native Lenovo F0 evidence exists and the gate
 passed; its verifier correction is pushed as CI-green commit `f12dd71`. That
 establishes host and model feasibility only. Native S4 acceptance, S1R, and B0
 and S5 are released. No measured effect exists.
@@ -85,7 +87,7 @@ tests/                offline characterization and architecture tests
 |---|---|---|
 | Benchmark | `python -m bench.run_bench` | New domain world per task, but reused task paths and shared memory per model/condition; exploratory only |
 | Per-model CLI | `agents/<size>/run_agent.py` or `run.ps1` | Persistent synthetic domain state; legacy filesystem/shell options are rejected |
-| Agent Lab | `python -m webui.server` | One child run over selected domain state; unauthenticated loopback demo |
+| Agent Lab | `python -m webui.server` | One capability-authenticated local child run over selected synthetic domain state |
 | Training | scripts under `training_scripts/` | Local/HPC artifacts; may use the network unless assets are staged |
 
 Only the benchmark exposes both `raw` and `harness`; CLI and Agent Lab run the

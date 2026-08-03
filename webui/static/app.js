@@ -2,7 +2,12 @@
 'use strict';
 
 const $ = (id) => document.getElementById(id);
+const CAPABILITY = new URLSearchParams(location.hash.slice(1)).get('capability') || '';
+const authHeaders = (headers = {}) => ({
+  ...headers, Authorization: `Bearer ${CAPABILITY}`,
+});
 const api = async (path, opts) => {
+  opts = { ...(opts || {}), headers: authHeaders((opts && opts.headers) || {}) };
   const r = await fetch(path, opts);
   const data = await r.json().catch(() => ({ error: r.statusText }));
   if (!r.ok) throw new Error(data.error || r.statusText);
@@ -11,6 +16,29 @@ const api = async (path, opts) => {
 const post = (path, body) =>
   api(path, { method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(body || {}) });
+
+async function stream(path, opts, onEvent) {
+  opts = { ...(opts || {}), headers: authHeaders((opts && opts.headers) || {}) };
+  const response = await fetch(path, opts);
+  if (!response.ok) {
+    const value = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(value.error || response.statusText);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = '';
+  while (true) {
+    const { value, done } = await reader.read();
+    pending += decoder.decode(value || new Uint8Array(), { stream: !done });
+    const blocks = pending.split(/\r?\n\r?\n/);
+    pending = blocks.pop();
+    for (const block of blocks) {
+      const line = block.split(/\r?\n/).find((part) => part.startsWith('data: '));
+      if (line) onEvent(JSON.parse(line.slice(6)));
+    }
+    if (done) break;
+  }
+}
 
 function el(tag, cls, text) {
   const n = document.createElement(tag);
@@ -37,7 +65,7 @@ const TOOL_ICON = {
 };
 
 const S = {
-  agents: [], domains: [], agent: null, domain: null, ws: null, run: null, es: null,
+  agents: [], domains: [], agent: null, domain: null, ws: null, run: null, stream: null,
   call: null, banner: null, t0: 0, timer: null, seen: {}, first: true,
   locked: false, runScope: null,
   open: new Set(['files', 'inbox', 'calendar']),
@@ -93,28 +121,30 @@ function renderAgents() {
   }
 }
 
-function pullModel(a, row) {
+async function pullModel(a, row) {
   row.textContent = `downloading ${a.model}…`;
   const bar = el('div', 'pull-bar');
   const fill = el('i');
   bar.append(fill);
   row.after(bar);
-  const es = new EventSource(`/api/pull?model=${encodeURIComponent(a.model)}`);
-  es.onmessage = (e) => {
-    const m = JSON.parse(e.data);
+  try {
+    await stream('/api/pull', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: a.model }),
+    }, (m) => {
     if (m.t === 'pull') {
       const pct = m.total ? (m.completed / m.total) * 100 : 0;
       fill.style.width = `${pct}%`;
       row.textContent = `${m.status}${m.total ? ` — ${bytes(m.completed)} / ${bytes(m.total)}` : ''}`;
     } else if (m.t === 'error') {
       row.textContent = m.message;
-      es.close();
     } else if (m.t === 'closed') {
-      es.close();
       loadAgents(true);
     }
-  };
-  es.onerror = () => es.close();
+    });
+  } catch (err) {
+    row.textContent = err.message;
+  }
 }
 
 async function selectAgent(id) {
@@ -279,7 +309,14 @@ function openViewer(title, node, dl) {
   body.textContent = '';
   body.append(node);
   const a = $('viewer-dl');
-  if (dl) { a.href = dl; a.classList.remove('hidden'); } else a.classList.add('hidden');
+  if (dl) {
+    a.href = '#';
+    a.onclick = (event) => { event.preventDefault(); dl(); };
+    a.classList.remove('hidden');
+  } else {
+    a.onclick = null;
+    a.classList.add('hidden');
+  }
   $('viewer').classList.remove('hidden');
 }
 const closeViewer = () => $('viewer').classList.add('hidden');
@@ -332,7 +369,16 @@ async function openFile(name) {
   } else {
     box.append(el('div', 'plain', `binary file, ${bytes(p.size)} — download to open it`));
   }
-  openViewer(name, box, url);
+  openViewer(name, box, async () => {
+    const response = await fetch(url, { headers: authHeaders() });
+    if (!response.ok) throw new Error('download failed');
+    const objectUrl = URL.createObjectURL(await response.blob());
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = name;
+    anchor.click();
+    URL.revokeObjectURL(objectUrl);
+  });
 }
 
 async function openLog(name) {
@@ -562,6 +608,31 @@ function onError(e) {
   }
 }
 
+function onConfirmation(e) {
+  const card = addCard('note feedback');
+  card.append(el('div', 'tag', 'operator confirmation required'),
+              el('div', 'note-text', `${e.action}: ${e.detail}`));
+  const controls = el('div', 'confirm-controls');
+  const decide = async (decision) => {
+    for (const button of controls.querySelectorAll('button')) button.disabled = true;
+    try {
+      await post('/api/confirm', {
+        run_id: S.run, confirmation_id: e.confirmation_id,
+        nonce: e.nonce, decision,
+      });
+      controls.append(el('span', 'note-text', decision ? 'approved' : 'denied'));
+    } catch (err) {
+      controls.append(el('span', 'note-text', err.message));
+    }
+  };
+  const deny = el('button', 'ghost small', 'Deny');
+  const approve = el('button', 'ghost small', 'Approve once');
+  deny.onclick = () => decide(false);
+  approve.onclick = () => decide(true);
+  controls.append(deny, approve);
+  card.append(controls);
+}
+
 /* ---------------------------------------------------------------- run --- */
 
 function handle(e) {
@@ -575,6 +646,7 @@ function handle(e) {
     case 'world': return renderTree({ ...S.ws, ...e, logs: (S.ws || {}).logs || [] });
     case 'end': return onEnd(e);
     case 'error': return onError(e);
+    case 'confirmation': return onConfirmation(e);
     case 'stdout': return void console.log('[runner]', e.text);
     case 'closed': return finishRun();
   }
@@ -620,13 +692,18 @@ async function startRun() {
     $('time-val').textContent = `${Math.round((Date.now() - S.t0) / 1000)}s`;
   }, 500);
 
-  S.es = new EventSource(`/api/events?run=${S.run}`);
-  S.es.onmessage = (m) => handle(JSON.parse(m.data));
-  S.es.onerror = () => { if (S.run) finishRun(); };
+  const controller = new AbortController();
+  S.stream = controller;
+  stream(`/api/events?run=${encodeURIComponent(S.run)}`, {
+    signal: controller.signal,
+  }, handle).catch((err) => {
+    if (S.run && err.name !== 'AbortError') onError({ message: err.message });
+    if (S.run) finishRun();
+  });
 }
 
 function finishRun() {
-  if (S.es) { S.es.close(); S.es = null; }
+  if (S.stream) { S.stream.abort(); S.stream = null; }
   if (S.timer) { clearInterval(S.timer); S.timer = null; }
   S.run = null;
   S.locked = false;
@@ -643,7 +720,9 @@ function finishRun() {
 /* --------------------------------------------------------------- boot --- */
 
 $('run').onclick = startRun;
-$('stop').onclick = () => post('/api/stop').catch(() => {});
+$('stop').onclick = () => {
+  if (S.run) post('/api/stop', { run_id: S.run }).catch(() => {});
+};
 $('viewer-close').onclick = closeViewer;
 $('viewer').onclick = (e) => { if (e.target === $('viewer')) closeViewer(); };
 document.addEventListener('keydown', (e) => {
@@ -680,5 +759,9 @@ $('reset').onclick = async () => {
   await loadAgents(true);
 };
 
-loadAgents();
+if (!CAPABILITY) {
+  document.body.textContent = 'Agent Lab capability missing. Launch Agent Lab again.';
+} else {
+  loadAgents();
+}
 setInterval(() => { if (!S.run) loadAgents(true); }, 20000);

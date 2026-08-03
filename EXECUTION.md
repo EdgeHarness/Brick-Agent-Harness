@@ -132,10 +132,11 @@ because verifying it is F0's job.
 
 ## 3. Immediate next action
 
-The S5 boundary is complete: native tests passed 775 with 3 intentional platform
-skips; retained F0/S4 blobs remained byte-identical; candidate and tag CI passed;
-and `v0.8.0` is published. Stop for review. The next stage is S5W Agent Lab
-hardening, and it begins only after a separate explicit decision.
+The S5W boundary is complete: its 17-test adversarial matrix and real Windows
+process-tree teardown pass; the complete native suite passes 792 with 3
+intentional platform skips; and `v0.9.0` is published. Stop for review. The next
+stage is S6G independent task generation, and it begins only after a separate
+explicit decision.
 
 Do not import or synchronize the moving `SMalshe/Brick` product tree into S4,
 S1R, B0, or a retained condition. `PROJECT_GUIDE.md` defines the convergence

@@ -4,7 +4,9 @@ This file maps known implementation defects to the active release sequence in
 [`PROJECT_SETUP.md`](PROJECT_SETUP.md). It does not define a second gate
 taxonomy.
 
-The latest release is `v0.8.0` (S5 strict versioned graders), preceded by `v0.7.0` (B0), `v0.6.0` (S1R), `v0.5.0` (S4) and `v0.4.0` (F0/Q0). The native Lenovo evidence required for `v0.4.0` exists and
+The latest release is `v0.9.0` (S5W Agent Lab hardening), preceded by `v0.8.0`
+(S5), `v0.7.0` (B0), `v0.6.0` (S1R), `v0.5.0` (S4), and `v0.4.0` (F0/Q0).
+The native Lenovo evidence required for `v0.4.0` exists and
 the F0 gate passed. Its independent verifier correction is pushed as CI-green
 commit `f12dd71`. Native S4 acceptance, S1R, and B0 are released; the current
 S5 is released as `v0.8.0`. “Targeted” below means planned, implemented in a candidate,
@@ -348,6 +350,18 @@ channel.
 
 Wrong-token, cross-origin, stale-confirmation, reset-during-run, oversized-body,
 path, and orphan-process tests must pass on Windows and POSIX.
+
+Implemented in `v0.9.0`. The browser receives a 256-bit startup capability in
+the URL fragment and sends it only as a bearer header. Every API route validates
+the exact Host and capability; every mutation additionally validates exact
+Origin and same-origin Fetch Metadata, accepts bounded JSON only, and uses an
+exact typed schema. Streams use authenticated `fetch`, state changes use POST,
+and stop/reset/confirmation decisions bind to the current run. POSIX sessions
+and Windows kill-on-close Job Objects own descendant processes. File, archive,
+event, stderr, and log retention are bounded; paths reject traversal, links,
+reparse points, irregular files, and nonportable leaves; saved logs are
+redacted, atomically replaced, and pruned. The 17-test S5W matrix and complete
+native Windows suite (792 passed, 3 intentional skips) pass.
 
 ## S6G — independent task instances
 

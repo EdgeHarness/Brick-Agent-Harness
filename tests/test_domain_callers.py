@@ -535,11 +535,12 @@ def test_frontend_passes_and_locks_selected_domain():
         "opt-office",
         "with_domain",
         "with_office",
-        "/api/confirm",
     )
     for token in retired_tokens:
         assert token not in source
         assert token not in html
+    assert "/api/confirm" in source
+    assert "Authorization: `Bearer ${CAPABILITY}`" in source
     runner_source = (PROJECT / "webui/runner.py").read_text(
         encoding="utf-8"
     )

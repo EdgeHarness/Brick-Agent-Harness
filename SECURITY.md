@@ -6,7 +6,9 @@ Brick is an experimental research scaffold. It is not approved for production,
 private Brix data, authoritative business systems, or unattended external side
 effects.
 
-The latest release is `v0.8.0` (S5 strict versioned graders), preceded by `v0.7.0` (B0), `v0.6.0` (S1R), `v0.5.0` (S4) and `v0.4.0` (F0/Q0). The native-Windows Lenovo F0 gate and the native S4 gate both passed.
+The latest release is `v0.9.0` (S5W Agent Lab control-plane hardening), preceded
+by `v0.8.0` (S5), `v0.7.0` (B0), `v0.6.0` (S1R), `v0.5.0` (S4), and `v0.4.0`
+(F0/Q0). The native-Windows Lenovo F0, S4, and S5W gates passed.
 Annotated tags and bound evidence are release-authoritative; the tagged S4
 release commit intentionally retains candidate prose until immediate docs-only
 descendant `D` promotes status. No release is approved for real Brix data.
@@ -18,11 +20,11 @@ configuration surfaces. Legacy `--root`, `--shell`, `--yolo`, `--with-domain`, a
 `--with-office` forms are rejected before output creation, model access, network
 access, or mutation.
 
-Q0 also removes Agent Lab's old browser/stdin confirmation channel. A missing
-`ActionPolicy` callback now denies; this fail-closed default is still only an
-in-process policy seam, not authentication or authorization. Any future operator
-decision channel must be newly bound to a run, confirmation identifier, and
-nonce at S5W.
+Q0 also removed Agent Lab's old browser/stdin confirmation channel. S5W adds a
+narrow JSONL decision channel bound to a run, confirmation identifier, and
+nonce. A missing, malformed, stale, mismatched, timed-out, or denied decision
+fails closed. This remains a human decision seam, not production authorization
+or an operating-system sandbox.
 
 Domain-specific tools may still create `.pptx` and `.xlsx` artifacts inside an
 attempt-owned synthetic workspace. That narrow artifact behavior is not a
@@ -62,16 +64,17 @@ The following are not production security controls:
 - domain-pack names or SemVer labels;
 - `RunConfig`, `AttemptContext`, `ToolRegistry`, or `ActionPolicy`;
 - model prompts, plans, memories, or completion verification;
-- any historical or future browser confirmation prompt;
+- any browser confirmation prompt by itself;
 - an attempt workspace path by itself;
 - marker-last evidence publication as an authorization mechanism; or
 - a local Ollama endpoint by itself.
 
 `ActionPolicy` classifies actions and can request confirmation; it does not
 authenticate the requester, constrain an executor at the operating-system level,
-or prove authorization. Domain packs are trusted Python imports. Loopback
-services remain reachable by other local processes and potentially by
-browser-driven requests until the S5W control-plane gate passes.
+or prove authorization. Domain packs are trusted Python imports. S5W therefore
+adds a per-start high-entropy capability and exact Host/Origin controls rather
+than treating loopback as authority. The console is still single-user local
+development software and must not be remotely exposed.
 
 Marker-last evidence is designed to detect incomplete or corrupted benchmark
 records and fail closed after process termination. It does not make model actions

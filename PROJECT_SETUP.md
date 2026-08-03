@@ -7,7 +7,7 @@ the former `S0`–`S18`, `G0`–`G1`, `R1`–`R5`, and `P0`–`P4` execution tax
 Those names may remain in released changelog entries as historical descriptions,
 but they no longer authorize or order current work.
 
-The latest released version is `v0.8.0`. The native-Windows Lenovo F0 gate
+The latest released version is `v0.9.0`. The native-Windows Lenovo F0 gate
 passed, so `v0.4.0` records feasibility, and the native Windows ARM64 S4 gate
 passed from candidate `0b8f77d` with `overall_status` pass, 461 passed, 0 failed
 and `s4_skipped` 0, so `v0.5.0` records the production evidence store. Both
@@ -18,7 +18,11 @@ passes tenant, approval, concurrency, expiry, idempotency, ambiguous-delivery,
 audit and no-network tests, and no generic package imports a Brix module.
 S5 is released as `v0.8.0`. Its acceptance matrix covers every released
 scenario and every required fixture class; candidate and tag CI are green.
-S5W through S9 are unstarted and no measured effect exists.
+S5W is released as `v0.9.0`: its 17-test adversarial matrix covers the startup
+capability, Host/Origin, JSON/body, run/confirmation/reset, path/retention, and
+real process-tree gates, and the complete native Windows ARM64 suite passes 792
+with 3 platform-intentional skips. S6G through S9 are unstarted and no measured
+effect exists.
 
 Release identity is authoritative in annotated Git tags and their bound
 evidence, not in mutable current-status prose. S4 uses three commits/states:

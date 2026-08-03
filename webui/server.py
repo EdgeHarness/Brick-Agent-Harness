@@ -15,14 +15,14 @@ import json
 import mimetypes
 import os
 import queue
-import shutil
-import socket
+from collections import deque
 import subprocess
 import sys
 import threading
 import time
 import urllib.parse
 import webbrowser
+import zipfile
 
 import requests
 
@@ -38,6 +38,33 @@ DEFAULT_PORT = 8765
 from agents._shared.run_agent import validate_config  # noqa: E402
 from harness.domain import load_domain  # noqa: E402
 from harness.storage import agent_runtime_paths  # noqa: E402
+from webui.control import (  # noqa: E402
+    ConfirmationLedger,
+    EventJournal,
+    MAX_ARCHIVE_EXPANDED_BYTES,
+    MAX_ARCHIVE_MEMBERS,
+    MAX_ARTIFACT_BYTES,
+    MAX_LOG_FILE_BYTES,
+    MAX_PREVIEW_BYTES,
+    MAX_STDERR_LINE,
+    MAX_STDERR_LINES,
+    ProcessTree,
+    RequestError,
+    exact_object,
+    new_capability,
+    portable_leaf,
+    read_json_object,
+    regular_path_under,
+    reset_directory,
+    require_bool,
+    require_int,
+    require_optional_string,
+    require_string,
+    validate_capability,
+    validate_host,
+    validate_mutation_origin,
+    trusted_directory_under,
+)
 
 
 REMOVED_RUN_FIELDS = frozenset(
@@ -214,6 +241,7 @@ def workspace(agent, domain_name=None):
     folder = agent_dir(agent)
     domain = _agent_domain(agent, domain_name)
     paths = agent_runtime_paths(folder, domain)
+    trusted_directory_under(folder, paths.root, must_exist=False)
     state = domain.inspect(paths.workspace, paths.memory)
 
     logs = []
@@ -233,21 +261,33 @@ def workspace_file(agent, name, domain_name=None):
     folder = agent_dir(agent)
     domain = _agent_domain(agent, domain_name)
     files_dir = str(agent_runtime_paths(folder, domain).artifacts)
-    path = _resolve_under(files_dir, os.path.basename(str(name)))
-    if not os.path.isfile(path):
-        raise ValueError(f"no such file {name!r}")
-    return path
+    trusted_directory_under(folder, files_dir)
+    return regular_path_under(files_dir, name, maximum_bytes=MAX_ARTIFACT_BYTES)
+
+
+def _check_office_archive(path):
+    """Reject oversized/degenerate Office archives before library expansion."""
+    with zipfile.ZipFile(path) as archive:
+        members = archive.infolist()
+        if len(members) > MAX_ARCHIVE_MEMBERS:
+            raise RequestError(413, "preview archive has too many members")
+        expanded = sum(member.file_size for member in members)
+        if expanded > MAX_ARCHIVE_EXPANDED_BYTES:
+            raise RequestError(413, "preview archive expands beyond its limit")
 
 
 def preview(agent, name, domain_name=None):
     """Render a generated file in the browser instead of making the user open
     PowerPoint — the whole point is to see what the agent produced."""
     path = workspace_file(agent, name, domain_name)
+    if os.path.getsize(path) > MAX_PREVIEW_BYTES:
+        raise RequestError(413, "file is too large to preview")
     ext = os.path.splitext(path)[1].lower()
     if ext == ".pptx":
+        _check_office_archive(path)
         from pptx import Presentation
         slides = []
-        for slide in Presentation(path).slides:
+        for slide in list(Presentation(path).slides)[:100]:
             title, body = "", []
             for shape in slide.shapes:
                 if not shape.has_text_frame:
@@ -256,17 +296,26 @@ def preview(agent, name, domain_name=None):
                 if shape == slide.shapes.title:
                     title = " ".join(lines)
                 else:
-                    body += lines
-            slides.append({"title": title, "bullets": body})
+                    body += lines[:200]
+            slides.append({"title": title[:4_096], "bullets": body[:500]})
         return {"kind": "pptx", "name": os.path.basename(path), "slides": slides}
     if ext == ".xlsx":
+        _check_office_archive(path)
         from openpyxl import load_workbook
         sheets = []
-        for ws in load_workbook(path, data_only=False).worksheets:
-            rows = [["" if c is None else c for c in row]
-                    for row in ws.iter_rows(values_only=True)]
-            sheets.append({"sheet": ws.title, "rows": rows[:200]})
+        book = load_workbook(path, data_only=False, read_only=True)
+        for ws in book.worksheets[:20]:
+            rows = []
+            for row in ws.iter_rows(max_row=200, max_col=50, values_only=True):
+                rows.append([
+                    "" if cell is None else str(cell)[:4_096] for cell in row
+                ])
+            sheets.append({"sheet": ws.title[:256], "rows": rows})
+        book.close()
         return {"kind": "xlsx", "name": os.path.basename(path), "sheets": sheets}
+    if ext not in (".txt", ".json", ".md", ".csv"):
+        return {"kind": "binary", "name": os.path.basename(path),
+                "size": os.path.getsize(path)}
     with open(path, "rb") as f:
         blob = f.read(20000)
     if b"\x00" in blob[:2000]:
@@ -294,8 +343,7 @@ def reset_agent(agent, what, domain_name=None):
         ("logs", str(paths.logs)),
     ):
         if key in what and os.path.isdir(path):
-            shutil.rmtree(path)
-            os.makedirs(path, exist_ok=True)
+            reset_directory(folder, path)
             done.append(key)
     return done
 
@@ -314,50 +362,65 @@ def reveal(path):
 class Run:
     """One agent subprocess, its event log, and everyone watching it."""
 
-    def __init__(self, rid, agent, task, proc, options):
+    def __init__(self, rid, agent, task, process_tree, options):
         self.id = rid
         self.agent = agent
         self.task = task
-        self.proc = proc
+        self.process_tree = process_tree
+        self.proc = process_tree.proc
         self.options = options
         self.started = time.time()
-        self.events = []
-        self.subs = []
+        self.events = EventJournal()
+        self.confirmations = ConfirmationLedger(rid)
         self.status = "running"
         self.lock = threading.Lock()
 
     def add(self, event):
-        with self.lock:
-            self.events.append(event)
-            item = (len(self.events) - 1, event)
-            subs = list(self.subs)
-        for q in subs:
-            q.put(item)
+        return self.events.add(event)
 
     def subscribe(self, after=-1):
         """Register a watcher and hand back everything it has not seen. `after`
         comes from Last-Event-ID, so a reconnect resumes instead of replaying."""
-        q = queue.Queue()
-        with self.lock:
-            backlog = list(enumerate(self.events))[after + 1:]
-            self.subs.append(q)
-        return q, backlog
+        return self.events.subscribe(after)
 
     def unsubscribe(self, q):
-        with self.lock:
-            if q in self.subs:
-                self.subs.remove(q)
+        self.events.unsubscribe(q)
 
     def stop(self):
-        if self.proc.poll() is None:
-            self.proc.terminate()
+        with self.lock:
+            if self.proc.poll() is not None:
+                return
             self.status = "stopped"
+            self.confirmations.clear()
+            try:
+                self.proc.stdin.close()
+            except (AttributeError, OSError):
+                pass
+        self.process_tree.terminate()
+
+    def register_confirmation(self, event):
+        if event.get("run_id") != self.id:
+            raise ValueError("confirmation belongs to another run")
+        self.confirmations.register(
+            event.get("confirmation_id"), event.get("nonce")
+        )
+
+    def decide(self, confirmation_id, nonce, decision):
+        message = self.confirmations.decide(
+            self.id, confirmation_id, nonce, decision
+        )
+        if self.proc.poll() is not None:
+            raise RequestError(409, "run is no longer active")
+        try:
+            self.proc.stdin.write(json.dumps(message) + "\n")
+            self.proc.stdin.flush()
+        except (BrokenPipeError, OSError):
+            raise RequestError(409, "run confirmation channel is closed")
 
 
 class Runs:
     def __init__(self):
         self.current = None
-        self.next_id = 1
         self.lock = threading.Lock()
 
     def start(self, agent, task, options):
@@ -365,8 +428,9 @@ class Runs:
             if self.current and self.current.proc.poll() is None:
                 raise RuntimeError(f"{self.current.agent} is already running — "
                                    "stop it first (one agent run at a time).")
+            run_id = new_capability()[:22]
             cmd = [sys.executable, "-u", "-m", "webui.runner",
-                   "--agent", agent, "--task", task]
+                   "--run-id", run_id, "--agent", agent, "--task", task]
             if options.get("domain"):
                 cmd += ["--domain", options["domain"]]
             if options.get("tiers"):
@@ -378,30 +442,43 @@ class Runs:
             if options.get("max_calls") is not None:
                 cmd += ["--max-calls", str(int(options["max_calls"]))]
             env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
-            proc = subprocess.Popen(cmd, cwd=PROJECT, env=env, text=True,
-                                    encoding="utf-8", errors="replace", bufsize=1,
-                                    stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE)
-            run = Run(self.next_id, agent, task, proc, options)
-            self.next_id += 1
+            process_tree = ProcessTree.start(
+                cmd, cwd=PROJECT, env=env, text=True,
+                encoding="utf-8", errors="replace", bufsize=1,
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            run = Run(run_id, agent, task, process_tree, options)
             self.current = run
         threading.Thread(target=self._pump, args=(run,), daemon=True).start()
         return run
 
     def _pump(self, run):
-        stderr = []
-        threading.Thread(target=lambda: stderr.extend(run.proc.stderr),
-                         daemon=True).start()
+        stderr = deque(maxlen=MAX_STDERR_LINES)
+
+        def drain_stderr():
+            for line in run.proc.stderr:
+                stderr.append(line[-MAX_STDERR_LINE:])
+
+        stderr_thread = threading.Thread(target=drain_stderr, daemon=True)
+        stderr_thread.start()
         for line in run.proc.stdout:
             line = line.strip()
             if not line:
                 continue
             try:
-                run.add(json.loads(line))
+                event = json.loads(line)
+                if not isinstance(event, dict):
+                    raise ValueError("runner event is not an object")
+                if event.get("t") == "confirmation":
+                    run.register_confirmation(event)
+                run.add(event)
             except ValueError:
-                run.add({"t": "stdout", "text": line})
+                run.add({"t": "stdout", "text": line[:MAX_STDERR_LINE]})
         code = run.proc.wait()
-        time.sleep(0.05)  # let the stderr reader drain
+        stderr_thread.join(timeout=0.2)
+        run.process_tree.close()
+        run.confirmations.clear()
         if run.status == "running":
             run.status = "finished" if code == 0 else "failed"
         if code not in (0, -15) and run.status != "stopped":
@@ -409,6 +486,13 @@ class Runs:
             run.add({"t": "error", "message": f"the run exited with code {code}",
                      "trace": tail})
         run.add({"t": "closed", "status": run.status, "code": code})
+
+    def with_idle(self, operation):
+        """Serialize reset with process creation and reject a live run."""
+        with self.lock:
+            if self.current and self.current.proc.poll() is None:
+                raise RuntimeError("cannot reset state while a run is active")
+            return operation()
 
 
 RUNS = Runs()
@@ -424,50 +508,103 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass  # the console belongs to the run banner, not to request noise
 
     # ---- helpers ----
+    def _security_headers(self):
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Content-Security-Policy", "default-src 'self'; "
+                         "connect-src 'self'; img-src 'self' data:; "
+                         "style-src 'self'; script-src 'self'; object-src 'none'; "
+                         "base-uri 'none'; frame-ancestors 'none'")
+        self.send_header("Cross-Origin-Opener-Policy", "same-origin")
+        self.send_header("Cross-Origin-Resource-Policy", "same-origin")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+
     def send_json(self, obj, status=200):
         body = json.dumps(obj, ensure_ascii=False, default=str).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        self._security_headers()
         self.end_headers()
         self.wfile.write(body)
 
-    def send_bytes(self, blob, ctype, extra=()):
-        self.send_response(200)
+    def send_bytes(self, blob, ctype, extra=(), status=200):
+        self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(blob)))
-        self.send_header("Cache-Control", "no-store")
+        self._security_headers()
         for k, v in extra:
             self.send_header(k, v)
         self.end_headers()
         self.wfile.write(blob)
 
-    def body_json(self):
-        length = int(self.headers.get("Content-Length") or 0)
-        if not length:
-            return {}
-        return json.loads(self.rfile.read(length).decode("utf-8"))
-
     def query(self):
         parts = urllib.parse.urlparse(self.path)
-        return parts.path, {k: v[0] for k, v in urllib.parse.parse_qs(parts.query).items()}
+        pairs = urllib.parse.parse_qsl(
+            parts.query, keep_blank_values=True, strict_parsing=True
+        ) if parts.query else []
+        values = {}
+        for key, value in pairs:
+            if key in values:
+                raise RequestError(400, "duplicate query parameter")
+            values[key] = value
+        return parts.path, values
+
+    def exact_query(self, query, *, required=(), optional=()):
+        return exact_object(query, required=required, optional=optional)
+
+    def authorize(self, path, *, mutation=False):
+        validate_host(self.headers, self.server.expected_host)
+        if path.startswith("/api/"):
+            validate_capability(self.headers, self.server.capability)
+        if mutation:
+            validate_mutation_origin(self.headers, self.server.origin)
+
+    def handle_error(self, exc):
+        if isinstance(exc, RequestError):
+            if exc.status == 401:
+                self.send_response(401)
+                self.send_header("WWW-Authenticate", 'Bearer realm="Agent Lab"')
+                body = json.dumps({"error": str(exc)}).encode("utf-8")
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self._security_headers()
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            return self.send_json({"error": str(exc)}, exc.status)
+        if isinstance(exc, RuntimeError):
+            return self.send_json({"error": str(exc)}, 409)
+        if isinstance(exc, ValueError):
+            return self.send_json({"error": str(exc)}, 400)
+        if isinstance(exc, FileNotFoundError):
+            return self.send_json({"error": "file not found"}, 404)
+        return self.send_json({"error": "internal Agent Lab error"}, 500)
 
     # ---- GET ----
     def do_GET(self):
-        path, q = self.query()
         try:
+            path, q = self.query()
+            self.authorize(path)
             if path in ("/", "/index.html"):
+                self.exact_query(q)
                 return self.static_file("index.html")
             if path.startswith("/static/"):
+                self.exact_query(q)
                 return self.static_file(path[len("/static/"):])
             if path == "/api/agents":
+                self.exact_query(q)
                 return self.send_json(agent_list())
             if path == "/api/workspace":
+                q = self.exact_query(q, required=("agent",), optional=("domain",))
                 return self.send_json(
                     workspace(q.get("agent", ""), q.get("domain"))
                 )
             if path == "/api/preview":
+                q = self.exact_query(
+                    q, required=("agent", "name"), optional=("domain",)
+                )
                 return self.send_json(
                     preview(
                         q.get("agent", ""),
@@ -476,6 +613,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     )
                 )
             if path == "/api/download":
+                q = self.exact_query(
+                    q, required=("agent", "name"), optional=("domain",)
+                )
                 fpath = workspace_file(
                     q.get("agent", ""),
                     q.get("name", ""),
@@ -488,79 +628,136 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     ("Content-Disposition",
                      f'attachment; filename="{os.path.basename(fpath)}"')])
             if path == "/api/log":
+                q = self.exact_query(
+                    q, required=("agent", "name"), optional=("domain",)
+                )
                 folder = agent_dir(q.get("agent", ""))
                 domain = _agent_domain(
                     q.get("agent", ""), q.get("domain")
                 )
                 paths = agent_runtime_paths(folder, domain)
-                name = os.path.basename(q.get("name", ""))
-                with open(_resolve_under(paths.logs, name), encoding="utf-8") as f:
+                trusted_directory_under(folder, paths.logs)
+                name = portable_leaf(q.get("name", ""))
+                if not name.startswith("run_") or not name.endswith(".json"):
+                    raise RequestError(400, "invalid run-log name")
+                log_path = regular_path_under(
+                    paths.logs, name, maximum_bytes=MAX_LOG_FILE_BYTES
+                )
+                with open(log_path, encoding="utf-8") as f:
                     return self.send_json(json.load(f))
             if path == "/api/status":
-                run = RUNS.current
+                self.exact_query(q)
+                run = self.server.runs.current
                 return self.send_json({"run": run.id if run else None,
                                        "agent": run.agent if run else None,
                                        "status": run.status if run else "idle"})
             if path == "/api/events":
+                q = self.exact_query(q, required=("run",))
                 return self.stream_events(q)
-            if path == "/api/pull":
-                return self.stream_pull(q.get("model", ""))
-        except ValueError as e:
-            return self.send_json({"error": str(e)}, 400)
-        except FileNotFoundError as e:
-            return self.send_json({"error": str(e)}, 404)
-        except Exception as e:  # a broken panel shouldn't take the server down
-            return self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
+        except Exception as exc:
+            return self.handle_error(exc)
         self.send_json({"error": "not found"}, 404)
 
     # ---- POST ----
     def do_POST(self):
-        path, _ = self.query()
         try:
-            body = self.body_json()
+            path, query = self.query()
+            self.exact_query(query)
+            self.authorize(path, mutation=True)
+            body = read_json_object(self)
             if path == "/api/run":
                 reject_removed_run_fields(body)
-                agent = body.get("agent", "")
-                task = (body.get("task") or "").strip()
+                body = exact_object(
+                    body,
+                    required=("agent", "domain", "task", "tiers", "max_calls"),
+                    optional=("small", "deep"),
+                )
+                agent = require_string(body["agent"], "agent", maximum=128)
+                task = require_string(body["task"], "task").strip()
+                domain = require_optional_string(body["domain"], "domain")
+                tiers = require_bool(body["tiers"], "tiers")
+                max_calls = body["max_calls"]
+                if max_calls is not None:
+                    max_calls = require_int(
+                        max_calls, "max_calls", minimum=2, maximum=80
+                    )
                 agent_dir(agent)  # validates
                 if not task:
-                    raise ValueError("give the agent a task first")
-                options = {"domain": body.get("domain"),
-                           "tiers": body.get("tiers"), "small": body.get("small"),
-                           "deep": body.get("deep"), "max_calls": body.get("max_calls")}
-                run = RUNS.start(agent, task, options)
+                    raise RequestError(400, "give the agent a task first")
+                options = {
+                    "domain": domain,
+                    "tiers": tiers,
+                    "small": require_optional_string(body.get("small"), "small"),
+                    "deep": require_optional_string(body.get("deep"), "deep"),
+                    "max_calls": max_calls,
+                }
+                run = self.server.runs.start(agent, task, options)
                 return self.send_json({"run": run.id, "agent": agent})
             if path == "/api/stop":
-                run = RUNS.current
-                if run:
-                    run.stop()
+                body = exact_object(body, required=("run_id",))
+                run_id = require_string(body["run_id"], "run_id", maximum=128)
+                run = self.server.runs.current
+                if not run or run.id != run_id:
+                    raise RequestError(409, "run is stale or unknown")
+                run.stop()
                 return self.send_json({"ok": True})
             if path == "/api/reset":
-                what = set(body.get("what") or [])
+                body = exact_object(
+                    body, required=("agent", "domain", "what")
+                )
+                agent = require_string(body["agent"], "agent", maximum=128)
+                domain = require_optional_string(body["domain"], "domain")
+                values = body["what"]
+                if (
+                    not isinstance(values, list)
+                    or not values
+                    or any(not isinstance(item, str) for item in values)
+                    or len(values) != len(set(values))
+                ):
+                    raise RequestError(400, "what must be a nonempty unique string list")
+                what = set(values)
+                if not what <= {"world", "memory", "files", "logs"}:
+                    raise RequestError(400, "what contains an unsupported reset target")
                 return self.send_json({
-                    "cleared": reset_agent(
-                        body.get("agent", ""), what, body.get("domain")
+                    "cleared": self.server.runs.with_idle(
+                        lambda: reset_agent(agent, what, domain)
                     )
                 })
             if path == "/api/reveal":
-                agent = body.get("agent", "")
-                sub = body.get("sub") or ""
+                body = exact_object(body, required=("agent", "domain"))
+                agent = require_string(body["agent"], "agent", maximum=128)
                 folder = agent_dir(agent)
-                domain = _agent_domain(agent, body.get("domain"))
-                base = str(agent_runtime_paths(folder, domain).root)
-                target = _resolve_under(base, *sub.split("/")) if sub else (
-                    os.path.realpath(base)
+                domain = _agent_domain(
+                    agent, require_optional_string(body["domain"], "domain")
                 )
-                if not os.path.exists(target):
-                    raise ValueError("that folder does not exist yet")
-                reveal(target)
-                return self.send_json({"ok": True, "path": target})
-        except RuntimeError as e:
-            return self.send_json({"error": str(e)}, 409)
-        except ValueError as e:
-            return self.send_json({"error": str(e)}, 400)
-        except Exception as e:
-            return self.send_json({"error": f"{type(e).__name__}: {e}"}, 500)
+                base = str(agent_runtime_paths(folder, domain).root)
+                trusted_directory_under(folder, base)
+                reveal(base)
+                return self.send_json({"ok": True})
+            if path == "/api/confirm":
+                body = exact_object(
+                    body,
+                    required=("run_id", "confirmation_id", "nonce", "decision"),
+                )
+                run_id = require_string(body["run_id"], "run_id", maximum=128)
+                run = self.server.runs.current
+                if not run or run.id != run_id:
+                    raise RequestError(409, "confirmation belongs to a stale run")
+                run.decide(
+                    require_string(
+                        body["confirmation_id"], "confirmation_id", maximum=128
+                    ),
+                    require_string(body["nonce"], "nonce", minimum=32, maximum=256),
+                    require_bool(body["decision"], "decision"),
+                )
+                return self.send_json({"ok": True})
+            if path == "/api/pull":
+                body = exact_object(body, required=("model",))
+                return self.stream_pull(
+                    require_string(body["model"], "model", maximum=200)
+                )
+        except Exception as exc:
+            return self.handle_error(exc)
         self.send_json({"error": "not found"}, 404)
 
     # ---- static ----
@@ -581,7 +778,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def open_stream(self):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
-        self.send_header("Cache-Control", "no-store")
+        self._security_headers()
         self.send_header("Connection", "close")
         self.end_headers()
 
@@ -592,7 +789,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.flush()
 
     def stream_events(self, q):
-        run = RUNS.current
+        run = self.server.runs.current
         want = q.get("run")
         if not run or (want and str(run.id) != str(want)):
             self.open_stream()
@@ -656,19 +853,33 @@ class Server(http.server.ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = True
 
+    def __init__(self, server_address, handler_class, *, capability=None, runs=None):
+        super().__init__(server_address, handler_class)
+        host, port = self.server_address[:2]
+        self.expected_host = f"{host}:{port}"
+        self.origin = f"http://{self.expected_host}"
+        self.capability = capability or new_capability()
+        self.runs = runs or Runs()
 
-def free_port(start=DEFAULT_PORT):
+
+def bind_server(start=DEFAULT_PORT):
+    """Bind directly, avoiding the check-then-bind race of port probing."""
+    if start == 0:
+        return Server(("127.0.0.1", 0), Handler)
+    last_error = None
     for port in range(start, start + 20):
-        with socket.socket() as s:
-            if s.connect_ex(("127.0.0.1", port)) != 0:
-                return port
-    return start
+        try:
+            return Server(("127.0.0.1", port), Handler)
+        except OSError as exc:
+            last_error = exc
+    raise last_error
 
 
 def main():
     sys.path.insert(0, PROJECT)
-    port = free_port(int(os.environ.get("AGENT_LAB_PORT", DEFAULT_PORT)))
-    url = f"http://127.0.0.1:{port}"
+    requested_port = int(os.environ.get("AGENT_LAB_PORT", DEFAULT_PORT))
+    server = bind_server(requested_port)
+    url = server.origin + "/#capability=" + server.capability
     tags = installed_tags()
     print(f"\n  Agent Lab  →  {url}")
     print(f"  project    {PROJECT}")
@@ -681,11 +892,13 @@ def main():
     if os.environ.get("AGENT_LAB_NO_BROWSER") != "1":
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
     try:
-        Server(("127.0.0.1", port), Handler).serve_forever()
+        server.serve_forever()
     except KeyboardInterrupt:
-        if RUNS.current:
-            RUNS.current.stop()
+        if server.runs.current:
+            server.runs.current.stop()
         print("\n  stopped.\n")
+    finally:
+        server.server_close()
 
 
 if __name__ == "__main__":

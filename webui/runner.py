@@ -29,6 +29,7 @@ from harness.runtime import (  # noqa: E402
     RunHooks,
 )
 from harness.storage import agent_runtime_paths  # noqa: E402
+from webui.control import ConfirmationChannel, prune_logs, redact  # noqa: E402
 
 
 AGENTS_DIR = os.path.join(PROJECT, "agents")
@@ -89,6 +90,7 @@ def build_llm(config, args, log_dir, stream_hook):
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
+    parser.add_argument("--run-id", required=True)
     parser.add_argument("--agent", required=True)
     parser.add_argument("--domain", default=None)
     parser.add_argument("--task", required=True)
@@ -154,6 +156,7 @@ def main(argv=None):
         str(paths.memory)
     )
     attempt_holder = {}
+    confirmation_channel = ConfirmationChannel(sys.stdin, emit, args.run_id)
 
     def on_note(kind, content):
         emit("note", kind=kind, content=content)
@@ -176,7 +179,9 @@ def main(argv=None):
         config=run_config,
         domain=domain,
         tools=domain.registry,
-        policy=domain.default_policy,
+        policy=domain.default_policy.with_effects(
+            {}, confirmer=confirmation_channel.confirm
+        ),
         world=world,
         memory=memory,
         workdir=workdir,
@@ -230,26 +235,35 @@ def main(argv=None):
         raise SystemExit(1)
 
     os.makedirs(log_dir, exist_ok=True)
-    log_path = os.path.join(
-        log_dir, f"run_{len(os.listdir(log_dir)) + 1:03d}.json"
+    log_path = os.path.join(log_dir, f"run_{time.time_ns()}.json")
+    payload = redact(
+        {
+            "task": args.task,
+            "agent": args.agent,
+            "model": config_data["model"],
+            "domain": domain.name,
+            "domain_version": domain.version,
+            "via": "webui",
+            "transcript": episode.transcript,
+            "finished": episode.finished,
+            "summary": episode.done_summary,
+        }
     )
-    with open(log_path, "w", encoding="utf-8") as handle:
-        json.dump(
-            {
-                "task": args.task,
-                "agent": args.agent,
-                "model": config_data["model"],
-                "domain": domain.name,
-                "domain_version": domain.version,
-                "via": "webui",
-                "transcript": episode.transcript,
-                "finished": episode.finished,
-                "summary": episode.done_summary,
-            },
-            handle,
-            indent=1,
-            ensure_ascii=False,
-        )
+    encoded = json.dumps(payload, indent=1, ensure_ascii=False).encode("utf-8")
+    if len(encoded) > 4 * 1024 * 1024:
+        payload["transcript"] = payload.get("transcript", [])[-100:]
+        payload["log_truncated"] = True
+        encoded = json.dumps(payload, indent=1, ensure_ascii=False).encode("utf-8")
+    if len(encoded) > 4 * 1024 * 1024:
+        payload["transcript"] = payload.get("transcript", [])[-10:]
+        encoded = json.dumps(payload, indent=1, ensure_ascii=False).encode("utf-8")
+    temporary = log_path + ".tmp"
+    with open(temporary, "xb") as handle:
+        handle.write(encoded)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, log_path)
+    prune_logs(log_dir)
 
     emit("world", **world_snapshot(domain, attempt))
     emit(

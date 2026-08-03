@@ -132,6 +132,26 @@ def _obs(text, limit=2000):
     return text if len(text) <= limit else text[:limit] + " ...[truncated]"
 
 
+def _execute_with_policy(attempt, name, args):
+    """Require an explicit one-shot decision for host/external effects."""
+    effect = attempt.policy.effect(name)
+    if effect in ("external_write", "shell"):
+        detail = json.dumps(
+            {"tool": name, "args": args}, sort_keys=True,
+            ensure_ascii=False, default=str,
+        )[:4_096]
+        if not attempt.policy.confirm(name, detail):
+            observation = "ERROR: operator confirmation was denied or unavailable"
+            attempt.record_action(name, args, False, observation)
+            if attempt.hooks.on_tool:
+                try:
+                    attempt.hooks.on_tool(name, args, False, observation)
+                except Exception:
+                    pass
+            return False, observation
+    return attempt.tools.execute(name, args, attempt)
+
+
 class _AttemptLLM:
     """Attempt-local call meter around an LLM or ModelRouter.
 
@@ -211,7 +231,7 @@ def run_raw(llm, task_text, attempt):
             ep.finished = True
             ep.note("done", ep.done_summary)
             break
-        ok, obs = attempt.tools.execute(name, args, attempt)
+        ok, obs = _execute_with_policy(attempt, name, args)
         if not ok:
             ep.tool_errors += 1
         obs = _obs(obs, config.observation_limit)
@@ -412,7 +432,7 @@ def run_harness(llm, task_text, attempt):
             continue
         think_streak = think_streak + 1 if name == "think" else 0
 
-        ok, obs = attempt.tools.execute(name, args, attempt)
+        ok, obs = _execute_with_policy(attempt, name, args)
         if ok and attempt.policy.is_mutating(name):
             world_version += 1
         seen_calls[sig] = world_version

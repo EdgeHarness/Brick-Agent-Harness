@@ -19,7 +19,9 @@ benchmark results, training corpora, adapters, or model weights are shipped.
 surfaces; it is not evidence of generalization or performance. The proposition
 that orchestration improves model tool use remains an untested hypothesis.
 
-The latest release is `v0.8.0` (S5 strict versioned graders), preceded by `v0.7.0` (B0 synthetic lead-follow-up slice), `v0.6.0` (S1R repaired runtime), `v0.5.0` (S4 evidence store) and `v0.4.0` (F0/Q0 feasibility). The required native-Windows Lenovo F0 evidence
+The latest release is `v0.9.0` (S5W Agent Lab hardening), preceded by `v0.8.0`
+(S5), `v0.7.0` (B0), `v0.6.0` (S1R), `v0.5.0` (S4), and `v0.4.0` (F0/Q0).
+The required native-Windows Lenovo F0 evidence
 exists and the gate passed, establishing host and model feasibility only.
 Commit `f12dd71` contains the subsequent independent verifier correction and is
 pushed with required CI green. Native S4 acceptance, S1R, and B0 are released.
@@ -172,8 +174,11 @@ python -m webui.server
 or the platform launcher where supported. It exposes the available domain
 packs, starts one agent subprocess and streams its events. The subprocess
 provides lifecycle and crash/stop containment only; it is not a security
-sandbox. The web server is an unauthenticated loopback development interface
-without CSRF/origin protection or production access control.
+sandbox. S5W gives the loopback server a fresh 256-bit startup capability,
+exact Host/Origin controls, bounded JSON mutations, bounded file/log/event
+surfaces, and process-tree teardown. The browser launcher opens the capability
+URL; use only that printed URL. These controls do not make Agent Lab a
+production or multi-user service.
 
 Some launchers and UI actions can install packages or pull model weights, so
 the repository as a whole should not be described as offline.
@@ -188,8 +193,9 @@ tools and attempt-owned Office artifact writers; it does not expose a supported
 general filesystem or shell.
 
 `ActionPolicy` remains a classification/callback seam, not an operating-system
-sandbox or authorization system. In Q0, absence of a callback denies, and Agent
-Lab exposes no browser/stdin confirmation channel.
+sandbox or authorization system. Absence of a callback denies. S5W's replacement
+operator channel is deliberately narrow and binds a one-shot decision to the
+current `(run_id, confirmation_id, nonce)`; it is not generic stdin.
 
 Do not place real Brix member, payment, email or document data in this
 repository. Authentication, authorization, tenant isolation, privacy controls,

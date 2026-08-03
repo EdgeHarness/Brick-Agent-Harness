@@ -14,8 +14,41 @@ that the research instrument is valid or that any measured effect exists.
 
 ## [Unreleased]
 
-No unreleased changes. The next stage is S5W, which begins only after a separate
-review decision.
+No unreleased changes. The next stage is S6G independent task generation, which
+begins only after a separate review decision.
+
+## [0.9.0] â€” 2026-08-03
+
+S5W Agent Lab control-plane hardening. This local console remains a synthetic
+development surface, not a production service or retained benchmark runner.
+The native Windows ARM64 offline suite passes with 792 passed and 3
+platform-intentional skips; the S5W-specific matrix contributes 17 passing
+tests, including a real parent/child process-tree teardown.
+
+### Added
+
+- A per-start 256-bit bearer capability, exact Host and mutation-Origin policy,
+  Fetch Metadata check, security response headers, and authenticated fetch
+  streaming for events, model pulls, and downloads.
+- Exact JSON request schemas, a 64 KiB body ceiling, typed run options,
+  run-bound stop, reset/run serialization, and a one-shot operator decision
+  protocol bound to `(run_id, confirmation_id, nonce)`.
+- POSIX session and Windows kill-on-close Job Object ownership, bounded event
+  replay/subscribers/stderr, bounded Office previews and downloads, portable
+  regular-file/path controls, recursive log redaction, atomic run-log writes,
+  and count/byte retention limits.
+- Adversarial tests for token, Host, Origin, content type, body limit, stale
+  run/confirmation, reset concurrency, redaction, traversal/link refusal,
+  subscriber bounds, response headers, and real descendant-process teardown.
+
+### Changed
+
+- Model pulling is a guarded JSON POST instead of a state-changing GET.
+- `external_write` and `shell` effects now consult `ActionPolicy.confirm`
+  before an executor can run; absent, denied, malformed, stale, timed-out, or
+  mismatched decisions fail closed and are recorded as refused actions.
+- Agent Lab log names no longer depend on directory counts, and internal
+  exceptions are no longer returned to browser clients.
 
 ## [0.8.0] — 2026-08-02
 
