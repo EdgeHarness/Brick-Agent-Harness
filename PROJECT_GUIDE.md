@@ -1,6 +1,6 @@
 # Project Guide
 
-Last reconciled with the local project tree: 3 August 2026.
+Last reconciled with the local project tree: 4 August 2026.
 
 The canonical execution plan is [`PROJECT_SETUP.md`](PROJECT_SETUP.md). This
 guide defines the durable evidence, architecture, and claim rules. Released
@@ -29,9 +29,11 @@ passed, recording host and model feasibility; the native Windows ARM64 S4 gate
 passed from candidate `0b8f77d` with `overall_status` pass, 461 passed, 0 failed
 and `s4_skipped` 0. Both record instrument behaviour only. S1R and B0 are
 released. S5 is released as `v0.8.0`, S5W as `v0.9.0`, S6G as `v0.10.0`, and
-S6C as `v0.11.0`, and its pre-D0 integrity repair as `v0.11.1`. D0/S7 through
-S9 are unstarted; retained execution remains disabled and no confirmatory
-effect estimate exists.
+S6C as `v0.11.0`, and its pre-D0 integrity repair as `v0.11.1`. D0/S7 closed
+without a protocol freeze after the sole correction cohort's direction-blind
+audit raised three ceiling flags and one floor flag. S8/S9 are blocked, retained
+execution remains disabled, and no condition-level or confirmatory effect
+estimate exists.
 
 Annotated tags and their bound evidence are authoritative. The tagged S4 release
 commit `R` adds only `evidence/s4/v0.5.0.json` to tested candidate `C`; docs-only

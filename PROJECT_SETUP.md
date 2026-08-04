@@ -30,9 +30,11 @@ generator as `office-generators/1.1.0`, reproducing 352 canonical fictional
 instances with 352 distinct semantic structures and no repeated entity key or
 surface. It provides fresh, balanced D0-A and D0-B cohorts of 44 paired cases
 each, binds the ten disposable runs/four exposed instances in a canonical
-ledger, and corrects the Brix domain/grader to `0.1.1`/`1.0.1`. D0/S7 through
-S9 are unstarted, retained
-execution is mechanically disabled, and no confirmatory effect estimate exists.
+ledger, and corrects the Brix domain/grader to `0.1.1`/`1.0.1`. D0/S7 has now
+closed without a protocol freeze: D0-B completed 44 pairs/88 attempts, but its
+preregistered direction-blind audit raised three ceiling flags and one floor
+flag. S8 and S9 are blocked, retained execution is mechanically disabled, and
+no condition-level or confirmatory effect estimate exists.
 
 Release identity is authoritative in annotated Git tags and their bound
 evidence, not in mutable current-status prose. S4 uses three commits/states:
@@ -841,23 +843,33 @@ deterministic workflow for that family.
 
 ## D0/S7 — frozen research protocol
 
-The current source contains the pre-run S7 enforcement layer: deferred D0
-grading, a score-masked operator summary, exact reconstruction of every attempt
-identity, a marker-last runtime-only sample decision, a direction-blind
-floor/ceiling audit, role-aware equal-action accounting, and pinned analysis.
-This implementation is not evidence that D0 passed. D0-A executed from clean,
-CI-green commit `05308f6`, but three of 88 cells exhausted the one allowed
-same-seed retry with the same Ollama HTTP 500. Therefore no runtime sample
-decision exists and grading remains blocked. The original server log and pinned
+The source contains the S7 enforcement layer: deferred D0 grading, a
+score-masked operator summary, exact reconstruction of every attempt identity,
+a marker-last runtime-only sample decision, a direction-blind floor/ceiling
+audit, role-aware equal-action accounting, and pinned analysis. D0-A executed
+from clean, CI-green commit `05308f6`, but three of 88 cells exhausted the one
+allowed same-seed retry with the same Ollama HTTP 500. It remains invalid and
+ungraded. The original server log and pinned
 Ollama v0.32.5 source show that all six failures were Qwen tool-call XML parser
 rejections from complete, non-truncated generations—not OOM, context overflow,
 or a 700-token cap. Protocol `1.0.2` preserves D0-A as instrument-invalid and
 prospectively classifies only the two source-proven signatures as non-retryable
 model-output failures. Unknown 5xx/connectivity failures retain one same-seed
 environment retry after a 60-second cooldown and exact loopback
-version/model-digest verification; runner faults are never retried. Reserved
-D0-B remains the sole correction cohort. Any unresolved D0-B instrument fault
-or later floor/ceiling flag stops the work before retained execution.
+version/model-digest verification; runner faults are never retried.
+
+The sole correction cohort, D0-B, completed all 44 pairs/88 physical attempts
+as `s7-d0b-20260804T025010Z` from clean CI-green commit `b756843`. Its
+runtime-only decision used the exact median `121.4338273000030312687158584`
+seconds and estimate `66788.60501500166719779372212` seconds to select the frozen
+20-case prefix. No efficacy field informed that decision. The direction-blind
+audit then raised ceiling flags for `cal_brief`, `email_reply`, and
+`pptx_from_email`, plus a floor flag for `xlsx_from_email`. By the frozen rule,
+`protocol_freeze_allowed=false`: no S7 freeze, D0-C, `v0.12.0`, S8, or retained
+run may be created. The tracked decision and audit are
+`evidence/s7/d0b-runtime-decision.json` and
+`evidence/s7/d0b-floor-ceiling-audit.json`; neither exposes condition-specific
+scores or a directional effect.
 
 D0-B's operator projection also removes per-cell execution status and failure
 origin. Those fields exposed model budget exhaustion during D0-A and were not

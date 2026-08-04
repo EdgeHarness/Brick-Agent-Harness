@@ -132,21 +132,19 @@ because verifying it is F0's job.
 
 ## 3. Immediate next action
 
-The S6C boundary and pre-D0 integrity repair are complete.
-`office-generators/1.1.0` reproduces 352 unique cases under a fresh seed
-namespace. D0-A and reserved D0-B each contain 44 paired cases, have identical
-declared semantic-axis marginals, and share no semantic structure. A canonical
-ledger binds the ten disposable runs and rejects reuse of all four exposed
-development instances across five identity channels. The exact F0-attested Qwen 4B digest,
-Ollama 0.32.5, native schemas, condition mechanisms, opportunity ledger,
-requests, responses, actions, state, artifacts, retry identity, and environment
-are bound into disposable attempt evidence. `v0.11.1` is published. Disposable
-live checks exercised native tools, two-subepisode memory, raw JSON, and a real
-XLSX artifact; they are engineering records, not an effect estimate.
+S7 is closed without a protocol freeze. D0-A is preserved as instrument-invalid
+and ungraded. The sole correction cohort, D0-B run
+`s7-d0b-20260804T025010Z`, completed all 44 pairs/88 attempts from clean,
+CI-green commit `b756843`. Its efficacy-blind runtime decision selected 20 cases
+per family. The preregistered direction-blind audit then raised ceiling flags
+for `cal_brief`, `email_reply`, and `pptx_from_email` and a floor flag for
+`xlsx_from_email`; consequently `protocol_freeze_allowed=false`.
 
-Stop for review. D0 has not run. The next stage is D0/S7. It must implement score-masked timing,
-the role-aware equal-action sensitivity contract, frozen analysis code, and the
-runtime-only sample-size decision before any retained execution is unlocked.
+Stop the experiment. Do not create D0-C, an S7 freeze attestation, `v0.12.0`,
+an S8 run, a condition comparison, or any retained run. Protocol `1.0.2` allows
+no further correction cohort, and retained execution remains mechanically
+disabled. The next legitimate work is postmortem/research redesign under a new
+study, not continuation of this preregistered experiment.
 
 Do not import or synchronize the moving `SMalshe/Brick` product tree into the
 research instrument or a retained condition. `PROJECT_GUIDE.md` defines the convergence

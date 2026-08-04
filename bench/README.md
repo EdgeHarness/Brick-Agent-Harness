@@ -551,18 +551,17 @@ the frozen generators.
 
 ### D0 correction execution boundary
 
-D0 must run only from a clean commit whose required CI is green. D0-A completed
-88 logical cells but was instrument-invalid: three cells retained an Ollama
-HTTP 500 after the frozen retry. It was not graded and did not create a runtime
-decision. Protocol `1.0.1` consumes reserved D0-B as the sole correction cohort.
-Install the
-separate analysis environment first; NumPy is deliberately not a dependency of
-the reusable harness core:
+D0-A completed 88 logical cells but was instrument-invalid: three cells retained
+an Ollama HTTP 500 after the frozen retry. It was not graded and did not create
+a runtime decision. Protocol `1.0.2` consumed reserved D0-B as the sole
+correction cohort. D0-B run `s7-d0b-20260804T025010Z` completed all 44 pairs/88
+attempts from clean CI-green commit `b756843`. The commands below are retained
+as exact provenance; do not rerun D0-B or create another cohort.
 
 ```powershell
 python -m pip install -r requirements-analysis.txt
 python -m bench.s7_preflight
-python -m bench.s7_run --run-id s7-d0b-YYYYMMDDTHHMMSSZ
+python -m bench.s7_run --run-id s7-d0b-20260804T025010Z
 ```
 
 The run command schedules exactly 44 D0-B pairs/88 primary attempts and cannot
@@ -577,8 +576,8 @@ decision to a new directory:
 ```powershell
 python -m bench.s7_decision `
   --runs-root C:\BrickRuns\s7 `
-  --run-id s7-d0b-YYYYMMDDTHHMMSSZ `
-  --output C:\BrickRuns\s7-decisions\s7-d0b-YYYYMMDDTHHMMSSZ
+  --run-id s7-d0b-20260804T025010Z `
+  --output C:\BrickRuns\s7-decisions\s7-d0b-20260804T025010Z
 ```
 
 Only after that marker-last decision verifies may the direction-blind audit
@@ -587,9 +586,9 @@ grade D0 in memory:
 ```powershell
 python -m bench.s7_floor_audit `
   --runs-root C:\BrickRuns\s7 `
-  --run-id s7-d0b-YYYYMMDDTHHMMSSZ `
-  --decision C:\BrickRuns\s7-decisions\s7-d0b-YYYYMMDDTHHMMSSZ `
-  --output C:\BrickRuns\s7-audits\s7-d0b-YYYYMMDDTHHMMSSZ
+  --run-id s7-d0b-20260804T025010Z `
+  --decision C:\BrickRuns\s7-decisions\s7-d0b-20260804T025010Z `
+  --output C:\BrickRuns\s7-audits\s7-d0b-20260804T025010Z
 ```
 
 The audit emits only eight-condition-combined successes per family. A floor or
@@ -597,6 +596,12 @@ ceiling flag forbids the S7 freeze. D0-B is the only reserved correction cohort,
 so any instrument fault or floor/ceiling flag stops the experiment before S8.
 An audit with no flags permits protocol freeze but does not unlock retained
 execution.
+
+The sealed decision selected 20 cases per family, but the audit raised ceiling
+flags for `cal_brief`, `email_reply`, and `pptx_from_email` and a floor flag for
+`xlsx_from_email`. It emitted no condition-specific score or directional effect.
+The flagged branch is terminal: no D0-C, S7 freeze, S8 handoff, or retained run
+is permitted under this protocol.
 
 ## Descriptive matrix
 

@@ -1,4 +1,5 @@
 import copy
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -352,6 +353,47 @@ def test_floor_ceiling_audit_is_direction_blind_and_blocks_flagged_family(
         set(item) == {"family", "combined_successes", "combined_outcomes"}
         for item in audit["family_combined_totals"]
     )
+
+
+def test_d0b_decision_and_blocking_audit_are_exact_canonical_evidence():
+    decision_path = ROOT / "evidence" / "s7" / "d0b-runtime-decision.json"
+    audit_path = ROOT / "evidence" / "s7" / "d0b-floor-ceiling-audit.json"
+    decision_bytes = decision_path.read_bytes()
+    audit_bytes = audit_path.read_bytes()
+    decision = load_canonical_json(decision_path)
+    audit = load_canonical_json(audit_path)
+
+    assert decision_bytes == canonical_json_bytes(decision) + b"\n"
+    assert audit_bytes == canonical_json_bytes(audit) + b"\n"
+    assert hashlib.sha256(decision_bytes).hexdigest() == (
+        "d46e07476040bc3833a314ae2f382c49525496b1afec2f706a4b3fd54c4d670f"
+    )
+    assert hashlib.sha256(audit_bytes).hexdigest() == (
+        "361132449a778d3906b6a095c1c89ea2df2e69f23ca5c2bcb184c42cc4ef2337"
+    )
+    assert decision["run_id"] == "s7-d0b-20260804T025010Z"
+    assert decision["valid_attempts"] == 88
+    assert decision["selected_cases_per_family"] == 20
+    assert decision["efficacy_fields_read"] is False
+    assert audit["runtime_decision_sha256"] == hashlib.sha256(
+        decision_bytes
+    ).hexdigest()
+    assert len(audit["family_combined_totals"]) == 11
+    assert all(
+        item["combined_outcomes"] == 8
+        for item in audit["family_combined_totals"]
+    )
+    assert audit["flags"] == [
+        {"family": "cal_brief", "flag": "ceiling"},
+        {"family": "email_reply", "flag": "ceiling"},
+        {"family": "pptx_from_email", "flag": "ceiling"},
+        {"family": "xlsx_from_email", "flag": "floor"},
+    ]
+    assert audit["condition_scores_emitted"] is False
+    assert audit["directional_effects_computed"] is False
+    assert audit["protocol_freeze_allowed"] is False
+    assert load_protocol()["retained_execution_enabled"] is False
+    assert BASE_PROTOCOL["retained_execution_enabled"] is False
 
 
 def _analysis_fixture():

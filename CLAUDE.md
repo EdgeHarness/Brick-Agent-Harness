@@ -103,17 +103,17 @@ and strict preflight. The `v0.11.1` repair versions the generator as
 `office-generators/1.1.0`: 352 cases and structures, including two fresh,
 balanced 44-pair D0 cohorts, with exposed disposable material rejected across
 five identity channels. It also versions the corrected Brix domain/grader as
-`0.1.1`/`1.0.1`. Retained execution is disabled. D0-A ran 88 masked logical
-cells but is instrument-invalid because three cells retained Ollama HTTP 500
-failures after the frozen retry; no runtime decision, grading, or confirmatory
-model result exists. Protocol `1.0.1` consumes reserved D0-B for the sole
-direction-blind correction, but its cooldown-only root-cause statement was
-provisional. Protocol `1.0.2` binds the original Ollama log evidence and pinned
-parser source: the six 500s were complete, non-truncated Qwen tool-syntax
-rejections. Prospectively those two exact signatures are non-retryable model
-failures; unknown 5xx/connectivity failures retain the one same-seed
-environment retry, and runner faults are not retried. D0-A remains invalid and
-ungraded; D0-B has not run; retained execution remains disabled.
+`0.1.1`/`1.0.1`. D0-A ran 88 masked logical cells but is instrument-invalid
+because three cells retained Ollama HTTP 500 failures after the frozen retry.
+Protocol `1.0.2` binds the original Ollama log and pinned parser source: the six
+500s were complete, non-truncated Qwen tool-syntax rejections. D0-B then
+completed all 44 pairs/88 attempts as `s7-d0b-20260804T025010Z` from commit
+`b756843`. The sealed runtime-only decision selected 20 cases per family
+(`d46e074...`), without reading efficacy. The subsequent direction-blind audit
+(`3611324...`) raised three ceiling flags and one floor flag and set
+`protocol_freeze_allowed=false`. S7 is therefore closed without a freeze:
+there is no `v0.12.0`, no S8 handoff, no condition-level result, and retained
+execution remains mechanically disabled.
 
 For S4, release state is authoritative in the annotated tag and bound evidence.
 Direct descendant `R` adds only the regular file

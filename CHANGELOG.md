@@ -14,13 +14,14 @@ that the research instrument is valid or that any measured effect exists.
 
 ## [Unreleased]
 
-S7 instrument-correction candidate. D0-A ran from clean CI-green commit
-`05308f6` as `s7-d0a-20260803T213152Z`: all 88 logical cells published, but
-three cells remained environment-invalid after the one allowed full-attempt
-retry, all with Ollama HTTP 500. The run contains 91 immutable physical
-attempts and is bound by `evidence/s7/d0a-instrument-audit.json`. No runtime
-sample decision was created, grading was not performed, no efficacy field was
-read, and retained execution remains mechanically disabled.
+S7 is closed without a protocol freeze. D0-A remains instrument-invalid and
+ungraded. The sole correction cohort, D0-B run
+`s7-d0b-20260804T025010Z`, completed all 44 pairs/88 physical attempts from
+clean CI-green commit `b756843`. Its runtime-only decision selected the frozen
+20-case retained prefix, but the preregistered direction-blind audit raised
+ceiling flags for `cal_brief`, `email_reply`, and `pptx_from_email`, and a floor
+flag for `xlsx_from_email`. Therefore no S7 freeze, `v0.12.0` release, S8 run,
+condition comparison, or retained execution is permitted.
 
 ### Added
 
@@ -34,6 +35,12 @@ read, and retained execution remains mechanically disabled.
 - A D0-only runner that defers grading and omits success from its operator
   summary, plus immutable marker-last runtime-decision and floor/ceiling-audit
   artifacts.
+- Canonical tracked copies of D0-B's runtime-only decision
+  (`d46e07476040bc3833a314ae2f382c49525496b1afec2f706a4b3fd54c4d670f`)
+  and direction-blind audit
+  (`361132449a778d3906b6a095c1c89ea2df2e69f23ca5c2bcb184c42cc4ef2337`).
+  The audit contains 11 eight-outcome family totals and no condition-specific
+  scores or directional effects.
 - The exact paired sign-flip diagnostic, equal-family estimand, 20,000-draw
   within-family PCG64 bootstrap, family and leave-one-family-out effects, and
   the three-part positive-claim gate.
@@ -44,7 +51,7 @@ read, and retained execution remains mechanically disabled.
 - Offline regressions for exact Qwen parser-signature recognition, unknown-5xx
   fallback, malformed success responses, no retry of runner or model failures,
   honest generated-token bounds, and operator-projection masking. The complete
-  native Windows ARM64 suite passes 855 tests with 3 intentional skips.
+  native Windows ARM64 suite passes 857 tests with 3 intentional skips.
 
 ### Changed
 
@@ -64,8 +71,8 @@ read, and retained execution remains mechanically disabled.
   are non-retryable model failures; unknown 5xx/connectivity failures receive
   the one same-seed environment retry after a fixed 60-second cooldown and
   exact loopback version/model-digest verification. Runner failures are never
-  retried. D0-A remains immutable and invalid; D0-B is still unexecuted and is
-  the sole correction cohort. D0-B's operator projection now hides per-cell
+  retried. D0-A remains immutable and invalid; D0-B was the sole correction
+  cohort and completed 88/88 attempts. D0-B's operator projection hides per-cell
   execution status and failure origin—fields that leaked model budget outcomes
   during D0-A—and emits only instrument validity.
 
