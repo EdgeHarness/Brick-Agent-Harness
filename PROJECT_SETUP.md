@@ -847,13 +847,22 @@ identity, a marker-last runtime-only sample decision, a direction-blind
 floor/ceiling audit, role-aware equal-action accounting, and pinned analysis.
 This implementation is not evidence that D0 passed. D0-A executed from clean,
 CI-green commit `05308f6`, but three of 88 cells exhausted the one allowed
-instrument retry with the same Ollama HTTP 500. Therefore no runtime sample
-decision exists and grading remains blocked. Protocol `1.0.1` binds the
-score-free instrument audit and consumes reserved D0-B for one direction-blind
-environment-recovery correction: a 60-second cooldown plus exact loopback
-version/model-digest health verification before the unchanged single retry.
-Any unresolved D0-B instrument fault or later floor/ceiling flag stops the work
-before retained execution.
+same-seed retry with the same Ollama HTTP 500. Therefore no runtime sample
+decision exists and grading remains blocked. The original server log and pinned
+Ollama v0.32.5 source show that all six failures were Qwen tool-call XML parser
+rejections from complete, non-truncated generations—not OOM, context overflow,
+or a 700-token cap. Protocol `1.0.2` preserves D0-A as instrument-invalid and
+prospectively classifies only the two source-proven signatures as non-retryable
+model-output failures. Unknown 5xx/connectivity failures retain one same-seed
+environment retry after a 60-second cooldown and exact loopback
+version/model-digest verification; runner faults are never retried. Reserved
+D0-B remains the sole correction cohort. Any unresolved D0-B instrument fault
+or later floor/ceiling flag stops the work before retained execution.
+
+D0-B's operator projection also removes per-cell execution status and failure
+origin. Those fields exposed model budget exhaustion during D0-A and were not
+truly mask-safe. The corrected projection emits only `instrument_valid`; full
+records remain immutable for the automated runtime decision and later audit.
 
 ### Primary question and estimand
 
@@ -996,9 +1005,11 @@ a cooldown and warm-up check. Persistent degradation stops the scheduler as
 `environment_unstable`. This decision uses performance telemetry only, never
 task outcome.
 
-One logical cell receives at most one preregistered retry for an instrument
-failure. A valid task failure is never rerun. Both physical records remain
-auditable.
+One logical cell receives at most one preregistered retry only when an
+environment-origin failure carries the runtime's explicit `retryable=true`
+marker. The seed is unchanged. Runner failures and valid model failures,
+including a recognized Qwen tool-syntax rejection, are never rerun. Both
+physical environment-attempt records remain auditable.
 
 ### Incomplete-run rule
 

@@ -107,7 +107,13 @@ five identity channels. It also versions the corrected Brix domain/grader as
 cells but is instrument-invalid because three cells retained Ollama HTTP 500
 failures after the frozen retry; no runtime decision, grading, or confirmatory
 model result exists. Protocol `1.0.1` consumes reserved D0-B for the sole
-direction-blind correction.
+direction-blind correction, but its cooldown-only root-cause statement was
+provisional. Protocol `1.0.2` binds the original Ollama log evidence and pinned
+parser source: the six 500s were complete, non-truncated Qwen tool-syntax
+rejections. Prospectively those two exact signatures are non-retryable model
+failures; unknown 5xx/connectivity failures retain the one same-seed
+environment retry, and runner faults are not retried. D0-A remains invalid and
+ungraded; D0-B has not run; retained execution remains disabled.
 
 For S4, release state is authoritative in the annotated tag and bound evidence.
 Direct descendant `R` adds only the regular file

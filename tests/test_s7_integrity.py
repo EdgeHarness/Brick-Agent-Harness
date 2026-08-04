@@ -70,9 +70,30 @@ class _DoneTransport:
 
 def test_s7_protocol_and_d0_schedule_are_exact_and_fail_closed(monkeypatch, tmp_path):
     protocol = load_protocol()
+    assert protocol["protocol_version"] == "1.0.2"
+    assert protocol["model_output_rejection"] == {
+        "failure_origin": "model",
+        "execution_status": "model_error",
+        "failure_type": "model_output_tool_syntax_rejected",
+        "retryable": False,
+        "strict_success": False,
+        "classification_scope": "exact_parser_audit_signatures_only",
+        "generated_token_accounting": (
+            "null_exact_with_zero_to_request_limit_bounds"
+        ),
+        "report_rate_by_condition_after_unmasking": True,
+    }
     changed = copy.deepcopy(protocol)
     changed["d0"]["pairs_per_cohort"] = 43
     with pytest.raises(S7ContractError, match="allocation"):
+        validate_protocol(changed)
+    changed = copy.deepcopy(protocol)
+    changed["model_output_rejection"]["retryable"] = True
+    with pytest.raises(S7ContractError, match="model-output rejection"):
+        validate_protocol(changed)
+    changed = copy.deepcopy(protocol)
+    changed["parser_audit_sha256"] = "0" * 64
+    with pytest.raises(S7ContractError, match="parser-audit"):
         validate_protocol(changed)
 
     manifest = load_canonical_json(MANIFESTS / "development.json")
@@ -119,8 +140,6 @@ def test_s7_protocol_and_d0_schedule_are_exact_and_fail_closed(monkeypatch, tmp_
     )
     assert captured["policy"].environment_retry_cooldown_seconds == 60
     assert captured["policy"].verify_transport_health_before_retry is True
-    assert captured["policy"].environment_retry_failure_type == "HTTPError"
-    assert captured["policy"].environment_retry_http_status == 500
 
     args.cohort = "d0a"
     with pytest.raises(RuntimeError, match="active D0 cohort"):
@@ -259,12 +278,9 @@ def _fake_d0(protocol, wall_seconds=1.0):
                 "cooldown_seconds"
             ],
             "verify_transport_health_before_retry": True,
-            "failure_type": protocol["environment_recovery"][
-                "eligible_failure_type"
-            ],
-            "http_status": protocol["environment_recovery"][
-                "eligible_http_status"
-            ],
+            "eligible_failure_origin": "environment",
+            "requires_retryable_failure_marker": True,
+            "same_seed": True,
         },
         "conditions": {
             name: {

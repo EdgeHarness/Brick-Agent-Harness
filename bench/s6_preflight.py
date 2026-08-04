@@ -57,8 +57,10 @@ IMPLEMENTATION_PATHS = (
     "bench/s7_preflight.py",
     "bench/s7_protocol.json",
     "bench/s7_protocol_v1.0.0.json",
+    "bench/s7_protocol_v1.0.1.json",
     "bench/s7_run.py",
     "evidence/s7/d0a-instrument-audit.json",
+    "evidence/s7/d0a-ollama-parser-audit.json",
     "requirements-analysis.txt",
     "bench/manifests/office-v1/" + EXPOSURE_NAME,
 )

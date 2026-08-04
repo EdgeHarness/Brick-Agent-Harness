@@ -46,8 +46,9 @@ def _final_records(store, protocol, manifests=DEFAULT_MANIFESTS):
         "verify_transport_health_before_retry": protocol["environment_recovery"][
             "verify_loopback_version_and_model_digest"
         ],
-        "failure_type": protocol["environment_recovery"]["eligible_failure_type"],
-        "http_status": protocol["environment_recovery"]["eligible_http_status"],
+        "eligible_failure_origin": "environment",
+        "requires_retryable_failure_marker": True,
+        "same_seed": True,
     }
     if metadata.get("environment_recovery") != expected_recovery:
         raise RuntimeError("D0 environment-recovery policy differs")

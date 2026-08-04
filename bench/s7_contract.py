@@ -48,20 +48,21 @@ def validate_protocol(value):
             "equal_action_sensitivity", "retained_execution_enabled",
             "predecessor_protocol_path", "predecessor_protocol_sha256",
             "instrument_audit_path", "instrument_audit_sha256",
-            "environment_recovery",
+            "parser_audit_path", "parser_audit_sha256",
+            "environment_recovery", "model_output_rejection",
         },
         "S7 protocol",
     )
     if value["schema_version"] != "brick.s7.protocol/1":
         raise S7ContractError("unsupported S7 protocol schema")
-    if value["protocol_version"] != "1.0.1":
+    if value["protocol_version"] != "1.0.2":
         raise S7ContractError("unsupported S7 protocol version")
     if value["base_protocol_path"] != "bench/s6_protocol.json":
         raise S7ContractError("S7 must bind the frozen S6 protocol path")
     if value["retained_execution_enabled"] is not False:
         raise S7ContractError("S7 must keep retained execution disabled")
 
-    if value["predecessor_protocol_path"] != "bench/s7_protocol_v1.0.0.json":
+    if value["predecessor_protocol_path"] != "bench/s7_protocol_v1.0.1.json":
         raise S7ContractError("S7 predecessor protocol path differs")
     predecessor_path = ROOT / value["predecessor_protocol_path"]
     try:
@@ -71,9 +72,9 @@ def validate_protocol(value):
     predecessor_sha = hashlib.sha256(canonical_json_bytes(predecessor)).hexdigest()
     if (
         value["predecessor_protocol_sha256"]
-        != "cd1ebf1f101e6357a8fd3bcc00f9e63114b19032fbeda32dff1e3bcbf4515bd1"
+        != "b5035ded59011f22f80e4657f151e47e923684e6d55412646a7903de58291b2e"
         or predecessor_sha != value["predecessor_protocol_sha256"]
-        or predecessor.get("protocol_version") != "1.0.0"
+        or predecessor.get("protocol_version") != "1.0.1"
     ):
         raise S7ContractError("S7 predecessor protocol binding differs")
 
@@ -100,6 +101,50 @@ def validate_protocol(value):
         or audit.get("efficacy_fields_read") is not False
     ):
         raise S7ContractError("D0-A instrument-audit binding differs")
+
+    if value["parser_audit_path"] != "evidence/s7/d0a-ollama-parser-audit.json":
+        raise S7ContractError("S7 parser-audit path differs")
+    parser_audit_path = ROOT / value["parser_audit_path"]
+    try:
+        parser_audit_bytes = parser_audit_path.read_bytes()
+        parser_audit = json.loads(parser_audit_bytes.decode("utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise S7ContractError("cannot load the D0-A parser audit") from exc
+    attribution = parser_audit.get("attribution", {})
+    source = parser_audit.get("upstream_source", {})
+    events = parser_audit.get("observed_events", [])
+    if (
+        hashlib.sha256(parser_audit_bytes).hexdigest()
+        != value["parser_audit_sha256"]
+        or value["parser_audit_sha256"]
+        != "f54b215dbf6837b9a7dfe8d3c727da447041d4252a9759591aca00de93b1337b"
+        or parser_audit.get("schema_version")
+        != "brick.s7.ollama-parser-audit/1"
+        or parser_audit.get("efficacy_fields_read") is not False
+        or parser_audit.get("grading_performed") is not False
+        or parser_audit.get("runtime_decision_created") is not False
+        or parser_audit.get("incident", {}).get("audit_sha256")
+        != value["instrument_audit_sha256"]
+        or attribution.get("historical_d0a_relabeling") is not False
+        or attribution.get("prospective_only") is not True
+        or attribution.get("failure_origin") != "model"
+        or attribution.get("execution_status") != "model_error"
+        or attribution.get("retryable") is not False
+        or attribution.get("strict_success") is not False
+        or len(events) != 6
+        or any(event.get("truncated") is not False for event in events)
+        or sorted(event.get("generated_tokens") for event in events)
+        != [259, 259, 275, 275, 381, 381]
+        or source.get("tag") != "v0.32.5"
+        or source.get("tag_commit")
+        != "eec8e0b9458b8a01be0c216a9cc53eefde24ef50"
+        or [item.get("git_blob_sha1") for item in source.get("files", [])]
+        != [
+            "0da7980a845300762b38218461bbd26916ca6db0",
+            "fe941c8b008a3415f1546ac7f867fd254c500894",
+        ]
+    ):
+        raise S7ContractError("D0-A parser-audit binding differs")
 
     base_path = ROOT / value["base_protocol_path"]
     try:
@@ -128,7 +173,7 @@ def validate_protocol(value):
     if (
         d0["active_cohort"] != "d0b"
         or d0["correction_reason"]
-        != "unresolved_ollama_http_500_environment_failures"
+        != "prospective_transport_attribution_after_invalid_d0a"
     ):
         raise S7ContractError("D0 correction authorization differs")
     if (
@@ -145,7 +190,8 @@ def validate_protocol(value):
     excluded = d0["operator_projection_excludes"]
     required_exclusions = {
         "candidate_decision", "checks", "condition_success",
-        "directional_discordance", "family_effect", "strict_success",
+        "directional_discordance", "execution_status", "failure_origin",
+        "family_effect", "model_outcome_status", "strict_success",
     }
     if not isinstance(excluded, list) or set(excluded) != required_exclusions:
         raise S7ContractError("D0 score exclusions differ")
@@ -203,8 +249,8 @@ def validate_protocol(value):
     recovery = _exact(
         value["environment_recovery"],
         {
-            "eligible_failure_origin", "eligible_failure_type",
-            "eligible_http_status", "cooldown_seconds",
+            "eligible_failure_origin", "requires_retryable_failure_marker",
+            "same_seed", "cooldown_seconds",
             "verify_loopback_version_and_model_digest",
             "full_attempt_retry_limit",
         },
@@ -212,8 +258,8 @@ def validate_protocol(value):
     )
     if recovery != {
         "eligible_failure_origin": "environment",
-        "eligible_failure_type": "HTTPError",
-        "eligible_http_status": 500,
+        "requires_retryable_failure_marker": True,
+        "same_seed": True,
         "cooldown_seconds": 60,
         "verify_loopback_version_and_model_digest": True,
         "full_attempt_retry_limit": 1,
@@ -225,6 +271,30 @@ def validate_protocol(value):
         raise S7ContractError(
             "environment recovery retry limit differs from the base protocol"
         )
+
+    rejection = _exact(
+        value["model_output_rejection"],
+        {
+            "failure_origin", "execution_status", "failure_type",
+            "retryable", "strict_success", "classification_scope",
+            "generated_token_accounting",
+            "report_rate_by_condition_after_unmasking",
+        },
+        "model-output rejection",
+    )
+    if rejection != {
+        "failure_origin": "model",
+        "execution_status": "model_error",
+        "failure_type": "model_output_tool_syntax_rejected",
+        "retryable": False,
+        "strict_success": False,
+        "classification_scope": "exact_parser_audit_signatures_only",
+        "generated_token_accounting": (
+            "null_exact_with_zero_to_request_limit_bounds"
+        ),
+        "report_rate_by_condition_after_unmasking": True,
+    }:
+        raise S7ContractError("model-output rejection rule differs")
 
     analysis = _exact(
         value["analysis"],

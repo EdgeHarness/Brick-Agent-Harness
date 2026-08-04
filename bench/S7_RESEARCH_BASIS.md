@@ -61,14 +61,51 @@ useful harness overhead from a hidden increase in action opportunities.
 ## D0-A instrument correction
 
 D0-A published 88 logical cells, but three cells returned Ollama HTTP 500 on
-both the initial attempt and its immediate retry. The score-free audit binds
-that fact; no runtime decision or grading followed. Ollama's public issue
-tracker documents HTTP 500 as a server/runner failure class on Windows, but the
-available local server log did not capture this run, so Brick does not claim a
-more specific root cause. Protocol 1.0.1 makes the smallest direction-blind
-change supported by the local evidence: retain one full-attempt retry, but
-precede it with a fixed 60-second cooldown and require the loopback server to
-report the exact frozen Ollama version and model digest. D0-B is consumed as the
-only correction cohort; another instrument fault stops the experiment.
+both the initial attempt and its same-seed retry. The score-free instrument
+audit remains immutable and invalid; no runtime decision or grading followed.
+Protocol 1.0.1's cooldown-only explanation was provisional and is preserved as
+history, not treated as the final diagnosis.
 
-Source: <https://github.com/ollama/ollama/issues/12940>
+The original local server log did capture the run. The canonical parser audit
+binds its snapshot and all six events. Every HTTP 500 is immediately preceded
+by both the Qwen3Coder and Qwen3.5 parser warnings. The paired generations used
+259, 275, or 381 tokens and each runner record says `truncated = 0`; there is no
+evidence for a 700-token cap, context overflow, or OOM explanation.
+
+The pinned Ollama v0.32.5 source makes the attribution mechanically narrower:
+Qwen3Coder does not emit a raw tool-call event until it has observed the full
+outer `</tool_call>` delimiter. It then rewrites opening `function` and
+`parameter` tags and escapes text without deleting or reordering their closing
+tags. The observed `unexpected EOF` and `function closed by parameter`
+signatures therefore identify malformed model-emitted inner tool-call grammar.
+Protocol 1.0.2 prospectively records these two signatures as
+`model_output_tool_syntax_rejected`: model origin, strict failure, no retry.
+It does not relabel D0-A.
+
+All other HTTP 5xx, connection, and timeout failures remain environment-origin
+and are eligible for the one same-seed retry. A malformed success response or
+unrecognized client exception is runner-origin and is not retried. This follows
+Inspect's warning that indiscriminate retries can create distribution shift and
+its distinction between infrastructure errors and errors that are themselves
+scoreable task outcomes. Exact token telemetry is absent from Ollama's error
+response, so Brick stores a null exact count plus zero-to-request-limit bounds
+rather than inventing a value. Parser-rejection rates by condition are emitted
+only after score unmasking.
+
+Protocol 1.0.2 also removes `execution_status` and `failure_origin` from the
+operator-facing D0 cell stream. D0-A showed that these fields leak model budget
+exhaustion by condition even without a grader score. D0-B exposes only the
+instrument-validity bit needed to stop on an infrastructure defect; automated
+sealed processing retains the full evidence.
+
+A trace replay was deliberately not performed: a new same-seed generation
+cannot recover the original raw bytes and would add post-hoc model calls without
+changing the source-level proof. D0-B remains the sole correction cohort; an
+unresolved instrument fault still stops the experiment.
+
+Sources:
+
+- <https://github.com/ollama/ollama/blob/v0.32.5/model/parsers/qwen35.go>
+- <https://github.com/ollama/ollama/blob/v0.32.5/model/parsers/qwen3coder.go>
+- <https://github.com/ollama/ollama/issues/14492>
+- <https://inspect.aisi.org.uk/errors-and-limits.html>

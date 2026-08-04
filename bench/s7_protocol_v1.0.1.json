@@ -1,19 +1,17 @@
 {
   "schema_version": "brick.s7.protocol/1",
-  "protocol_version": "1.0.2",
-  "predecessor_protocol_path": "bench/s7_protocol_v1.0.1.json",
-  "predecessor_protocol_sha256": "b5035ded59011f22f80e4657f151e47e923684e6d55412646a7903de58291b2e",
+  "protocol_version": "1.0.1",
+  "predecessor_protocol_path": "bench/s7_protocol_v1.0.0.json",
+  "predecessor_protocol_sha256": "cd1ebf1f101e6357a8fd3bcc00f9e63114b19032fbeda32dff1e3bcbf4515bd1",
   "instrument_audit_path": "evidence/s7/d0a-instrument-audit.json",
   "instrument_audit_sha256": "dd6f15321c87f53e6e220df0ab12147f7f6222e3273c83dff993d4797734aa72",
-  "parser_audit_path": "evidence/s7/d0a-ollama-parser-audit.json",
-  "parser_audit_sha256": "f54b215dbf6837b9a7dfe8d3c727da447041d4252a9759591aca00de93b1337b",
   "base_protocol_path": "bench/s6_protocol.json",
   "base_protocol_sha256": "da876e4b5a71889f4b2fc5ce5e245e81faeda1ef07f3c247ab9c4d61c32b0073",
   "d0": {
     "initial_cohort": "d0a",
     "correction_cohort": "d0b",
     "active_cohort": "d0b",
-    "correction_reason": "prospective_transport_attribution_after_invalid_d0a",
+    "correction_reason": "unresolved_ollama_http_500_environment_failures",
     "families": 11,
     "pairs_per_family": 4,
     "pairs_per_cohort": 44,
@@ -25,10 +23,7 @@
       "checks",
       "condition_success",
       "directional_discordance",
-      "execution_status",
-      "failure_origin",
       "family_effect",
-      "model_outcome_status",
       "strict_success"
     ],
     "runtime_decision": {
@@ -51,21 +46,11 @@
   },
   "environment_recovery": {
     "eligible_failure_origin": "environment",
-    "requires_retryable_failure_marker": true,
-    "same_seed": true,
+    "eligible_failure_type": "HTTPError",
+    "eligible_http_status": 500,
     "cooldown_seconds": 60,
     "verify_loopback_version_and_model_digest": true,
     "full_attempt_retry_limit": 1
-  },
-  "model_output_rejection": {
-    "failure_origin": "model",
-    "execution_status": "model_error",
-    "failure_type": "model_output_tool_syntax_rejected",
-    "retryable": false,
-    "strict_success": false,
-    "classification_scope": "exact_parser_audit_signatures_only",
-    "generated_token_accounting": "null_exact_with_zero_to_request_limit_bounds",
-    "report_rate_by_condition_after_unmasking": true
   },
   "analysis": {
     "python_minor": "3.13",

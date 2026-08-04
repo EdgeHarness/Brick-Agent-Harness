@@ -24,6 +24,10 @@ read, and retained execution remains mechanically disabled.
 
 ### Added
 
+- A canonical score-free Ollama parser audit binding the original 2,720,975-byte
+  server-log snapshot, all six adjacent Qwen parser/HTTP 500 events, the
+  non-truncated generation telemetry, and the exact v0.32.5 parser tag and blob
+  identities. D0-A remains unchanged and ungraded.
 - A fail-closed `brick.s7.protocol/1` binding the 44-pair D0-A cohort, reserved
   D0-B boundary, runtime-only 20-versus-12 sample-size rule, direction-blind
   floor/ceiling gate, pinned NumPy analysis, and role-aware sensitivity budget.
@@ -37,6 +41,10 @@ read, and retained execution remains mechanically disabled.
   reconstruction, efficacy rejection, artifact tampering, non-transferable
   role budgets, exact small-sample p-values, and a golden first-100-resample
   stream digest.
+- Offline regressions for exact Qwen parser-signature recognition, unknown-5xx
+  fallback, malformed success responses, no retry of runner or model failures,
+  honest generated-token bounds, and operator-projection masking. The complete
+  native Windows ARM64 suite passes 855 tests with 3 intentional skips.
 
 ### Changed
 
@@ -49,14 +57,17 @@ read, and retained execution remains mechanically disabled.
 - CI installs the analysis dependency only on frozen Python 3.13 lanes. The
   reusable harness continues to support and test Python 3.9 through 3.13
   without NumPy as a core dependency.
-- `brick.s7.protocol/1` version `1.0.1` consumes the sole reserved correction
-  cohort, D0-B. Before the one already-frozen full-attempt retry, an eligible
-  environment-origin Ollama `HTTPError` with status 500 now receives a fixed
-  60-second cooldown and a loopback health check that must preserve the exact
-  Ollama version and model digest. This correction depends only on typed
-  environment telemetry and cannot observe a task score. Any unresolved D0-B
-  instrument fault, or any subsequent floor/ceiling flag, stops the experiment
-  before retained execution.
+- `brick.s7.protocol/1` version `1.0.2` supersedes the provisional 1.0.1
+  cooldown-only diagnosis without rewriting it. The original Ollama log and
+  pinned v0.32.5 parser source bind six complete, non-truncated Qwen tool-call
+  XML rejections. Prospectively, only the two observed source-proven signatures
+  are non-retryable model failures; unknown 5xx/connectivity failures receive
+  the one same-seed environment retry after a fixed 60-second cooldown and
+  exact loopback version/model-digest verification. Runner failures are never
+  retried. D0-A remains immutable and invalid; D0-B is still unexecuted and is
+  the sole correction cohort. D0-B's operator projection now hides per-cell
+  execution status and failure origin—fields that leaked model budget outcomes
+  during D0-A—and emits only instrument validity.
 
 ## [0.11.1] — 2026-08-03
 

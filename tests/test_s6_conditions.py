@@ -16,8 +16,10 @@ from harness.experiment import (
     AttemptMemory,
     ExecutionContext,
     ExperimentError,
+    ModelOutputProtocolError,
     OllamaTransport,
     OpportunityLedger,
+    TransportResponseError,
     condition_registry,
     run_raw_json_attempt,
     run_attempt,
@@ -424,6 +426,75 @@ def test_transport_health_check_binds_version_and_model_digest():
         transport.verify_health(PROTOCOL, changed)
 
 
+def _response(status, body):
+    response = requests.Response()
+    response.status_code = status
+    response.url = "http://127.0.0.1:11434/api/chat"
+    response._content = (
+        body if isinstance(body, bytes) else json.dumps(body).encode("utf-8")
+    )
+    response.headers["Content-Type"] = "application/json"
+    return response
+
+
+def test_transport_recognizes_only_bound_qwen35_tool_parser_signatures():
+    class Session:
+        trust_env = True
+
+        def __init__(self, response):
+            self.response = response
+
+        def post(self, _url, json, timeout):
+            assert timeout == (5, 30)
+            return self.response
+
+    payload = {
+        "model": PROTOCOL["primary_model"],
+        "tools": [{"type": "function", "function": {"name": "done"}}],
+    }
+    for message in (
+        "XML syntax error on line 26: unexpected EOF",
+        "XML syntax error on line 4: element <function> closed by </parameter>",
+    ):
+        transport = OllamaTransport(
+            PROTOCOL["transport"]["endpoint"], 30,
+            session=Session(_response(500, {"error": message})),
+        )
+        with pytest.raises(ModelOutputProtocolError, match="XML syntax error"):
+            transport.chat(payload)
+
+    for changed_payload, body in (
+        (payload, {"error": "some other server error"}),
+        ({"model": PROTOCOL["primary_model"]}, {
+            "error": "XML syntax error on line 26: unexpected EOF",
+        }),
+        ({"model": "other:latest", "tools": payload["tools"]}, {
+            "error": "XML syntax error on line 26: unexpected EOF",
+        }),
+        (payload, {"error": "XML syntax error on line 3: invalid token"}),
+    ):
+        transport = OllamaTransport(
+            PROTOCOL["transport"]["endpoint"], 30,
+            session=Session(_response(500, body)),
+        )
+        with pytest.raises(requests.HTTPError):
+            transport.chat(changed_payload)
+
+
+def test_transport_rejects_malformed_success_body_as_runner_response_error():
+    class Session:
+        trust_env = True
+
+        def post(self, _url, json, timeout):
+            return _response(200, b"not-json")
+
+    transport = OllamaTransport(
+        PROTOCOL["transport"]["endpoint"], 30, session=Session()
+    )
+    with pytest.raises(TransportResponseError, match="non-JSON"):
+        transport.chat({"model": PROTOCOL["primary_model"]})
+
+
 def test_protocol_and_retained_execution_fail_closed():
     changed = copy.deepcopy(PROTOCOL)
     changed["sampling"]["unreviewed"] = 1
@@ -494,8 +565,10 @@ def test_preflight_fingerprints_every_executable_s6_dependency():
         "bench/s7_preflight.py",
         "bench/s7_protocol.json",
         "bench/s7_protocol_v1.0.0.json",
+        "bench/s7_protocol_v1.0.1.json",
         "bench/s7_run.py",
         "evidence/s7/d0a-instrument-audit.json",
+        "evidence/s7/d0a-ollama-parser-audit.json",
         "requirements-analysis.txt",
         "bench/manifests/office-v1/development-exposure-v0.11.0.json",
     }
@@ -579,8 +652,6 @@ def test_scheduler_retries_only_environment_failure_and_resumes_exactly(
         s6_run.RunPolicy(
             environment_retry_cooldown_seconds=60,
             verify_transport_health_before_retry=True,
-            environment_retry_failure_type="HTTPError",
-            environment_retry_http_status=500,
         ),
     )
     assert summary["committed_attempts"] == 2
@@ -618,8 +689,6 @@ def test_scheduler_retries_only_environment_failure_and_resumes_exactly(
         s6_run.RunPolicy(
             environment_retry_cooldown_seconds=60,
             verify_transport_health_before_retry=True,
-            environment_retry_failure_type="HTTPError",
-            environment_retry_http_status=500,
         ),
     )
     assert resumed == summary
@@ -638,7 +707,92 @@ def test_scheduler_never_retries_a_valid_model_failure(monkeypatch, tmp_path):
     assert len(transport.payloads) == PROTOCOL["opportunity_budget"]["model_calls"]
 
 
-def test_scheduler_does_not_apply_http_500_recovery_to_other_environment_faults(
+def test_parser_rejection_is_one_model_failure_with_bounded_token_telemetry(
+    monkeypatch, tmp_path
+):
+    class ParserRejectTransport:
+        def __init__(self):
+            self.payloads = []
+
+        def chat(self, payload):
+            self.payloads.append(copy.deepcopy(payload))
+            raise ModelOutputProtocolError(
+                "XML syntax error on line 26: unexpected EOF", 500
+            )
+
+    instance = _one("cal_add")
+    transport = ParserRejectTransport()
+    monkeypatch.setattr(s6_preflight, "collect", lambda *_a, **_k: _fake_preflight())
+    monkeypatch.setattr(s6_run, "OllamaTransport", lambda *_a, **_k: transport)
+    args = _scheduler_args(tmp_path, instance["content"]["id"], "parser-model")
+    summary = s6_run._run(
+        args,
+        s6_run.RunPolicy(
+            environment_retry_cooldown_seconds=60,
+            verify_transport_health_before_retry=True,
+        ),
+    )
+    assert summary["committed_attempts"] == 1
+    assert summary["cells"][0]["failure_origin"] == "model"
+    assert summary["cells"][0]["strict_success"] is False
+    assert len(transport.payloads) == 1
+
+    record = json.loads(
+        (tmp_path / "parser-model" / "results.json").read_text("utf-8")
+    )["records"][0]
+    result = record["result"]
+    assert result["execution_status"] == "model_error"
+    assert result["failure"] == {
+        "type": "model_output_tool_syntax_rejected",
+        "message": "XML syntax error on line 26: unexpected EOF",
+        "provider": "ollama",
+        "provider_parser": "qwen3.5/qwen3coder",
+        "http_status": 500,
+        "retryable": False,
+        "request_index": 1,
+        "role": "driver",
+        "seed": result["failure"]["seed"],
+        "requested_num_predict": 700,
+        "client_wall_seconds": result["failure"]["client_wall_seconds"],
+        "request_sha256": result["failure"]["request_sha256"],
+        "generated_tokens_exact": False,
+        "generated_tokens_lower_bound": 0,
+        "generated_tokens_upper_bound": 700,
+    }
+    assert result["metrics"]["generated_tokens"] is None
+    assert result["diagnostics"]["ledger"]["generated_tokens_exact"] is False
+    assert result["diagnostics"]["ledger"]["generated_tokens_lower_bound"] == 0
+    assert result["diagnostics"]["ledger"]["generated_tokens_upper_bound"] == 700
+
+
+def test_score_masked_projection_hides_model_outcome_status(monkeypatch, tmp_path):
+    class ParserRejectTransport:
+        def chat(self, _payload):
+            raise ModelOutputProtocolError(
+                "XML syntax error on line 4: "
+                "element <function> closed by </parameter>",
+                500,
+            )
+
+    instance = _one("cal_add")
+    monkeypatch.setattr(s6_preflight, "collect", lambda *_a, **_k: _fake_preflight())
+    monkeypatch.setattr(
+        s6_run, "OllamaTransport", lambda *_a, **_k: ParserRejectTransport()
+    )
+    args = _scheduler_args(tmp_path, instance["content"]["id"], "masked-model")
+    summary = s6_run._run(
+        args,
+        s6_run.RunPolicy(
+            grading_mode="deferred",
+            score_masked=True,
+        ),
+    )
+    cell = summary["cells"][0]
+    assert cell["instrument_valid"] is True
+    assert not ({"execution_status", "failure_origin", "strict_success"} & set(cell))
+
+
+def test_scheduler_does_not_retry_unresolved_bare_oserror(
     monkeypatch, tmp_path
 ):
     instance = _one("cal_add")
@@ -667,12 +821,11 @@ def test_scheduler_does_not_apply_http_500_recovery_to_other_environment_faults(
         s6_run.RunPolicy(
             environment_retry_cooldown_seconds=60,
             verify_transport_health_before_retry=True,
-            environment_retry_failure_type="HTTPError",
-            environment_retry_http_status=500,
         ),
     )
-    assert summary["committed_attempts"] == 2
-    assert summary["cells"][0]["strict_success"] is True
+    assert summary["committed_attempts"] == 1
+    assert summary["cells"][0]["failure_origin"] == "environment"
+    assert summary["cells"][0]["strict_success"] is None
     assert sleeps == []
     assert transport.health_checks == 0
 

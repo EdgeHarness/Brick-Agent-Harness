@@ -11,6 +11,7 @@ import copy
 import hashlib
 import json
 import math
+import re
 import time
 
 import requests
@@ -108,6 +109,19 @@ class ExperimentError(RuntimeError):
     """An instrument defect or unavailable environment, never a model fault."""
 
 
+class TransportResponseError(ExperimentError):
+    """The provider returned a response the instrument cannot interpret."""
+
+
+class ModelOutputProtocolError(RuntimeError):
+    """The pinned provider rejected a complete, malformed model tool call."""
+
+    def __init__(self, provider_error, http_status):
+        super().__init__(provider_error)
+        self.provider_error = provider_error
+        self.http_status = http_status
+
+
 class BudgetExhausted(RuntimeError):
     """The model consumed the frozen end-to-end opportunity budget."""
 
@@ -140,8 +154,11 @@ class OpportunityLedger:
         self.per_request = per_request
         self.calls = 0
         self.generated_tokens = 0
+        self.generated_tokens_upper_bound = 0
+        self.generated_tokens_exact = True
         self.call_roles = {}
         self.role_generated_tokens = {}
+        self.role_generated_tokens_upper_bound = {}
         self._active_role = None
         if role_budgets is not None:
             if not isinstance(role_budgets, dict) or not role_budgets:
@@ -173,7 +190,7 @@ class OpportunityLedger:
 
     @property
     def remaining_tokens(self):
-        return self.maximum_tokens - self.generated_tokens
+        return self.maximum_tokens - self.generated_tokens_upper_bound
 
     def begin_request(self, role):
         if self._active_role is not None:
@@ -186,7 +203,7 @@ class OpportunityLedger:
                 raise BudgetExhausted("model role has no opportunity budget")
             role_budget = self.role_budgets[role]
             role_calls = self.call_roles.get(role, 0)
-            role_tokens = self.role_generated_tokens.get(role, 0)
+            role_tokens = self.role_generated_tokens_upper_bound.get(role, 0)
             if (
                 role_calls >= role_budget["model_calls"]
                 or role_tokens >= role_budget["generated_tokens"]
@@ -217,8 +234,13 @@ class OpportunityLedger:
                 "response generated-token count violates its request limit"
             )
         self.generated_tokens += generated_tokens
+        self.generated_tokens_upper_bound += generated_tokens
         self.role_generated_tokens[active_role] = (
             self.role_generated_tokens.get(active_role, 0) + generated_tokens
+        )
+        self.role_generated_tokens_upper_bound[active_role] = (
+            self.role_generated_tokens_upper_bound.get(active_role, 0)
+            + generated_tokens
         )
         self._active_role = None
         if self.generated_tokens > self.maximum_tokens:
@@ -229,10 +251,47 @@ class OpportunityLedger:
         ):
             raise ExperimentError("generated-token role ledger exceeded its ceiling")
 
+    def finish_request_unknown(self, requested_limit, role=None):
+        """Close a rejected request whose provider omitted token telemetry.
+
+        The lower bound remains the observed total and the upper bound reserves
+        the entire requested allowance.  The attempt terminates immediately, so
+        this uncertainty can never create additional model opportunity.
+        """
+
+        active_role = self._active_role
+        if active_role is None:
+            raise ExperimentError("no model request is awaiting accounting")
+        if role is not None and role != active_role:
+            raise ExperimentError("model response role differs from its request")
+        if type(requested_limit) is not int or requested_limit < 1:
+            raise ExperimentError("unknown request limit is invalid")
+        self.generated_tokens_upper_bound += requested_limit
+        self.role_generated_tokens_upper_bound[active_role] = (
+            self.role_generated_tokens_upper_bound.get(active_role, 0)
+            + requested_limit
+        )
+        self.generated_tokens_exact = False
+        self._active_role = None
+        if self.generated_tokens_upper_bound > self.maximum_tokens:
+            raise ExperimentError("generated-token upper bound exceeded its ceiling")
+        if self.role_budgets is not None and (
+            self.role_generated_tokens_upper_bound[active_role]
+            > self.role_budgets[active_role]["generated_tokens"]
+        ):
+            raise ExperimentError(
+                "generated-token role upper bound exceeded its ceiling"
+            )
+
     def as_record(self):
         record = {
             "model_calls": self.calls,
-            "generated_tokens": self.generated_tokens,
+            "generated_tokens": (
+                self.generated_tokens if self.generated_tokens_exact else None
+            ),
+            "generated_tokens_exact": self.generated_tokens_exact,
+            "generated_tokens_lower_bound": self.generated_tokens,
+            "generated_tokens_upper_bound": self.generated_tokens_upper_bound,
             "maximum_model_calls": self.maximum_calls,
             "maximum_generated_tokens": self.maximum_tokens,
             "generated_tokens_per_request": self.per_request,
@@ -245,6 +304,9 @@ class OpportunityLedger:
             }
             record["role_generated_tokens"] = dict(
                 sorted(self.role_generated_tokens.items())
+            )
+            record["role_generated_tokens_upper_bound"] = dict(
+                sorted(self.role_generated_tokens_upper_bound.items())
             )
         return record
 
@@ -325,6 +387,36 @@ class ExecutionContext:
         )
 
 
+_QWEN35_TOOL_XML_ERRORS = re.compile(
+    r"^XML syntax error on line [1-9][0-9]*: "
+    r"(?:unexpected EOF|element <function> closed by </parameter>)$"
+)
+
+
+def _recognized_qwen35_tool_syntax_rejection(payload, response):
+    """Return the exact provider error for the two source-proven signatures."""
+
+    if getattr(response, "status_code", None) != 500:
+        return None
+    if not isinstance(payload, dict) or not str(payload.get("model", "")).startswith(
+        "qwen3.5:"
+    ):
+        return None
+    tools = payload.get("tools")
+    if not isinstance(tools, list) or not tools:
+        return None
+    try:
+        body = response.json()
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(body, dict) or set(body) != {"error"}:
+        return None
+    error = body["error"]
+    if not isinstance(error, str) or _QWEN35_TOOL_XML_ERRORS.fullmatch(error) is None:
+        return None
+    return error
+
+
 class OllamaTransport:
     """Loopback-only Ollama client with proxy inheritance disabled."""
 
@@ -343,8 +435,28 @@ class OllamaTransport:
             json=payload,
             timeout=(5, self.timeout_seconds),
         )
-        response.raise_for_status()
-        return response.json()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            provider_error = _recognized_qwen35_tool_syntax_rejection(
+                payload, response
+            )
+            if provider_error is not None:
+                raise ModelOutputProtocolError(
+                    provider_error, response.status_code
+                ) from exc
+            raise
+        try:
+            body = response.json()
+        except (TypeError, ValueError) as exc:
+            raise TransportResponseError(
+                "Ollama returned a non-JSON success response"
+            ) from exc
+        if not isinstance(body, dict):
+            raise TransportResponseError(
+                "Ollama returned a non-object success response"
+            )
+        return body
 
     def verify_health(self, protocol, expected_environment):
         """Verify the loopback server identity without invoking the model."""
@@ -378,15 +490,61 @@ class OllamaTransport:
         }
 
 
-def _environment_failure(exc):
-    """Preserve a transport status code when the client exposes one."""
+def _transport_failure(exc):
+    """Classify a provider-call exception conservatively and explicitly."""
 
-    failure = {"type": type(exc).__name__, "message": str(exc)}
+    failure = {
+        "type": type(exc).__name__,
+        "message": str(exc),
+        "retryable": False,
+    }
     response = getattr(exc, "response", None)
     status_code = getattr(response, "status_code", None)
     if type(status_code) is int:
         failure["http_status"] = status_code
-    return failure
+    if isinstance(exc, (requests.ConnectionError, requests.Timeout)):
+        failure["category"] = "transport_connectivity"
+        failure["retryable"] = True
+        return "environment_unstable", "environment", failure
+    if isinstance(exc, requests.HTTPError):
+        if type(status_code) is int and 500 <= status_code <= 599:
+            failure["category"] = "provider_server_error"
+            failure["retryable"] = True
+            return "environment_unstable", "environment", failure
+        failure["category"] = "provider_request_rejected"
+        return "runner_error", "runner", failure
+    if isinstance(exc, OSError):
+        failure["category"] = "unresolved_host_error"
+        return "environment_unstable", "environment", failure
+    failure["category"] = "unresolved_transport_client_error"
+    return "runner_error", "runner", failure
+
+
+def _model_output_protocol_failure(
+    exc, ledger, requested_limit, role, payload, seed, wall_seconds
+):
+    """Close and describe an unmetered provider-rejected model generation."""
+
+    ledger.finish_request_unknown(requested_limit, role)
+    return {
+        "type": "model_output_tool_syntax_rejected",
+        "message": str(exc),
+        "provider": "ollama",
+        "provider_parser": "qwen3.5/qwen3coder",
+        "http_status": exc.http_status,
+        "retryable": False,
+        "request_index": ledger.calls,
+        "role": role,
+        "seed": seed,
+        "requested_num_predict": requested_limit,
+        "client_wall_seconds": wall_seconds,
+        "request_sha256": hashlib.sha256(
+            canonical_json_bytes(payload, allow_float=True)
+        ).hexdigest(),
+        "generated_tokens_exact": False,
+        "generated_tokens_lower_bound": 0,
+        "generated_tokens_upper_bound": requested_limit,
+    }
 
 
 def validate_protocol(protocol):
@@ -792,10 +950,17 @@ def run_raw_json_attempt(
             started = time.monotonic()
             try:
                 response = transport.chat(payload)
+            except ModelOutputProtocolError as exc:
+                wall = time.monotonic() - started
+                execution_status = "model_error"
+                failure_origin = "model"
+                failure = _model_output_protocol_failure(
+                    exc, ledger, request_limit, "driver", payload, seed, wall
+                )
+                episode_status = "model_error"
+                break
             except Exception as exc:
-                execution_status = "environment_unstable"
-                failure_origin = "environment"
-                failure = _environment_failure(exc)
+                execution_status, failure_origin, failure = _transport_failure(exc)
                 episode_status = "instrument_failure"
                 break
             wall = time.monotonic() - started
@@ -914,7 +1079,9 @@ def run_raw_json_attempt(
         "transcript": transcript,
         "metrics": {
             "model_calls": ledger.calls,
-            "generated_tokens": ledger.generated_tokens,
+            "generated_tokens": (
+                ledger.generated_tokens if ledger.generated_tokens_exact else None
+            ),
             "model_eval_seconds": model_seconds,
             "wall_seconds": wall_seconds,
             "successful_actions": sum(action["ok"] for action in context.actions),
@@ -999,10 +1166,17 @@ def run_attempt(
             started = time.monotonic()
             try:
                 response = transport.chat(payload)
+            except ModelOutputProtocolError as exc:
+                wall = time.monotonic() - started
+                execution_status = "model_error"
+                failure_origin = "model"
+                failure = _model_output_protocol_failure(
+                    exc, ledger, request_limit, role_name, payload, seed, wall
+                )
+                episode_status = "model_error"
+                break
             except Exception as exc:
-                execution_status = "environment_unstable"
-                failure_origin = "environment"
-                failure = _environment_failure(exc)
+                execution_status, failure_origin, failure = _transport_failure(exc)
                 episode_status = "instrument_failure"
                 break
             wall = time.monotonic() - started
@@ -1198,7 +1372,9 @@ def run_attempt(
         "transcript": transcript,
         "metrics": {
             "model_calls": ledger.calls,
-            "generated_tokens": ledger.generated_tokens,
+            "generated_tokens": (
+                ledger.generated_tokens if ledger.generated_tokens_exact else None
+            ),
             "model_eval_seconds": model_seconds,
             "wall_seconds": wall_seconds,
             "successful_actions": sum(action["ok"] for action in context.actions),
@@ -1230,6 +1406,8 @@ __all__ = [
     "ExecutionContext",
     "ExperimentError",
     "OllamaTransport",
+    "ModelOutputProtocolError",
+    "TransportResponseError",
     "OpportunityLedger",
     "base_seed",
     "condition_registry",

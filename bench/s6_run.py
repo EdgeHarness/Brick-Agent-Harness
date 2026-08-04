@@ -70,8 +70,6 @@ class RunPolicy:
     summary_schema: str = "brick.s6.run-summary/1"
     environment_retry_cooldown_seconds: int = 0
     verify_transport_health_before_retry: bool = False
-    environment_retry_failure_type: object = None
-    environment_retry_http_status: object = None
 
     def __post_init__(self):
         if self.grading_mode not in {"immediate", "deferred"}:
@@ -96,18 +94,6 @@ class RunPolicy:
             and self.environment_retry_cooldown_seconds < 1
         ):
             raise ValueError("transport health verification requires a cooldown")
-        configured_failure = self.environment_retry_failure_type is not None
-        configured_status = self.environment_retry_http_status is not None
-        if configured_failure != configured_status:
-            raise ValueError("environment recovery selector is incomplete")
-        if configured_failure and (
-            not isinstance(self.environment_retry_failure_type, str)
-            or not self.environment_retry_failure_type
-            or type(self.environment_retry_http_status) is not int
-            or not 400 <= self.environment_retry_http_status <= 599
-            or self.environment_retry_cooldown_seconds < 1
-        ):
-            raise ValueError("environment recovery selector is invalid")
 
 
 def _sha256(value, allow_float=False):
@@ -517,8 +503,9 @@ def _run(args, policy, preflight=None):
                 "verify_transport_health_before_retry": (
                     policy.verify_transport_health_before_retry
                 ),
-                "failure_type": policy.environment_retry_failure_type,
-                "http_status": policy.environment_retry_http_status,
+                "eligible_failure_origin": "environment",
+                "requires_retryable_failure_marker": True,
+                "same_seed": True,
             },
         })
     store = EvidenceStore.create_run(args.runs_root, run_id, metadata)
@@ -550,15 +537,16 @@ def _run(args, policy, preflight=None):
                 final = resolution.record
                 if final["failure_origin"] not in {"runner", "environment"}:
                     break
-                if (
+                failure = final["result"]["failure"]
+                retryable = (
                     final["failure_origin"] == "environment"
+                    and isinstance(failure, dict)
+                    and failure.get("retryable") is True
                     and repeat < protocol["instrument_retry_limit"]
-                    and policy.environment_retry_cooldown_seconds
-                    and final["result"]["failure"].get("type")
-                    == policy.environment_retry_failure_type
-                    and final["result"]["failure"].get("http_status")
-                    == policy.environment_retry_http_status
-                ):
+                )
+                if not retryable:
+                    break
+                if policy.environment_retry_cooldown_seconds:
                     print(
                         json.dumps({
                             "event": "environment_retry_cooldown",
@@ -572,18 +560,22 @@ def _run(args, policy, preflight=None):
                         flush=True,
                     )
                     time.sleep(policy.environment_retry_cooldown_seconds)
-                    if policy.verify_transport_health_before_retry:
-                        transport.verify_health(protocol, environment)
+                if policy.verify_transport_health_before_retry:
+                    transport.verify_health(protocol, environment)
             cell = {
                 "wave": wave,
                 "family": family,
                 "instance_id": instance["content"]["id"],
                 "condition": name,
                 "logical_hash": final["logical_hash"],
-                "execution_status": final["execution_status"],
-                "failure_origin": final["failure_origin"],
             }
-            if not policy.score_masked:
+            if policy.score_masked:
+                cell["instrument_valid"] = final["failure_origin"] in {
+                    "none", "model",
+                }
+            else:
+                cell["execution_status"] = final["execution_status"]
+                cell["failure_origin"] = final["failure_origin"]
                 cell["strict_success"] = final["strict_success"]
             cells.append(cell)
             print(

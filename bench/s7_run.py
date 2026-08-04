@@ -67,12 +67,6 @@ def run(args, preflight=None):
                 "verify_loopback_version_and_model_digest"
             ]
         ),
-        environment_retry_failure_type=(
-            s7["environment_recovery"]["eligible_failure_type"]
-        ),
-        environment_retry_http_status=(
-            s7["environment_recovery"]["eligible_http_status"]
-        ),
     )
     summary = s6_run._run(base_args, policy, preflight=checked)
     if len(summary["cells"]) != s7["d0"]["primary_attempts_per_cohort"]:
