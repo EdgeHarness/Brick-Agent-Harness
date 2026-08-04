@@ -980,6 +980,8 @@ def _validate_candidate_payloads(
     return {
         "attempt": attempt,
         "key": key,
+        "final_state": final,
+        "actions": actions,
         "result": result,
         "grade": grade,
     }

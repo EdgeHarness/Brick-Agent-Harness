@@ -69,6 +69,15 @@ read, and retained execution remains mechanically disabled.
   execution status and failure origin—fields that leaked model budget outcomes
   during D0-A—and emits only instrument validity.
 
+### Fixed
+
+- The first direction-blind D0-B audit invocation stopped before grading or
+  artifact creation because it reparsed committed `actions.json` through the
+  manifest-only JSON loader, which correctly forbids binary floats. Committed
+  evidence permits finite numeric tool arguments and already validates their
+  canonical bytes. The audit now consumes those same validated semantic
+  payloads, with a regression covering a spreadsheet-style float cell.
+
 ## [0.11.1] — 2026-08-03
 
 Pre-D0 integrity repair. This release replaces undersized and exposed

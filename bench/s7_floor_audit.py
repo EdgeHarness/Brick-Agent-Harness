@@ -28,9 +28,13 @@ def _grade_record(store, record, instance):
         / record["logical_hash"]
         / record["physical_uuid"]
     )
-    validate_committed(candidate)
-    final_state = load_canonical_json(candidate / "final-state.json")["payload"]
-    actions = load_canonical_json(candidate / "actions.json")["actions"]
+    validated = validate_committed(candidate)
+    # Evidence JSON deliberately permits finite binary floats (for example,
+    # spreadsheet cell values), while frozen manifests do not.  Grade the
+    # exact payloads already decoded and schema-checked by the evidence
+    # validator instead of reparsing them through the manifest-only loader.
+    final_state = validated["semantic"]["final_state"]["payload"]
+    actions = validated["semantic"]["actions"]["actions"]
     artifacts = [
         (path.name, path.read_bytes())
         for path in sorted((candidate / "artifacts").iterdir())

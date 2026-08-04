@@ -16,6 +16,7 @@ from harness.evidence import (
     EvidenceStore,
     LogicalCollisionError,
     RunLockedError,
+    validate_committed,
 )
 
 
@@ -445,6 +446,35 @@ def test_run_creation_is_exclusive_and_open_validates_existing_metadata(tmp_path
     reopened = EvidenceStore.open_run(runs_root, RUN_ID)
     with reopened.locked() as session:
         assert session is not None
+
+
+def test_committed_validation_returns_float_safe_grading_payloads(tmp_path):
+    store = make_store(tmp_path)
+    key = make_key()
+
+    def producer(writer):
+        for relative, template in REQUIRED_EVIDENCE.items():
+            value = json.loads(json.dumps(template))
+            if relative == "actions.json":
+                value["actions"][0]["args"] = {
+                    "rows": [["Amount"], ["Total", 17.25]],
+                }
+            writer.write_json(relative, value)
+        writer.write_bytes("transcript.md", b"# float-safe evidence\n")
+        writer.write_bytes(
+            "memory-delta.jsonl",
+            b'{"delta":[],"schema_version":"brick.memory-delta/1"}\n',
+        )
+        writer.write_bytes("artifacts/followup.txt", b"artifact\n")
+
+    resolution = store.execute_or_resume(key, producer)
+    validated = validate_committed(resolution.candidate_path)
+    assert validated["semantic"]["actions"]["actions"][0]["args"] == {
+        "rows": [["Amount"], ["Total", 17.25]],
+    }
+    assert validated["semantic"]["final_state"]["payload"] == {
+        "lead": {"id": "lead-0001", "status": "approved"},
+    }
 
 
 def test_run_manifest_change_invalidates_existing_committed_attempts(tmp_path):
