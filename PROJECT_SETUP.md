@@ -36,6 +36,16 @@ preregistered direction-blind audit raised three ceiling flags and one floor
 flag. S8 and S9 are blocked, retained execution is mechanically disabled, and
 no condition-level or confirmatory effect estimate exists.
 
+A separate offline successor-design contract now records the verified causes
+and necessary controls without reopening S7. The condition-blind postmortem
+shows that coarse structural balance hid one-to-eight-call action burdens and
+that the rules reference and grader shared the same hidden `required_effects`
+source. A 352-case/1,984-probe mutation audit validates every applicable named
+check for the retired grader only. The proposed fresh 528-case successor,
+independent prompt-to-outcome oracle, human review ledger, repeated-trial
+analysis, and expanded sentinel are not yet implemented as an executable study;
+all eight gates and all model execution remain disabled.
+
 Release identity is authoritative in annotated Git tags and their bound
 evidence, not in mutable current-status prose. S4 uses three commits/states:
 tested candidate `C`; direct attestation-only release descendant `R`, tagged
@@ -95,9 +105,10 @@ with Snapdragon X Elite, 32 GB RAM, and native Windows 11 ARM64.
 | S6G | `v0.10.0` | Independent versioned generators and split manifests. | Development, validation, sentinel, retained, and adversarial instances replay exactly and pass structural-overlap review. |
 | S6C | `v0.11.0` | Shared native-tool transport, condition registry, opportunity ledger, standalone scheduler, telemetry, rules reference, and descriptive ablations. | Primary conditions share the exact model transport, schemas, validators, tasks, and budgets; every condition has an immutable mechanism digest. |
 | Pre-D0 | `v0.11.1` | Fresh balanced D0 cohorts, immutable exposure accounting, and corrected Brix grading. | Each D0 cohort has 44 pairs/88 primary attempts with matched marginals and disjoint structures; all exposed-material reuse channels fail closed; all 352 rules-reference cases pass strictly. |
-| D0/S7 | `v0.12.0` | Score-masked development timing run and frozen protocol, manifests, exclusions, order, analysis, and sample size. | Only instrumentation and resource fields were visible during D0; all retained inputs hash-match the tag before retained outcomes are inspected. |
-| S8 | `v0.13.x` | Disposable sentinel across every retained condition. | There are zero instrument-invalid sentinel cells. Any instrument change creates a patch release and requires a complete sentinel rerun. |
-| S9 | `v0.14.0` | Sealed primary experiment, bounded descriptive work, immutable evidence bundle, final report, and reproduction command. | A clean checkout reproduces all reported records, tables, intervals, and conclusions from validated committed bundles. |
+| D0/S7 | not released | Terminal score-masked development calibration under protocol 1.0.2. | The direction-blind floor/ceiling audit failed, so no freeze or efficacy contrast exists. |
+| Successor design | not assigned | Fresh tasks, independent oracle and human review, mutation matrix, repeated-trial statistics, and sentinel protocol. | Every reviewed design gate closes before any live model execution is authorized. |
+| Successor sentinel | not assigned | Disposable sentinel across every successor retained condition. | The frozen sentinel's instrument-validity rule and error bound pass without an instrument change. |
+| Successor retained run | not assigned | New sealed primary experiment, bounded descriptives, evidence bundle, and report. | A clean checkout reproduces the result from validated committed bundles; this row is unreachable until the successor sentinel passes. |
 
 ## F0/Q0 — feasibility and quarantine
 
@@ -841,7 +852,11 @@ instances and is reported separately as an architecture-selection reference. If
 rules are more accurate and cheaper for a family, the conclusion recommends a
 deterministic workflow for that family.
 
-## D0/S7 — frozen research protocol
+## Retired D0/S7 protocol — historical specification
+
+This section records protocol 1.0.2 exactly enough to interpret its artifacts.
+It is not an active execution plan. The failed direction-blind audit made every
+later command and S8/S9 provision in this lineage unreachable.
 
 The source contains the S7 enforcement layer: deferred D0 grading, a
 score-masked operator summary, exact reconstruction of every attempt identity,
@@ -896,7 +911,8 @@ causal parameter-size law.
 
 ### Sample-size rule
 
-D0 runs 44 development pairs on 4B with efficacy fields masked. Operators may
+Under retired protocol 1.0.2, D0 ran 44 development pairs on 4B with efficacy
+fields masked. Operators could
 inspect instrumentation validity, resource use, calls, tokens, and elapsed time,
 but not strict success, component scores, directional discordance, or
 family-level effects.
@@ -987,7 +1003,11 @@ draw per retained cell, so this milestone makes no within-instance repeatability
 or pass-at-\(k\) claim. It reports the success distribution across independently
 generated cases under the frozen sampling policy.
 
-## S8/S9 — sentinel and retained execution
+## S8/S9 — unexecuted historical design
+
+Nothing in this section is authorized under protocol 1.0.2. It is retained to
+show what the failed S7 gate prevented and must not be adapted into a successor
+without a new reviewed protocol.
 
 A plain Python or PowerShell command owns the queue, run lock, heartbeat, health
 checks, evidence commits, logs, and resume. Execution does not depend on an
@@ -1047,7 +1067,8 @@ runs.
 
 Real Brix discovery, provider integration, approved-data shadow evaluation,
 pilot deployment, external-benchmark integration, and model fine-tuning are
-outside this milestone. They may be considered after `v0.14.0`; none is needed
+outside this retired milestone. They may be considered only after a valid
+successor study; none is needed
 to manufacture a positive internal result. Broader claims require independently
 developed domains or a suitable pinned external benchmark.
 

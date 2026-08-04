@@ -146,6 +146,16 @@ no further correction cohort, and retained execution remains mechanically
 disabled. The next legitimate work is postmortem/research redesign under a new
 study, not continuation of this preregistered experiment.
 
+The first offline redesign scaffold is now executable and fail closed. Verify
+it with `python -m pytest tests/test_next_study.py -q`. It binds the terminal S7
+artifacts, reproduces a condition-blind postmortem, reruns 1,984 targeted grader
+mutation probes across all 352 retired-suite cases, reconciles a proposed fresh
+528-case suite, and refuses every live execution. The next implementation goal
+is a new generator plus a genuinely independent prompt-to-outcome oracle and
+two-reviewer adjudication ledger, followed by a frozen repeat-aware power and
+analysis protocol. No model call is allowed merely because the offline design
+exists. See `bench/NEXT_STUDY_RESEARCH_BASIS.md`.
+
 Do not import or synchronize the moving `SMalshe/Brick` product tree into the
 research instrument or a retained condition. `PROJECT_GUIDE.md` defines the convergence
 rule: future product work is identified by an immutable commit and enters
@@ -267,11 +277,12 @@ a harness that helps only on the subset selected for it is a weaker result than
 a smaller effect measured across the full frozen distribution. Dilution is
 accepted as an honest cost.
 
-### Preregistered floor and ceiling audit
+### Retired S7 preregistered floor and ceiling audit
 
 Dilution risk is managed by a rule fixed in advance, not by later judgement.
 
-D0 runs 44 score-masked development pairs: four pairs per family, therefore
+Under the now-terminal protocol, D0 ran 44 score-masked development pairs: four
+pairs per family, therefore
 **eight outcomes per family** across both conditions. Audit combined
 development-set success only, never retained outcomes:
 

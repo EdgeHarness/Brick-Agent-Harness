@@ -115,6 +115,17 @@ completed all 44 pairs/88 attempts as `s7-d0b-20260804T025010Z` from commit
 there is no `v0.12.0`, no S8 handoff, no condition-level result, and retained
 execution remains mechanically disabled.
 
+The only active successor work is offline redesign. The tracked condition-blind
+postmortem verifies that D0-B's matched workload/distractor/constraint marginals
+still hid minimum action burdens ranging from one to eight calls, and that the
+rules reference and grader shared `required_effects` rather than supplying an
+independent outcome oracle. A 352-case/1,984-probe model-free mutation audit now
+validates every applicable named check for the retired grader. The proposed
+`brick.next-study.design/1` remains `offline_design_only`: every execution gate,
+live model execution, and retained execution are false. Read
+[`bench/NEXT_STUDY_RESEARCH_BASIS.md`](bench/NEXT_STUDY_RESEARCH_BASIS.md)
+before changing it.
+
 For S4, release state is authoritative in the annotated tag and bound evidence.
 Direct descendant `R` adds only the regular file
 `evidence/s4/v0.5.0.json`, so tagged `R`
@@ -175,9 +186,10 @@ carry a `domain` for exactly this reason.
 | S6G | `v0.10.0` | Independent versioned task generators and split manifests |
 | S6C | `v0.11.0` | Shared native transport, condition registry, scheduler, telemetry |
 | Pre-D0 | `v0.11.1` | Fresh balanced D0 cohorts, exposure ledger, corrected Brix grader |
-| D0/S7 | `v0.12.0` | Score-masked timing run, then frozen protocol and analysis |
-| S8 | `v0.13.x` | Disposable sentinel across every retained condition |
-| S9 | `v0.14.0` | Sealed retained experiment, evidence bundle, final report |
+| D0/S7 | not released | Terminal failed calibration; no protocol freeze or efficacy contrast |
+| Successor design | not assigned | Fresh tasks, independent oracle/review, mutation audit, repeated-trial statistics, and sentinel protocol; all live gates currently closed |
+| Successor sentinel | not assigned | Disposable sentinel only after every design gate closes |
+| Successor retained run | not assigned | New sealed experiment only after a valid sentinel |
 
 ## The primary contrast
 

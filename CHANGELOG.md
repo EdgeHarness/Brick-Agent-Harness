@@ -25,6 +25,22 @@ condition comparison, or retained execution is permitted.
 
 ### Added
 
+- A canonical, condition-blind S7 postmortem bound to the tracked runtime
+  decision and floor/ceiling audit. It proves that matched coarse structural
+  marginals did not equalize minimum action burden: the retired D0-B families
+  span conservative lower bounds from one to eight model-facing tool calls.
+- A model-free mutation audit over every generated office case. All 1,984
+  applicable named-check probes across 352 cases are rejected by their intended
+  check, with no model call and no retained execution. This validates mutation
+  sensitivity of the retired grader only; it is not an independent outcome
+  oracle.
+- A fail-closed `brick.next-study.design/1` offline design and executable
+  contract. It binds the terminal S7 artifacts, proposes a fresh 528-case
+  namespace, reconciles calibration/sentinel/primary counts, starts all eight
+  execution gates closed, and always refuses live or retained execution.
+- A post-S7 research basis distinguishing peer-reviewed evidence, maintained
+  open-source implementations, recent preprints, verified local findings, and
+  still-unresolved design gates.
 - A canonical score-free Ollama parser audit binding the original 2,720,975-byte
   server-log snapshot, all six adjacent Qwen parser/HTTP 500 events, the
   non-truncated generation telemetry, and the exact v0.32.5 parser tag and blob
@@ -51,7 +67,7 @@ condition comparison, or retained execution is permitted.
 - Offline regressions for exact Qwen parser-signature recognition, unknown-5xx
   fallback, malformed success responses, no retry of runner or model failures,
   honest generated-token bounds, and operator-projection masking. The complete
-  native Windows ARM64 suite passes 857 tests with 3 intentional skips.
+  native Windows ARM64 suite passes 870 tests with 3 intentional skips.
 
 ### Changed
 

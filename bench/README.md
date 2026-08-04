@@ -263,10 +263,10 @@ failure in either makes the case null. The subepisodes are not counted as two
 model attempts, so the stated primary and secondary totals remain unchanged.
 
 The checked-in development, validation, sentinel, retained, and adversarial
-manifests contain 22, 44, 11, 220, and 44 cases respectively. They replay
-exactly and share no instance IDs, semantic structures, or structural templates;
-no entity key or entity surface value repeats anywhere in the suite. Verify
-them without model or network
+manifests contain 88, 11, 11, 220, and 22 cases respectively: 352 total. They
+replay exactly and share no instance IDs or semantic structures; no entity key
+or entity surface value repeats anywhere in the suite. Verify them without
+model or network
 access:
 
 ```powershell
@@ -274,8 +274,8 @@ python -m bench.generate_manifests --verify
 ```
 
 These are frozen benchmark inputs, not outcomes. S6C compiles them into paired
-runnable primary conditions plus separately labeled descriptives. Retained
-execution remains mechanically blocked until S8/S9.
+primary conditions plus separately labeled descriptives. Retained execution for
+this retired suite is permanently blocked; its S8/S9 path is unreachable.
 
 Read-only native preflight and disposable engineering runs:
 
@@ -528,10 +528,10 @@ metadata-only release descendant `R` attestation. A nonzero command, non-pass
 summary, dirty worktree, unverified archive, or behavioral change after `C`
 leaves F0 pending and forbids `v0.4.0`.
 
-## Sample and analysis
+## Retired S7 sample and analysis
 
-D0 runs 44 score-masked development pairs and selects sample size using runtime
-only:
+The now-terminal S7 protocol ran 44 score-masked development pairs and selected
+sample size using runtime only:
 
 - default: 20 cases per family, 220 pairs, 440 attempts;
 - predeclared fallback: 12 cases per family, 132 pairs, 264 attempts.
@@ -603,9 +603,29 @@ flags for `cal_brief`, `email_reply`, and `pptx_from_email` and a floor flag for
 The flagged branch is terminal: no D0-C, S7 freeze, S8 handoff, or retained run
 is permitted under this protocol.
 
-## Descriptive matrix
+### Post-S7 successor design boundary
 
-Run descriptives only after sealing the primary:
+The terminal, condition-blind postmortem is tracked at
+`evidence/s7/d0b-direction-blind-postmortem.json`. It consumes only the tracked
+runtime decision, direction-blind audit, and public development manifest; it
+does not open raw attempts or compute a condition contrast. Rebuild and verify
+the complete offline successor scaffold with:
+
+```powershell
+python -m bench.s7_postmortem
+python -m pytest tests/test_next_study.py -q
+```
+
+`bench/next_study_design.json` is deliberately `offline_design_only`. Its fresh
+suite, repeated-trial calibration, primary, and larger sentinel are proposed
+counts, not an execution protocol. Every execution gate, live model execution,
+and retained execution remains false. The research basis and unresolved gates
+are documented in `NEXT_STUDY_RESEARCH_BASIS.md`.
+
+## Unexecuted historical descriptive matrix
+
+These descriptives were permitted only after sealing the S7 primary. That
+primary is now unreachable, so none of these commands may run:
 
 | Analysis | Attempts |
 |---|---:|

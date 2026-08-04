@@ -35,6 +35,13 @@ audit raised three ceiling flags and one floor flag. S8/S9 are blocked, retained
 execution remains disabled, and no condition-level or confirmatory effect
 estimate exists.
 
+The successor is currently an offline proposal, not a continuation or release.
+Its contract binds the terminal S7 decision/audit/postmortem, requires a fresh
+generator namespace and independent outcome oracle, and starts every execution
+gate closed. The retired office grader has complete generated-case mutation
+coverage (352 cases and 1,984 applicable probes), but that does not validate a
+fresh grader or remove the need for independent prompt/ground-truth review.
+
 Annotated tags and their bound evidence are authoritative. The tagged S4 release
 commit `R` adds only `evidence/s4/v0.5.0.json` to tested candidate `C`; docs-only
 descendant `D` promoted this status afterwards and is not part of `v0.5.0`. See
@@ -79,9 +86,10 @@ must identify:
 
 Predictions and model-folder labels are hypotheses, not observations.
 
-## 3. Active milestone and product boundary
+## 3. Current research and product boundary
 
-The active milestone has two related outputs:
+The program still targets two related outputs, but the S7 benchmark lineage is
+terminal and cannot supply the research output:
 
 - **Research:** a valid fixed-family comparison of a generic harness against a
   competent native-tools baseline.
@@ -96,7 +104,8 @@ systems.
 
 The synthetic pack is not a selected Brix production workflow. Actual workflow
 discovery, data authorization, integration, shadow evaluation, pilot, and
-deployment remain future work outside the `v0.14.0` milestone.
+deployment remain future work outside the blocked S7 lineage. A successor
+research release sequence has not been assigned.
 
 ### Repository roles and convergence
 
