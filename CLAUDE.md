@@ -115,16 +115,16 @@ completed all 44 pairs/88 attempts as `s7-d0b-20260804T025010Z` from commit
 there is no `v0.12.0`, no S8 handoff, no condition-level result, and retained
 execution remains mechanically disabled.
 
-The only active successor work is offline redesign. The tracked condition-blind
-postmortem verifies that D0-B's matched workload/distractor/constraint marginals
-still hid minimum action burdens ranging from one to eight calls, and that the
-rules reference and grader shared `required_effects` rather than supplying an
-independent outcome oracle. A 352-case/1,984-probe model-free mutation audit now
-validates every applicable named check for the retired grader. The proposed
-`brick.next-study.design/1` remains `offline_design_only`: every execution gate,
-live model execution, and retained execution are false. Read
-[`bench/NEXT_STUDY_RESEARCH_BASIS.md`](bench/NEXT_STUDY_RESEARCH_BASIS.md)
-before changing it.
+The active successor is an offline instrument build. It contains 528 fresh,
+split-isolated `office-generators/2.0.0` cases; 528 independent
+prompt-to-hidden-outcome comparisons; a blind two-reviewer/adjudication ledger;
+and frozen repeated-trial calibration, sentinel, power, and clustered-analysis
+protocols. The ledger is deliberately `pending_human_review`, and the fresh
+grader mutation matrix is unfinished. Five artifact-backed gates are true;
+human review, grader mutation, and live authorization remain false. Live and
+retained execution are still mechanically disabled. Read
+[`bench/NEXT_STUDY_RESEARCH_BASIS.md`](bench/NEXT_STUDY_RESEARCH_BASIS.md) and
+run `python -m bench.generate_next_study --verify` before changing it.
 
 For S4, release state is authoritative in the annotated tag and bound evidence.
 Direct descendant `R` adds only the regular file

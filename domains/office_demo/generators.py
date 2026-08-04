@@ -688,7 +688,10 @@ def validate_office_instance(instance):
         ]
         if flattened != content["required_effects"]:
             raise ValueError("learning subepisode effects do not form the case effects")
-    if content["split"] == "adversarial":
+    if (
+        content["split"] == "adversarial"
+        and content["generator_version"] == GENERATOR_VERSION
+    ):
         if content["structure"]["distractor_count"] < 2:
             raise ValueError("adversarial cases require at least two distractors")
         if content["policy_family"] != "office-adversarial-ambiguity-v1":

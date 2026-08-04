@@ -3,3 +3,4 @@
 evidence/**/*.json text eol=lf
 bench/manifests/**/*.json text eol=lf
 bench/next_study_design.json text eol=lf
+bench/next_study_protocol.json text eol=lf

@@ -22,7 +22,18 @@ INSTANCE_SCHEMA = "brick.task-instance/1"
 MANIFEST_SCHEMA = "brick.task-manifest/1"
 LOCK_SCHEMA = "brick.manifest-lock/1"
 EXPOSURE_SCHEMA = "brick.development-exposure/1"
+# ``SPLITS`` is the released office-generators/1.x split contract.  Keep it
+# stable so the retired suite continues to replay byte-for-byte.  Successor
+# studies may additionally use an isolated calibration split.
 SPLITS = ("development", "validation", "sentinel", "retained", "adversarial")
+SUPPORTED_SPLITS = (
+    "development",
+    "calibration",
+    "validation",
+    "sentinel",
+    "retained",
+    "adversarial",
+)
 MAX_CANONICAL_FILE_BYTES = 64 * 1024 * 1024
 
 _ID = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
@@ -161,7 +172,7 @@ def validate_instance(instance):
         _text(content[field], field, identifier=True)
     for field in ("domain_version", "family_version", "generator_version", "today"):
         _text(content[field], field)
-    if content["split"] not in SPLITS:
+    if content["split"] not in SUPPORTED_SPLITS:
         raise InstanceContractError("unknown instance split")
     seed = content["seed"]
     if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed < 2 ** 63:
@@ -243,7 +254,7 @@ def validate_instance(instance):
 
 
 def make_manifest(suite, generator_version, split, instances):
-    if split not in SPLITS:
+    if split not in SUPPORTED_SPLITS:
         raise InstanceContractError("unknown manifest split")
     ordered = sorted(instances, key=lambda item: item["content"]["id"])
     counts = Counter(item["content"]["family"] for item in ordered)
@@ -264,7 +275,7 @@ def validate_manifest(manifest):
         raise InstanceContractError("unsupported manifest schema")
     _text(manifest["suite"], "manifest suite", identifier=True)
     _text(manifest["generator_version"], "manifest generator_version")
-    if manifest["split"] not in SPLITS:
+    if manifest["split"] not in SUPPORTED_SPLITS:
         raise InstanceContractError("unknown manifest split")
     if not isinstance(manifest["instances"], list) or not manifest["instances"]:
         raise InstanceContractError("manifest instances cannot be empty")
@@ -291,8 +302,15 @@ def validate_manifest(manifest):
     return manifest
 
 
-def review_split_overlap(manifests):
+def review_split_overlap(manifests, required_splits=SPLITS):
     """Fail if splits reuse semantic templates or declared fictional entities."""
+    required_splits = tuple(required_splits)
+    if (
+        not required_splits
+        or len(set(required_splits)) != len(required_splits)
+        or any(split not in SUPPORTED_SPLITS for split in required_splits)
+    ):
+        raise InstanceContractError("required split set is invalid")
     by_split = {}
     structures = {}
     templates = {}
@@ -346,10 +364,13 @@ def review_split_overlap(manifests):
                             )
                         surface_owners[folded_surface] = instance_id
                         surfaces[split].add(folded_surface)
-    if set(by_split) != set(SPLITS):
-        raise InstanceContractError("overlap review requires all five splits")
-    for left_index, left in enumerate(SPLITS):
-        for right in SPLITS[left_index + 1:]:
+    if set(by_split) != set(required_splits):
+        raise InstanceContractError(
+            "overlap review requires exactly: %s"
+            % ", ".join(required_splits)
+        )
+    for left_index, left in enumerate(required_splits):
+        for right in required_splits[left_index + 1:]:
             shared = entities[left] & entities[right]
             if shared:
                 raise InstanceContractError(
@@ -365,7 +386,7 @@ def review_split_overlap(manifests):
     return {
         "schema_version": "brick.split-overlap-review/1",
         "passed": True,
-        "splits": list(SPLITS),
+        "splits": list(required_splits),
         "instances": len(all_ids),
         "structures": len(structures),
         "entity_keys": sum(len(value) for value in entities.values()),
@@ -561,6 +582,7 @@ __all__ = [
     "EXPOSURE_SCHEMA",
     "MAX_CANONICAL_FILE_BYTES",
     "SPLITS",
+    "SUPPORTED_SPLITS",
     "InstanceContractError",
     "canonical_file_bytes",
     "content_sha256",

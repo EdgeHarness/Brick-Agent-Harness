@@ -34,13 +34,19 @@ compiles them into shared native-tool primary conditions, descriptive
 ablations, a raw-JSON lower bound, a model-free rules reference, and a
 restartable disposable scheduler. The v0.11.1 exposure ledger prevents reuse of
 score-visible disposable inputs and the Brix grader now permits repeated safe
-reads while requiring one exact bound proposal. Retained execution remains
-mechanically disabled. D0-A produced 88 masked logical cells but is
-instrument-invalid because three cells retained Ollama HTTP 500 failures after
-the frozen retry; it produced no runtime sample decision, grading, or
-confirmatory effect estimate. Reserved D0-B is now the sole correction cohort.
-The Mac is a source-development and
-offline-test host only.
+reads while requiring one exact bound proposal. D0-A was instrument-invalid;
+D0-B completed but its direction-blind audit raised three ceiling flags and one
+floor flag. S7 is terminal without a condition comparison or confirmatory
+estimate.
+
+The offline successor build now contains 528 fresh
+`office-generators/2.0.0` cases, an independently implemented
+prompt-to-outcome oracle, a pending two-reviewer ledger, and frozen
+repeated-trial calibration, sentinel, power, and clustered-analysis protocols.
+Five artifact-backed design gates are complete. Human prompt/outcome review,
+the fresh grader mutation matrix, and explicit live authorization remain open,
+so live and retained execution remain mechanically disabled. The Mac is a
+source-development and offline-test host only.
 
 Annotated tags and bound evidence are release-authoritative. The tagged S4
 release commit `R` adds only `evidence/s4/v0.5.0.json` and intentionally retains

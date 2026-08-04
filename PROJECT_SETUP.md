@@ -36,15 +36,14 @@ preregistered direction-blind audit raised three ceiling flags and one floor
 flag. S8 and S9 are blocked, retained execution is mechanically disabled, and
 no condition-level or confirmatory effect estimate exists.
 
-A separate offline successor-design contract now records the verified causes
-and necessary controls without reopening S7. The condition-blind postmortem
-shows that coarse structural balance hid one-to-eight-call action burdens and
-that the rules reference and grader shared the same hidden `required_effects`
-source. A 352-case/1,984-probe mutation audit validates every applicable named
-check for the retired grader only. The proposed fresh 528-case successor,
-independent prompt-to-outcome oracle, human review ledger, repeated-trial
-analysis, and expanded sentinel are not yet implemented as an executable study;
-all eight gates and all model execution remain disabled.
+A separate offline successor-design contract records the verified causes and
+necessary controls without reopening S7. The successor now implements 528
+fresh `office-generators/2.0.0` cases, an independently implemented
+prompt-to-outcome oracle, a blind two-reviewer/adjudication ledger, and frozen
+repeated-trial calibration, sentinel, power, and clustered-analysis protocols.
+Five artifact-backed gates are complete. The human ledger remains pending, the
+fresh grader mutation matrix is unfinished, and live authorization is false;
+therefore all live and retained model execution remains disabled.
 
 Release identity is authoritative in annotated Git tags and their bound
 evidence, not in mutable current-status prose. S4 uses three commits/states:

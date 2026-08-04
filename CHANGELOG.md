@@ -35,9 +35,28 @@ condition comparison, or retained execution is permitted.
   sensitivity of the retired grader only; it is not an independent outcome
   oracle.
 - A fail-closed `brick.next-study.design/1` offline design and executable
-  contract. It binds the terminal S7 artifacts, proposes a fresh 528-case
-  namespace, reconciles calibration/sentinel/primary counts, starts all eight
-  execution gates closed, and always refuses live or retained execution.
+  contract. Version `0.2.0` binds the terminal S7 artifacts and every successor
+  artifact, derives five completed offline gates from them, and continues to
+  refuse live or retained execution while review, grader mutation, and explicit
+  authorization remain open.
+- `office-generators/2.0.0` with six canonical manifests and 528 fresh cases:
+  48 full-factorial semantic shapes in each of 11 families. Every split balances
+  workload and distractor axes exactly, all 528 structures and 2,256 declared
+  entity surfaces are unique, and all five predecessor identity-reuse channels
+  have zero overlap.
+- `office-prompt-oracle/1.0.0`, whose public API accepts only family, prompt,
+  subepisode prompts, initial state, and date. Its canonical audit independently
+  reproduces all 528 hidden outcomes without accepting `required_effects` or
+  grader output.
+- A canonical 528-entry blind two-reviewer/adjudication ledger. It is
+  deliberately `pending_human_review`; no human judgment or accepted
+  alternative is fabricated by software.
+- A frozen successor protocol with two trials per condition, 352 calibration
+  attempts, 880 retained-primary attempts, an 88-cell sentinel, a stratified
+  instance-cluster bootstrap, an exact cluster sign-flip diagnostic, and
+  pass@2/pass^2 reliability metrics. The 220-cluster design has normal-
+  approximation power `0.828074238908` for a 12-point paired effect under its
+  declared conservative variance envelope.
 - A post-S7 research basis distinguishing peer-reviewed evidence, maintained
   open-source implementations, recent preprints, verified local findings, and
   still-unresolved design gates.

@@ -2,8 +2,9 @@
 
 Status date: 2026-08-04. This note records the evidence used to design a
 possible successor to the terminal S7 study. It is not a preregistration,
-execution authorization, benchmark result, or retained-data release. All
-next-study execution gates remain closed in `next_study_design.json`.
+execution authorization, benchmark result, or retained-data release. Offline
+artifact gates may close, but live and retained execution remain disabled in
+`next_study_design.json`.
 
 ## Evidence hierarchy
 
@@ -102,9 +103,8 @@ does not close independent-oracle or prompt-validity gates for a new suite.
   reports useful ranking signal from tasks with historical pass rates between
   30% and 70%, while noting that scaffold shift degrades absolute-score
   prediction. Brick uses a broader provisional 10--22 of 32 direction-blind
-  acceptance band. That band is a proposed design input which still requires a
-  frozen calibration protocol; it is not imported evidence or an execution
-  license.
+  acceptance band. That band is now frozen for direction-blind calibration; it
+  is not imported evidence or an execution license.
 
 ### Stochastic reliability and final-state grading
 
@@ -136,10 +136,10 @@ does not close independent-oracle or prompt-validity gates for a new suite.
 
 ## Fail-closed successor architecture
 
-`next_study_design.json` is an offline design contract, version 0.1.0. It binds
-the terminal S7 artifacts and postmortem, proposes a genuinely fresh generator
-namespace, and reconciles the following candidate allocation across 11
-families:
+`next_study_design.json` is an offline instrument-build contract, version
+0.2.0. It binds the terminal S7 artifacts and postmortem plus a genuinely fresh
+generator namespace. `office-generators/2.0.0` now implements this allocation
+across 11 families:
 
 | Split | Cases per family | Total cases |
 |---|---:|---:|
@@ -151,18 +151,24 @@ families:
 | Adversarial | 4 | 44 |
 | **Total** | **48** | **528** |
 
-The proposed calibration has eight cases, two conditions, and two independent
+The frozen calibration has eight cases, two conditions, and two independent
 trials per cell: 32 condition-combined outcomes per family and 352 total model
-attempts. The proposed primary has 12 or 20 cases per family, two conditions,
-and two trials: 528 or 880 attempts. The larger sentinel has 88 primary-condition
-cells; observing zero invalid cells would have an exact one-sided 95% binomial
-upper bound of `0.03346948891663748` under an explicitly stated independent,
-identically distributed Bernoulli model. Whether that model is defensible must
-be reviewed before the sentinel gate can close.
+attempts. Every family must remain in the inclusive 10--22 band; any miss
+retires the complete generator version rather than dropping a family post hoc.
+The retained primary is fixed at 20 cases per family, two conditions, and two
+trials: 220 instance clusters and 880 attempts. Its normal-approximation power
+is `0.828074238908` for a 12 percentage-point paired effect under the declared
+conservative variance/correlation envelope. Smaller effects remain estimable
+but do not receive a powered confirmatory claim.
 
-No count or threshold above is frozen for live execution. Before that can
-happen, all eight gates in the design must be satisfied through reviewed,
-versioned artifacts:
+The larger sentinel has 88 primary-condition cells. Observing zero invalid
+cells would have an exact one-sided 95% binomial upper bound of
+`0.03346948891663748` under an explicitly stated independent, identically
+distributed Bernoulli model. The protocol labels that bound diagnostic only;
+it is not an efficacy or deployment-reliability claim.
+
+Before any model call, all eight gates in the design must be satisfied through
+reviewed, versioned artifacts:
 
 1. fresh generator complete;
 2. independent oracle complete;
@@ -173,7 +179,15 @@ versioned artifacts:
 7. sentinel protocol frozen; and
 8. explicit live-execution authorization.
 
-The contract rejects any enabled gate in version 0.1.0 and always returns
-`execution_allowed=false`. Retained execution is separately false. The next
-implementation milestone is therefore the fresh generator plus independent
-oracle/review machinery and frozen statistical design, not another model run.
+Five gates are now artifact-backed: fresh generator, independent oracle,
+calibration protocol, repeat-aware power/clustered analysis, and sentinel
+protocol. The canonical review ledger has 528 entries and two independent
+review slots per entry, but remains `pending_human_review` with zero completed
+cases. Software does not impersonate reviewers. The new grader mutation matrix
+also remains unfinished, and live authorization is false.
+
+The contract therefore still returns `execution_allowed=false`; retained
+execution is separately false. Reproduce the completed offline work with
+`python -m bench.generate_next_study --verify`. The next implementation
+milestone is independent human review plus a fresh-suite grader/mutation matrix,
+not a model run.

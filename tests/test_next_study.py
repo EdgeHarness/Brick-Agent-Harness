@@ -77,17 +77,27 @@ def test_retired_suite_grader_mutation_audit_replays_all_applicable_checks():
 
 def test_next_study_design_is_exact_counted_and_fail_closed():
     design = load_design()
-    assert design["status"] == "offline_design_only"
+    assert design["status"] == "offline_instrument_build"
+    assert design["version"] == "0.2.0"
     assert design["fresh_suite"]["generator_version"] == (
         design["fresh_suite"]["seed_namespace"]
     )
     assert design["fresh_suite"]["total_cases"] == 528
     assert design["calibration"]["combined_outcomes_per_family"] == 32
     assert design["calibration"]["model_attempts"] == 352
-    assert design["primary_design"]["minimum_model_attempts"] == 528
-    assert design["primary_design"]["maximum_model_attempts"] == 880
+    assert design["primary_design"]["instance_clusters"] == 220
+    assert design["primary_design"]["model_attempts"] == 880
     assert design["sentinel"]["primary_condition_cells"] == 88
-    assert all(value is False for value in design["execution_gates"].values())
+    assert design["execution_gates"] == {
+        "calibration_protocol_frozen": True,
+        "fresh_generator_complete": True,
+        "grader_mutation_matrix_complete": False,
+        "independent_oracle_complete": True,
+        "live_execution_authorized": False,
+        "power_and_cluster_analysis_frozen": True,
+        "prompt_ground_truth_review_complete": False,
+        "sentinel_protocol_frozen": True,
+    }
     assert design["live_model_execution_enabled"] is False
     assert design["retained_execution_enabled"] is False
     assert execution_allowed(design) is False
@@ -132,6 +142,12 @@ def test_next_study_canonical_json_is_lf_only_on_windows_checkout():
         ),
         lambda value: value["execution_gates"].pop(
             "independent_oracle_complete"
+        ),
+        lambda value: value["successor_artifacts"].__setitem__(
+            "oracle_audit_sha256", "0" * 64
+        ),
+        lambda value: value["primary_design"].__setitem__(
+            "minimum_relevant_absolute_effect", "0.10"
         ),
     ),
 )
