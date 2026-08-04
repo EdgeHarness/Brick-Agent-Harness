@@ -1,4 +1,4 @@
-"""Run one complete score-masked D0-A cohort with deferred grading."""
+"""Run the one active score-masked D0 cohort with deferred grading."""
 
 import argparse
 import datetime
@@ -19,11 +19,10 @@ DEFAULT_RUNS = (
 
 def run(args, preflight=None):
     s7 = load_protocol(args.protocol)
-    cohort = args.cohort or s7["d0"]["initial_cohort"]
-    if cohort != s7["d0"]["initial_cohort"]:
+    cohort = args.cohort or s7["d0"]["active_cohort"]
+    if cohort != s7["d0"]["active_cohort"]:
         raise RuntimeError(
-            "D0-B requires a separately released direction-blind correction "
-            "authorization"
+            "only the correction protocol's active D0 cohort may execute"
         )
     if getattr(args, "instance_id", None) is not None:
         raise ValueError("D0 forbids single-instance selection")
@@ -31,8 +30,10 @@ def run(args, preflight=None):
         raise ValueError("D0 forbids case-count truncation")
     checked = preflight or s7_preflight.collect(args.protocol, require_clean=True)
     run_id = args.run_id or (
-        "s7-d0a-%s"
-        % datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        "s7-%s-%s" % (
+            cohort,
+            datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ"),
+        )
     )
     base_args = SimpleNamespace(
         protocol=ROOT / s7["base_protocol_path"],
@@ -58,6 +59,20 @@ def run(args, preflight=None):
         },
         required_conditions=tuple(s7["d0"]["conditions"]),
         summary_schema="brick.s7.d0-run-summary/1",
+        environment_retry_cooldown_seconds=(
+            s7["environment_recovery"]["cooldown_seconds"]
+        ),
+        verify_transport_health_before_retry=(
+            s7["environment_recovery"][
+                "verify_loopback_version_and_model_digest"
+            ]
+        ),
+        environment_retry_failure_type=(
+            s7["environment_recovery"]["eligible_failure_type"]
+        ),
+        environment_retry_http_status=(
+            s7["environment_recovery"]["eligible_http_status"]
+        ),
     )
     summary = s6_run._run(base_args, policy, preflight=checked)
     if len(summary["cells"]) != s7["d0"]["primary_attempts_per_cohort"]:
@@ -70,7 +85,7 @@ def main(argv=None):
     parser.add_argument("--protocol", type=Path, default=DEFAULT_PROTOCOL)
     parser.add_argument("--manifests", type=Path, default=DEFAULT_MANIFESTS)
     parser.add_argument("--runs-root", type=Path, default=DEFAULT_RUNS)
-    parser.add_argument("--cohort", choices=("d0a", "d0b"), default="d0a")
+    parser.add_argument("--cohort", choices=("d0a", "d0b"))
     parser.add_argument("--run-id")
     args = parser.parse_args(argv)
     run(args)

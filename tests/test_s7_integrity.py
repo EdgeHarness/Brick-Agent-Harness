@@ -101,10 +101,10 @@ def test_s7_protocol_and_d0_schedule_are_exact_and_fail_closed(monkeypatch, tmp_
     monkeypatch.setattr(s7_run.s6_run, "_run", fake_run)
     args = SimpleNamespace(
         protocol=ROOT / "bench" / "s7_protocol.json",
-        cohort="d0a",
+        cohort="d0b",
         instance_id=None,
         max_cases=None,
-        run_id="test-d0a",
+        run_id="test-d0b",
         manifests=MANIFESTS,
         runs_root=tmp_path,
     )
@@ -113,10 +113,18 @@ def test_s7_protocol_and_d0_schedule_are_exact_and_fail_closed(monkeypatch, tmp_
     assert captured["args"].split == "development"
     assert captured["policy"].grading_mode == "deferred"
     assert captured["policy"].score_masked is True
-    assert captured["policy"].instance_prefix == "development.d0a."
+    assert captured["policy"].instance_prefix == "development.d0b."
     assert captured["policy"].required_conditions == (
         "native_tools", "harness_full"
     )
+    assert captured["policy"].environment_retry_cooldown_seconds == 60
+    assert captured["policy"].verify_transport_health_before_retry is True
+    assert captured["policy"].environment_retry_failure_type == "HTTPError"
+    assert captured["policy"].environment_retry_http_status == 500
+
+    args.cohort = "d0a"
+    with pytest.raises(RuntimeError, match="active D0 cohort"):
+        s7_run.run(args, preflight={"passed": True, "environment": {}})
 
 
 def test_deferred_producer_writes_no_candidate_decision():
@@ -201,7 +209,9 @@ def _fake_d0(protocol, wall_seconds=1.0):
     manifest = load_canonical_json(MANIFESTS / "development.json")
     instances = [
         item for item in manifest["instances"]
-        if item["content"]["id"].startswith("development.d0a.")
+        if item["content"]["id"].startswith(
+            "development.%s." % protocol["d0"]["active_cohort"]
+        )
     ]
     schedule = [
         {
@@ -235,7 +245,7 @@ def _fake_d0(protocol, wall_seconds=1.0):
         "retained": False,
         "grading_mode": "deferred",
         "score_masked": True,
-        "cohort": "d0a",
+        "cohort": protocol["d0"]["active_cohort"],
         "protocol_binding": {
             "schema_version": protocol["schema_version"],
             "protocol_version": protocol["protocol_version"],
@@ -244,6 +254,18 @@ def _fake_d0(protocol, wall_seconds=1.0):
         "schedule": schedule,
         "protocol": BASE_PROTOCOL,
         "environment": environment,
+        "environment_recovery": {
+            "cooldown_seconds": protocol["environment_recovery"][
+                "cooldown_seconds"
+            ],
+            "verify_transport_health_before_retry": True,
+            "failure_type": protocol["environment_recovery"][
+                "eligible_failure_type"
+            ],
+            "http_status": protocol["environment_recovery"][
+                "eligible_http_status"
+            ],
+        },
         "conditions": {
             name: {
                 "version": spec.version,

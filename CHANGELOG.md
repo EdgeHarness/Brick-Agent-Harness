@@ -14,8 +14,13 @@ that the research instrument is valid or that any measured effect exists.
 
 ## [Unreleased]
 
-S7 implementation candidate. D0 has not run in this source state, no efficacy
-result exists, and retained execution remains mechanically disabled.
+S7 instrument-correction candidate. D0-A ran from clean CI-green commit
+`05308f6` as `s7-d0a-20260803T213152Z`: all 88 logical cells published, but
+three cells remained environment-invalid after the one allowed full-attempt
+retry, all with Ollama HTTP 500. The run contains 91 immutable physical
+attempts and is bound by `evidence/s7/d0a-instrument-audit.json`. No runtime
+sample decision was created, grading was not performed, no efficacy field was
+read, and retained execution remains mechanically disabled.
 
 ### Added
 
@@ -44,6 +49,14 @@ result exists, and retained execution remains mechanically disabled.
 - CI installs the analysis dependency only on frozen Python 3.13 lanes. The
   reusable harness continues to support and test Python 3.9 through 3.13
   without NumPy as a core dependency.
+- `brick.s7.protocol/1` version `1.0.1` consumes the sole reserved correction
+  cohort, D0-B. Before the one already-frozen full-attempt retry, an eligible
+  environment-origin Ollama `HTTPError` with status 500 now receives a fixed
+  60-second cooldown and a loopback health check that must preserve the exact
+  Ollama version and model digest. This correction depends only on typed
+  environment telemetry and cannot observe a task score. Any unresolved D0-B
+  instrument fault, or any subsequent floor/ceiling flag, stops the experiment
+  before retained execution.
 
 ## [0.11.1] — 2026-08-03
 

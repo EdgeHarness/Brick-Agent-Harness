@@ -14,6 +14,7 @@ import hashlib
 import json
 from pathlib import Path
 import tempfile
+import time
 
 from bench import s6_preflight
 from domains.office_demo.contracts import build_registry
@@ -67,6 +68,10 @@ class RunPolicy:
     protocol_binding: object = None
     required_conditions: object = None
     summary_schema: str = "brick.s6.run-summary/1"
+    environment_retry_cooldown_seconds: int = 0
+    verify_transport_health_before_retry: bool = False
+    environment_retry_failure_type: object = None
+    environment_retry_http_status: object = None
 
     def __post_init__(self):
         if self.grading_mode not in {"immediate", "deferred"}:
@@ -79,6 +84,30 @@ class RunPolicy:
             object.__setattr__(
                 self, "required_conditions", tuple(self.required_conditions)
             )
+        if (
+            type(self.environment_retry_cooldown_seconds) is not int
+            or self.environment_retry_cooldown_seconds < 0
+        ):
+            raise ValueError("environment retry cooldown must be nonnegative")
+        if type(self.verify_transport_health_before_retry) is not bool:
+            raise ValueError("transport-health policy must be boolean")
+        if (
+            self.verify_transport_health_before_retry
+            and self.environment_retry_cooldown_seconds < 1
+        ):
+            raise ValueError("transport health verification requires a cooldown")
+        configured_failure = self.environment_retry_failure_type is not None
+        configured_status = self.environment_retry_http_status is not None
+        if configured_failure != configured_status:
+            raise ValueError("environment recovery selector is incomplete")
+        if configured_failure and (
+            not isinstance(self.environment_retry_failure_type, str)
+            or not self.environment_retry_failure_type
+            or type(self.environment_retry_http_status) is not int
+            or not 400 <= self.environment_retry_http_status <= 599
+            or self.environment_retry_cooldown_seconds < 1
+        ):
+            raise ValueError("environment recovery selector is invalid")
 
 
 def _sha256(value, allow_float=False):
@@ -483,6 +512,14 @@ def _run(args, policy, preflight=None):
             "grading_mode": policy.grading_mode,
             "score_masked": True,
             "protocol_binding": policy.protocol_binding,
+            "environment_recovery": {
+                "cooldown_seconds": policy.environment_retry_cooldown_seconds,
+                "verify_transport_health_before_retry": (
+                    policy.verify_transport_health_before_retry
+                ),
+                "failure_type": policy.environment_retry_failure_type,
+                "http_status": policy.environment_retry_http_status,
+            },
         })
     store = EvidenceStore.create_run(args.runs_root, run_id, metadata)
     transport = OllamaTransport(
@@ -513,6 +550,30 @@ def _run(args, policy, preflight=None):
                 final = resolution.record
                 if final["failure_origin"] not in {"runner", "environment"}:
                     break
+                if (
+                    final["failure_origin"] == "environment"
+                    and repeat < protocol["instrument_retry_limit"]
+                    and policy.environment_retry_cooldown_seconds
+                    and final["result"]["failure"].get("type")
+                    == policy.environment_retry_failure_type
+                    and final["result"]["failure"].get("http_status")
+                    == policy.environment_retry_http_status
+                ):
+                    print(
+                        json.dumps({
+                            "event": "environment_retry_cooldown",
+                            "instance_id": instance["content"]["id"],
+                            "condition": name,
+                            "repeat": repeat,
+                            "cooldown_seconds": (
+                                policy.environment_retry_cooldown_seconds
+                            ),
+                        }, sort_keys=True),
+                        flush=True,
+                    )
+                    time.sleep(policy.environment_retry_cooldown_seconds)
+                    if policy.verify_transport_health_before_retry:
+                        transport.verify_health(protocol, environment)
             cell = {
                 "wave": wave,
                 "family": family,

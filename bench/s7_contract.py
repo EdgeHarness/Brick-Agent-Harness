@@ -46,17 +46,60 @@ def validate_protocol(value):
             "schema_version", "protocol_version", "base_protocol_path",
             "base_protocol_sha256", "d0", "analysis",
             "equal_action_sensitivity", "retained_execution_enabled",
+            "predecessor_protocol_path", "predecessor_protocol_sha256",
+            "instrument_audit_path", "instrument_audit_sha256",
+            "environment_recovery",
         },
         "S7 protocol",
     )
     if value["schema_version"] != "brick.s7.protocol/1":
         raise S7ContractError("unsupported S7 protocol schema")
-    if value["protocol_version"] != "1.0.0":
+    if value["protocol_version"] != "1.0.1":
         raise S7ContractError("unsupported S7 protocol version")
     if value["base_protocol_path"] != "bench/s6_protocol.json":
         raise S7ContractError("S7 must bind the frozen S6 protocol path")
     if value["retained_execution_enabled"] is not False:
         raise S7ContractError("S7 must keep retained execution disabled")
+
+    if value["predecessor_protocol_path"] != "bench/s7_protocol_v1.0.0.json":
+        raise S7ContractError("S7 predecessor protocol path differs")
+    predecessor_path = ROOT / value["predecessor_protocol_path"]
+    try:
+        predecessor = json.loads(predecessor_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise S7ContractError("cannot load the predecessor S7 protocol") from exc
+    predecessor_sha = hashlib.sha256(canonical_json_bytes(predecessor)).hexdigest()
+    if (
+        value["predecessor_protocol_sha256"]
+        != "cd1ebf1f101e6357a8fd3bcc00f9e63114b19032fbeda32dff1e3bcbf4515bd1"
+        or predecessor_sha != value["predecessor_protocol_sha256"]
+        or predecessor.get("protocol_version") != "1.0.0"
+    ):
+        raise S7ContractError("S7 predecessor protocol binding differs")
+
+    if value["instrument_audit_path"] != "evidence/s7/d0a-instrument-audit.json":
+        raise S7ContractError("S7 instrument-audit path differs")
+    audit_path = ROOT / value["instrument_audit_path"]
+    try:
+        audit_bytes = audit_path.read_bytes()
+        audit = json.loads(audit_bytes.decode("utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise S7ContractError("cannot load the D0-A instrument audit") from exc
+    if (
+        hashlib.sha256(audit_bytes).hexdigest()
+        != value["instrument_audit_sha256"]
+        or value["instrument_audit_sha256"]
+        != "dd6f15321c87f53e6e220df0ab12147f7f6222e3273c83dff993d4797734aa72"
+        or audit.get("schema_version") != "brick.s7.instrument-audit/1"
+        or audit.get("instrument_valid") is not False
+        or audit.get("logical_cells") != 88
+        or audit.get("physical_attempts") != 91
+        or len(audit.get("instrument_invalid_cells", [])) != 3
+        or audit.get("runtime_decision_created") is not False
+        or audit.get("grading_performed") is not False
+        or audit.get("efficacy_fields_read") is not False
+    ):
+        raise S7ContractError("D0-A instrument-audit binding differs")
 
     base_path = ROOT / value["base_protocol_path"]
     try:
@@ -76,11 +119,18 @@ def validate_protocol(value):
             "primary_attempts_per_cohort", "conditions", "grading_mode",
             "operator_projection_excludes", "runtime_decision",
             "floor_ceiling_audit",
+            "active_cohort", "correction_reason",
         },
         "D0 protocol",
     )
     if d0["initial_cohort"] != "d0a" or d0["correction_cohort"] != "d0b":
         raise S7ContractError("D0 cohort order differs")
+    if (
+        d0["active_cohort"] != "d0b"
+        or d0["correction_reason"]
+        != "unresolved_ollama_http_500_environment_failures"
+    ):
+        raise S7ContractError("D0 correction authorization differs")
     if (
         d0["families"] != 11
         or d0["pairs_per_family"] != 4
@@ -149,6 +199,32 @@ def validate_protocol(value):
         "direction_blind": True,
     }:
         raise S7ContractError("floor/ceiling rule differs")
+
+    recovery = _exact(
+        value["environment_recovery"],
+        {
+            "eligible_failure_origin", "eligible_failure_type",
+            "eligible_http_status", "cooldown_seconds",
+            "verify_loopback_version_and_model_digest",
+            "full_attempt_retry_limit",
+        },
+        "environment recovery",
+    )
+    if recovery != {
+        "eligible_failure_origin": "environment",
+        "eligible_failure_type": "HTTPError",
+        "eligible_http_status": 500,
+        "cooldown_seconds": 60,
+        "verify_loopback_version_and_model_digest": True,
+        "full_attempt_retry_limit": 1,
+    }:
+        raise S7ContractError("environment recovery rule differs")
+    if recovery["full_attempt_retry_limit"] != base.get(
+        "instrument_retry_limit"
+    ):
+        raise S7ContractError(
+            "environment recovery retry limit differs from the base protocol"
+        )
 
     analysis = _exact(
         value["analysis"],

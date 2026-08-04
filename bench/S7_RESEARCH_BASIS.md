@@ -57,3 +57,18 @@ conditions receive the same non-transferable driver allowance, while only the
 full harness receives separately capped planning and completion-review calls.
 No role may borrow another role's unused calls or tokens. This distinguishes
 useful harness overhead from a hidden increase in action opportunities.
+
+## D0-A instrument correction
+
+D0-A published 88 logical cells, but three cells returned Ollama HTTP 500 on
+both the initial attempt and its immediate retry. The score-free audit binds
+that fact; no runtime decision or grading followed. Ollama's public issue
+tracker documents HTTP 500 as a server/runner failure class on Windows, but the
+available local server log did not capture this run, so Brick does not claim a
+more specific root cause. Protocol 1.0.1 makes the smallest direction-blind
+change supported by the local evidence: retain one full-attempt retry, but
+precede it with a fixed 60-second cooldown and require the loopback server to
+report the exact frozen Ollama version and model digest. D0-B is consumed as the
+only correction cohort; another instrument fault stops the experiment.
+
+Source: <https://github.com/ollama/ollama/issues/12940>

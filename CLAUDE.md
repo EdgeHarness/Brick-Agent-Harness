@@ -103,8 +103,11 @@ and strict preflight. The `v0.11.1` repair versions the generator as
 `office-generators/1.1.0`: 352 cases and structures, including two fresh,
 balanced 44-pair D0 cohorts, with exposed disposable material rejected across
 five identity channels. It also versions the corrected Brix domain/grader as
-`0.1.1`/`1.0.1`. Retained execution is disabled; D0 has not run and no
-confirmatory model result exists.
+`0.1.1`/`1.0.1`. Retained execution is disabled. D0-A ran 88 masked logical
+cells but is instrument-invalid because three cells retained Ollama HTTP 500
+failures after the frozen retry; no runtime decision, grading, or confirmatory
+model result exists. Protocol `1.0.1` consumes reserved D0-B for the sole
+direction-blind correction.
 
 For S4, release state is authoritative in the annotated tag and bound evidence.
 Direct descendant `R` adds only the regular file

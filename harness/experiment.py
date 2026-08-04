@@ -346,6 +346,48 @@ class OllamaTransport:
         response.raise_for_status()
         return response.json()
 
+    def verify_health(self, protocol, expected_environment):
+        """Verify the loopback server identity without invoking the model."""
+
+        version_response = self.session.get(
+            self.endpoint + "/api/version", timeout=(5, 30)
+        )
+        version_response.raise_for_status()
+        tags_response = self.session.get(
+            self.endpoint + "/api/tags", timeout=(5, 30)
+        )
+        tags_response.raise_for_status()
+        version = version_response.json().get("version")
+        matches = [
+            item for item in tags_response.json().get("models", [])
+            if item.get("name", item.get("model")) == protocol["primary_model"]
+        ]
+        if len(matches) != 1:
+            raise ExperimentError("health check cannot identify the pinned model")
+        digest = str(matches[0].get("digest", ""))
+        if not digest.startswith("sha256:"):
+            digest = "sha256:" + digest
+        if (
+            version != expected_environment["ollama"]["version"]
+            or digest != expected_environment["ollama"]["model_digest"]
+        ):
+            raise ExperimentError("health check environment identity drifted")
+        return {
+            "version": version,
+            "model_digest": digest,
+        }
+
+
+def _environment_failure(exc):
+    """Preserve a transport status code when the client exposes one."""
+
+    failure = {"type": type(exc).__name__, "message": str(exc)}
+    response = getattr(exc, "response", None)
+    status_code = getattr(response, "status_code", None)
+    if type(status_code) is int:
+        failure["http_status"] = status_code
+    return failure
+
 
 def validate_protocol(protocol):
     """Fail closed on any S6 protocol shape the runtime does not implement."""
@@ -753,7 +795,7 @@ def run_raw_json_attempt(
             except Exception as exc:
                 execution_status = "environment_unstable"
                 failure_origin = "environment"
-                failure = {"type": type(exc).__name__, "message": str(exc)}
+                failure = _environment_failure(exc)
                 episode_status = "instrument_failure"
                 break
             wall = time.monotonic() - started
@@ -960,7 +1002,7 @@ def run_attempt(
             except Exception as exc:
                 execution_status = "environment_unstable"
                 failure_origin = "environment"
-                failure = {"type": type(exc).__name__, "message": str(exc)}
+                failure = _environment_failure(exc)
                 episode_status = "instrument_failure"
                 break
             wall = time.monotonic() - started

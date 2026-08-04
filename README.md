@@ -35,8 +35,10 @@ ablations, a raw-JSON lower bound, a model-free rules reference, and a
 restartable disposable scheduler. The v0.11.1 exposure ledger prevents reuse of
 score-visible disposable inputs and the Brix grader now permits repeated safe
 reads while requiring one exact bound proposal. Retained execution remains
-mechanically disabled, D0 has not run, and no confirmatory effect estimate
-exists.
+mechanically disabled. D0-A produced 88 masked logical cells but is
+instrument-invalid because three cells retained Ollama HTTP 500 failures after
+the frozen retry; it produced no runtime sample decision, grading, or
+confirmatory effect estimate. Reserved D0-B is now the sole correction cohort.
 The Mac is a source-development and
 offline-test host only.
 

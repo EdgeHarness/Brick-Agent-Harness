@@ -30,16 +30,27 @@ def _final_records(store, protocol, manifests=DEFAULT_MANIFESTS):
         "protocol_version": protocol["protocol_version"],
         "sha256": s7_protocol_sha256(protocol),
     }
+    active_cohort = d0["active_cohort"]
     if (
         metadata.get("run_kind") != "score_masked_d0"
         or metadata.get("split") != "development"
         or metadata.get("retained") is not False
         or metadata.get("grading_mode") != "deferred"
         or metadata.get("score_masked") is not True
-        or metadata.get("cohort") != d0["initial_cohort"]
+        or metadata.get("cohort") != active_cohort
         or binding != expected_binding
     ):
-        raise RuntimeError("run is not the frozen score-masked D0-A cohort")
+        raise RuntimeError("run is not the active frozen score-masked D0 cohort")
+    expected_recovery = {
+        "cooldown_seconds": protocol["environment_recovery"]["cooldown_seconds"],
+        "verify_transport_health_before_retry": protocol["environment_recovery"][
+            "verify_loopback_version_and_model_digest"
+        ],
+        "failure_type": protocol["environment_recovery"]["eligible_failure_type"],
+        "http_status": protocol["environment_recovery"]["eligible_http_status"],
+    }
+    if metadata.get("environment_recovery") != expected_recovery:
+        raise RuntimeError("D0 environment-recovery policy differs")
     base = metadata.get("protocol")
     if not isinstance(base, dict) or protocol_sha256(base) != protocol["base_protocol_sha256"]:
         raise RuntimeError("D0 run embeds a different base protocol")
@@ -72,7 +83,7 @@ def _final_records(store, protocol, manifests=DEFAULT_MANIFESTS):
     validate_manifest(manifest)
     instances = [
         item for item in manifest["instances"]
-        if item["content"]["id"].startswith("development.d0a.")
+        if item["content"]["id"].startswith("development.%s." % active_cohort)
     ]
     instance_map = {item["content"]["id"]: item for item in instances}
     expected_schedule = [
@@ -93,7 +104,9 @@ def _final_records(store, protocol, manifests=DEFAULT_MANIFESTS):
     for cell in schedule:
         if (
             not isinstance(cell, dict)
-            or not cell.get("instance_id", "").startswith("development.d0a.")
+            or not cell.get("instance_id", "").startswith(
+                "development.%s." % active_cohort
+            )
             or cell.get("condition_order") not in (
                 ["native_tools", "harness_full"],
                 ["harness_full", "native_tools"],

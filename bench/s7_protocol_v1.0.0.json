@@ -1,17 +1,11 @@
 {
   "schema_version": "brick.s7.protocol/1",
-  "protocol_version": "1.0.1",
-  "predecessor_protocol_path": "bench/s7_protocol_v1.0.0.json",
-  "predecessor_protocol_sha256": "cd1ebf1f101e6357a8fd3bcc00f9e63114b19032fbeda32dff1e3bcbf4515bd1",
-  "instrument_audit_path": "evidence/s7/d0a-instrument-audit.json",
-  "instrument_audit_sha256": "dd6f15321c87f53e6e220df0ab12147f7f6222e3273c83dff993d4797734aa72",
+  "protocol_version": "1.0.0",
   "base_protocol_path": "bench/s6_protocol.json",
   "base_protocol_sha256": "da876e4b5a71889f4b2fc5ce5e245e81faeda1ef07f3c247ab9c4d61c32b0073",
   "d0": {
     "initial_cohort": "d0a",
     "correction_cohort": "d0b",
-    "active_cohort": "d0b",
-    "correction_reason": "unresolved_ollama_http_500_environment_failures",
     "families": 11,
     "pairs_per_family": 4,
     "pairs_per_cohort": 44,
@@ -43,14 +37,6 @@
       "correction_limit": 1,
       "direction_blind": true
     }
-  },
-  "environment_recovery": {
-    "eligible_failure_origin": "environment",
-    "eligible_failure_type": "HTTPError",
-    "eligible_http_status": 500,
-    "cooldown_seconds": 60,
-    "verify_loopback_version_and_model_digest": true,
-    "full_attempt_retry_limit": 1
   },
   "analysis": {
     "python_minor": "3.13",

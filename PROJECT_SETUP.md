@@ -845,9 +845,15 @@ The current source contains the pre-run S7 enforcement layer: deferred D0
 grading, a score-masked operator summary, exact reconstruction of every attempt
 identity, a marker-last runtime-only sample decision, a direction-blind
 floor/ceiling audit, role-aware equal-action accounting, and pinned analysis.
-This implementation is not evidence that D0 passed. D0 remains unexecuted until
-the exact clean candidate receives required CI, and retained execution remains
-disabled.
+This implementation is not evidence that D0 passed. D0-A executed from clean,
+CI-green commit `05308f6`, but three of 88 cells exhausted the one allowed
+instrument retry with the same Ollama HTTP 500. Therefore no runtime sample
+decision exists and grading remains blocked. Protocol `1.0.1` binds the
+score-free instrument audit and consumes reserved D0-B for one direction-blind
+environment-recovery correction: a 60-second cooldown plus exact loopback
+version/model-digest health verification before the unchanged single retry.
+Any unresolved D0-B instrument fault or later floor/ceiling flag stops the work
+before retained execution.
 
 ### Primary question and estimand
 

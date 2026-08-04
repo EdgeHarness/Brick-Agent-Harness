@@ -5,6 +5,7 @@ import tempfile
 from types import SimpleNamespace
 
 import pytest
+import requests
 
 from bench import s6_preflight, s6_rules_reference, s6_run
 from domains.office_demo.contracts import build_registry
@@ -14,6 +15,8 @@ from domains.office_demo.world import World
 from harness.experiment import (
     AttemptMemory,
     ExecutionContext,
+    ExperimentError,
+    OllamaTransport,
     OpportunityLedger,
     condition_registry,
     run_raw_json_attempt,
@@ -92,13 +95,37 @@ class EnvironmentThenTransport(FakeTransport):
     def __init__(self, calls):
         super().__init__(calls)
         self.fail_once = True
+        self.health_checks = 0
 
     def chat(self, payload):
         if self.fail_once:
             self.fail_once = False
             self.payloads.append(copy.deepcopy(payload))
-            raise OSError("temporary Ollama interruption")
+            response = requests.Response()
+            response.status_code = 500
+            response.url = "http://127.0.0.1:11434/api/chat"
+            raise requests.HTTPError(
+                "500 Server Error: Internal Server Error for url: "
+                "http://127.0.0.1:11434/api/chat",
+                response=response,
+            )
         return super().chat(payload)
+
+    def verify_health(self, protocol, environment):
+        self.health_checks += 1
+        return {
+            "version": environment["ollama"]["version"],
+            "model_digest": environment["ollama"]["model_digest"],
+        }
+
+
+class OtherEnvironmentThenTransport(EnvironmentThenTransport):
+    def chat(self, payload):
+        if self.fail_once:
+            self.fail_once = False
+            self.payloads.append(copy.deepcopy(payload))
+            raise OSError("temporary non-HTTP environment interruption")
+        return FakeTransport.chat(self, payload)
 
 
 class NoToolCallTransport:
@@ -359,6 +386,44 @@ def test_opportunity_ledger_counts_before_dispatch_and_never_resets():
     assert ledger.remaining_tokens == 0
 
 
+def test_transport_health_check_binds_version_and_model_digest():
+    class Response:
+        def __init__(self, value):
+            self.value = value
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return copy.deepcopy(self.value)
+
+    class Session:
+        trust_env = True
+
+        def get(self, url, timeout):
+            if url.endswith("/api/version"):
+                return Response({"version": "0.32.5"})
+            return Response({"models": [{
+                "name": PROTOCOL["primary_model"],
+                "digest": PROTOCOL["f0_binding"]["primary_model_digest"],
+            }]})
+
+    transport = OllamaTransport(
+        PROTOCOL["transport"]["endpoint"], 30, session=Session()
+    )
+    environment = {
+        "ollama": {
+            "version": "0.32.5",
+            "model_digest": PROTOCOL["f0_binding"]["primary_model_digest"],
+        }
+    }
+    assert transport.verify_health(PROTOCOL, environment) == environment["ollama"]
+    changed = copy.deepcopy(environment)
+    changed["ollama"]["model_digest"] = "sha256:" + "f" * 64
+    with pytest.raises(ExperimentError, match="identity drifted"):
+        transport.verify_health(PROTOCOL, changed)
+
+
 def test_protocol_and_retained_execution_fail_closed():
     changed = copy.deepcopy(PROTOCOL)
     changed["sampling"]["unreviewed"] = 1
@@ -428,7 +493,9 @@ def test_preflight_fingerprints_every_executable_s6_dependency():
         "bench/s7_floor_audit.py",
         "bench/s7_preflight.py",
         "bench/s7_protocol.json",
+        "bench/s7_protocol_v1.0.0.json",
         "bench/s7_run.py",
+        "evidence/s7/d0a-instrument-audit.json",
         "requirements-analysis.txt",
         "bench/manifests/office-v1/development-exposure-v0.11.0.json",
     }
@@ -504,13 +571,25 @@ def test_scheduler_retries_only_environment_failure_and_resumes_exactly(
     transport = EnvironmentThenTransport(calls)
     monkeypatch.setattr(s6_preflight, "collect", lambda *_a, **_k: _fake_preflight())
     monkeypatch.setattr(s6_run, "OllamaTransport", lambda *_a, **_k: transport)
+    sleeps = []
+    monkeypatch.setattr(s6_run.time, "sleep", lambda seconds: sleeps.append(seconds))
     args = _scheduler_args(tmp_path, instance["content"]["id"], "retry-resume")
-    summary = s6_run.run(args)
+    summary = s6_run._run(
+        args,
+        s6_run.RunPolicy(
+            environment_retry_cooldown_seconds=60,
+            verify_transport_health_before_retry=True,
+            environment_retry_failure_type="HTTPError",
+            environment_retry_http_status=500,
+        ),
+    )
     assert summary["committed_attempts"] == 2
     assert summary["cells"][0]["strict_success"] is True
     assert summary["cells"][0]["failure_origin"] == "none"
     seeds = [payload["options"]["seed"] for payload in transport.payloads]
     assert len(set(seeds)) == 1
+    assert sleeps == [60]
+    assert transport.health_checks == 1
 
     records = json.loads((tmp_path / "retry-resume" / "results.json").read_text("utf-8"))[
         "records"
@@ -521,13 +600,28 @@ def test_scheduler_retries_only_environment_failure_and_resumes_exactly(
         "environment",
         "none",
     ]
+    assert records[0]["result"]["failure"]["http_status"] == 500
 
     class MustNotRun:
         def chat(self, _payload):
             raise AssertionError("resume reran a committed physical record")
 
+        def verify_health(self, protocol, environment):
+            return {
+                "version": environment["ollama"]["version"],
+                "model_digest": environment["ollama"]["model_digest"],
+            }
+
     monkeypatch.setattr(s6_run, "OllamaTransport", lambda *_a, **_k: MustNotRun())
-    resumed = s6_run.run(args)
+    resumed = s6_run._run(
+        args,
+        s6_run.RunPolicy(
+            environment_retry_cooldown_seconds=60,
+            verify_transport_health_before_retry=True,
+            environment_retry_failure_type="HTTPError",
+            environment_retry_http_status=500,
+        ),
+    )
     assert resumed == summary
 
 
@@ -542,6 +636,45 @@ def test_scheduler_never_retries_a_valid_model_failure(monkeypatch, tmp_path):
     assert summary["cells"][0]["failure_origin"] == "model"
     assert summary["cells"][0]["strict_success"] is False
     assert len(transport.payloads) == PROTOCOL["opportunity_budget"]["model_calls"]
+
+
+def test_scheduler_does_not_apply_http_500_recovery_to_other_environment_faults(
+    monkeypatch, tmp_path
+):
+    instance = _one("cal_add")
+    effects = instance["content"]["required_effects"]
+    calendar = next(item for item in effects if item["type"] == "calendar_read")
+    event = next(item for item in effects if item["type"] == "event_created")
+    transport = OtherEnvironmentThenTransport([
+        ("list_events", {"date": calendar["date"]}),
+        ("add_event", {
+            "title": event["title"],
+            "date": event["date"],
+            "start_time": event["start"],
+            "end_time": event["end"],
+            "attendees": event["attendees"],
+            "location": event.get("location", ""),
+        }),
+        ("done", {"summary": "complete"}),
+    ])
+    monkeypatch.setattr(s6_preflight, "collect", lambda *_a, **_k: _fake_preflight())
+    monkeypatch.setattr(s6_run, "OllamaTransport", lambda *_a, **_k: transport)
+    sleeps = []
+    monkeypatch.setattr(s6_run.time, "sleep", lambda seconds: sleeps.append(seconds))
+    args = _scheduler_args(tmp_path, instance["content"]["id"], "other-env")
+    summary = s6_run._run(
+        args,
+        s6_run.RunPolicy(
+            environment_retry_cooldown_seconds=60,
+            verify_transport_health_before_retry=True,
+            environment_retry_failure_type="HTTPError",
+            environment_retry_http_status=500,
+        ),
+    )
+    assert summary["committed_attempts"] == 2
+    assert summary["cells"][0]["strict_success"] is True
+    assert sleeps == []
+    assert transport.health_checks == 0
 
 
 def test_environment_executor_fault_never_becomes_a_model_failure(tmp_path):
