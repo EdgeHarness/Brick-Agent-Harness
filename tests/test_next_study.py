@@ -93,6 +93,17 @@ def test_next_study_design_is_exact_counted_and_fail_closed():
     assert execution_allowed(design) is False
 
 
+def test_next_study_canonical_json_is_lf_only_on_windows_checkout():
+    attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+    assert "bench/next_study_design.json text eol=lf" in attributes.splitlines()
+    assert (ROOT / "bench" / "next_study_design.json").read_bytes().endswith(
+        b"\n"
+    )
+    assert b"\r\n" not in (
+        ROOT / "bench" / "next_study_design.json"
+    ).read_bytes()
+
+
 @pytest.mark.parametrize(
     "mutation",
     (

@@ -2,3 +2,4 @@
 # rewritten by a Windows checkout, regardless of the user's core.autocrlf.
 evidence/**/*.json text eol=lf
 bench/manifests/**/*.json text eol=lf
+bench/next_study_design.json text eol=lf

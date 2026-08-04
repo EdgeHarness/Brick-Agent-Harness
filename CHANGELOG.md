@@ -67,7 +67,7 @@ condition comparison, or retained execution is permitted.
 - Offline regressions for exact Qwen parser-signature recognition, unknown-5xx
   fallback, malformed success responses, no retry of runner or model failures,
   honest generated-token bounds, and operator-projection masking. The complete
-  native Windows ARM64 suite passes 870 tests with 3 intentional skips.
+  native Windows ARM64 suite passes 871 tests with 3 intentional skips.
 
 ### Changed
 
@@ -94,6 +94,9 @@ condition comparison, or retained execution is permitted.
 
 ### Fixed
 
+- The canonical next-study design is explicitly LF-only in `.gitattributes`.
+  Without that rule, Windows x64 CI converted its checkout to CRLF and the
+  canonical JSON loader correctly rejected the changed bytes.
 - The first direction-blind D0-B audit invocation stopped before grading or
   artifact creation because it reparsed committed `actions.json` through the
   manifest-only JSON loader, which correctly forbids binary floats. Committed
