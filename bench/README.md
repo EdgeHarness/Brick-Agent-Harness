@@ -623,8 +623,9 @@ version `0.7.0`. Six canonical manifests hold 528 split-neutral
 sentinel (88), retained primary (880), and at most 222 descriptive cells, with
 exact-uniform bootstrap sampling and descriptive-only LOFO sensitivity. The
 semantic and grader-conformance gates pass, while explicit live authorization
-remains false pending native qualification and the 22-cell development
-shakeout. `execution_allowed()` still returns false. See
+remains false pending an exact-commit GitHub Actions Linux matrix pass, fresh
+native qualification, and a fresh 22-cell development shakeout under one
+fingerprint. `execution_allowed()` still returns false. See
 `NEXT_STUDY_IMPLEMENTATION.md` for the implemented controls and remaining gates.
 
 `python -m bench.next_study_readiness` reports the exact boundary between

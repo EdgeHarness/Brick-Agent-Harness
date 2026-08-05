@@ -362,4 +362,7 @@ def test_readiness_report_names_the_real_next_gate_without_overclaiming():
     assert report["external_or_evidence_dependent_gates"][
         "score_masked_22_cell_development_shakeout"
     ] is False
-    assert report["next_transition"].startswith("complete native")
+    assert report["external_or_evidence_dependent_gates"][
+        "github_actions_linux_python_3_9_through_3_13"
+    ] is False
+    assert report["next_transition"].startswith("commit the authorization-gate repair")

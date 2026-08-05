@@ -83,6 +83,12 @@ SHAKEOUT_AUTHORIZATION_SCHEMA = "brick.next-study.shakeout-authorization/1"
 SHAKEOUT_DECISION_SCHEMA = "brick.next-study.shakeout-decision/1"
 RUN_METADATA_SCHEMA = "brick.next-study.live-run-metadata/1"
 CLEAN_CHECKOUT_SCHEMA = "brick.next-study.clean-checkout-reproduction/1"
+LINUX_CI_SCHEMA = "brick.next-study.linux-ci-reproduction/1"
+GITHUB_API_VERSION = "2026-03-10"
+GITHUB_REPOSITORY = "EdgeHarness/Brick-Agent-Harness"
+LINUX_CI_JOB_NAMES = tuple("Python " + version for version in (
+    "3.9", "3.10", "3.11", "3.12", "3.13",
+))
 MODEL_TAGS = {
     "2b": "qwen3.5:2b-q4_K_M",
     "4b": "qwen3.5:4b-q4_K_M",
@@ -436,15 +442,204 @@ def validate_clean_checkout_reproduction(document, preflight):
     return document
 
 
+def _github_json(session, url):
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": GITHUB_API_VERSION,
+        "User-Agent": "brick-next-study-linux-ci-verifier",
+    }
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = "Bearer " + token
+    response = session.get(url, headers=headers, timeout=(10, 60))
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise NextStudyLiveError("GitHub Actions returned a non-object payload")
+    return payload
+
+
+def _normalize_linux_ci_api(run, jobs):
+    if not isinstance(run, dict) or not isinstance(jobs, list):
+        raise NextStudyLiveError("GitHub Actions evidence is malformed")
+    run_id = run.get("id")
+    attempt = run.get("run_attempt")
+    if isinstance(run_id, bool) or not isinstance(run_id, int) or run_id <= 0:
+        raise NextStudyLiveError("GitHub Actions run id is invalid")
+    if isinstance(attempt, bool) or not isinstance(attempt, int) or attempt <= 0:
+        raise NextStudyLiveError("GitHub Actions run attempt is invalid")
+    normalized_jobs = []
+    for expected_name in LINUX_CI_JOB_NAMES:
+        matches = [item for item in jobs if item.get("name") == expected_name]
+        if len(matches) != 1:
+            raise NextStudyLiveError(
+                "Linux CI must contain exactly one successful %s job" % expected_name
+            )
+        job = matches[0]
+        steps = [
+            step for step in job.get("steps", [])
+            if step.get("name") == "Run offline tests"
+        ]
+        if len(steps) != 1:
+            raise NextStudyLiveError(expected_name + " lacks the offline-test step")
+        step = steps[0]
+        if (
+            job.get("status") != "completed" or job.get("conclusion") != "success"
+            or job.get("head_sha") != run.get("head_sha")
+            or "ubuntu-latest" not in job.get("labels", [])
+            or step.get("status") != "completed" or step.get("conclusion") != "success"
+        ):
+            raise NextStudyLiveError(expected_name + " did not pass on ubuntu-latest")
+        normalized_jobs.append({
+            "id": job.get("id"), "name": job.get("name"),
+            "head_sha": job.get("head_sha"), "status": job.get("status"),
+            "conclusion": job.get("conclusion"),
+            "labels": sorted(job.get("labels", [])),
+            "started_at": job.get("started_at"),
+            "completed_at": job.get("completed_at"),
+            "offline_test_step": {
+                "number": step.get("number"), "name": step.get("name"),
+                "status": step.get("status"), "conclusion": step.get("conclusion"),
+            },
+        })
+    workflow = {"name": run.get("name"), "path": run.get("path")}
+    normalized_run = {
+        "id": run_id, "attempt": attempt, "event": run.get("event"),
+        "status": run.get("status"), "conclusion": run.get("conclusion"),
+        "head_sha": run.get("head_sha"), "html_url": run.get("html_url"),
+        "updated_at": run.get("updated_at"),
+    }
+    if (
+        workflow != {"name": "Offline test suite", "path": ".github/workflows/ci.yml"}
+        or normalized_run["status"] != "completed"
+        or normalized_run["conclusion"] != "success"
+        or normalized_run["event"] not in {"push", "workflow_dispatch"}
+        or not isinstance(normalized_run["head_sha"], str)
+        or re.fullmatch(r"[0-9a-f]{40}", normalized_run["head_sha"]) is None
+        or normalized_run["html_url"] != (
+            "https://github.com/%s/actions/runs/%s" % (GITHUB_REPOSITORY, run_id)
+        )
+    ):
+        raise NextStudyLiveError("GitHub Actions run is not the required Linux CI pass")
+    _timestamp(normalized_run["updated_at"], "GitHub Actions update")
+    for job in normalized_jobs:
+        if isinstance(job["id"], bool) or not isinstance(job["id"], int) or job["id"] <= 0:
+            raise NextStudyLiveError("GitHub Actions job id is invalid")
+        _timestamp(job["started_at"], job["name"] + " start")
+        _timestamp(job["completed_at"], job["name"] + " completion")
+    return {"workflow": workflow, "run": normalized_run, "linux_jobs": normalized_jobs}
+
+
+def collect_linux_ci_reproduction(
+    preflight, run_id, *, session=None, collected_at=None,
+):
+    """Collect an exact-commit Linux matrix pass from the GitHub Actions API."""
+
+    validate_native_preflight(preflight)
+    if isinstance(run_id, bool) or not isinstance(run_id, int) or run_id <= 0:
+        raise NextStudyLiveError("GitHub Actions run id must be a positive integer")
+    session = session or requests.Session()
+    base = "https://api.github.com/repos/%s/actions/runs/%s" % (
+        GITHUB_REPOSITORY, run_id,
+    )
+    run = _github_json(session, base)
+    attempt = run.get("run_attempt")
+    jobs_payload = _github_json(
+        session, base + "/attempts/%s/jobs?per_page=100" % attempt,
+    )
+    jobs = jobs_payload.get("jobs")
+    if (
+        not isinstance(jobs, list)
+        or jobs_payload.get("total_count") != len(jobs)
+        or len(jobs) > 100
+    ):
+        raise NextStudyLiveError("GitHub Actions job list is incomplete")
+    evidence = _normalize_linux_ci_api(run, jobs)
+    if evidence["run"]["id"] != run_id:
+        raise NextStudyLiveError("GitHub Actions returned the wrong run")
+    if evidence["run"]["head_sha"] != preflight["commit_sha"]:
+        raise NextStudyLiveError("Linux CI commit does not match native preflight")
+    collected = collected_at or datetime.datetime.now(datetime.timezone.utc).isoformat()
+    _timestamp(collected, "Linux CI collection")
+    document = {
+        "schema_version": LINUX_CI_SCHEMA,
+        "status": "passed", "passed": True, "provider": "github_actions",
+        "repository": GITHUB_REPOSITORY, "api_version": GITHUB_API_VERSION,
+        **evidence, "api_evidence_sha256": _digest(evidence),
+        "collected_at": collected, "live_model_calls": 0,
+    }
+    document["attestation_sha256"] = _digest(document)
+    return validate_linux_ci_reproduction(document, preflight)
+
+
+def validate_linux_ci_reproduction(document, preflight):
+    """Validate fetched, exact-commit Linux CI evidence; absence fails closed."""
+
+    validate_native_preflight(preflight)
+    expected = {
+        "schema_version", "status", "passed", "provider", "repository",
+        "api_version", "workflow", "run", "linux_jobs", "api_evidence_sha256",
+        "collected_at", "live_model_calls", "attestation_sha256",
+    }
+    if not isinstance(document, dict) or set(document) != expected:
+        raise NextStudyLiveError("Linux CI reproduction has unexpected keys")
+    unsigned = dict(document); supplied = unsigned.pop("attestation_sha256")
+    if supplied != _digest(unsigned):
+        raise NextStudyLiveError("Linux CI reproduction digest drifted")
+    reconstructed_run = {
+        **document["run"], "name": document["workflow"].get("name"),
+        "path": document["workflow"].get("path"),
+        "run_attempt": document["run"].get("attempt"),
+    }
+    reconstructed_jobs = [
+        {**job, "steps": [job.get("offline_test_step", {})]}
+        for job in document["linux_jobs"]
+    ] if isinstance(document["linux_jobs"], list) else document["linux_jobs"]
+    evidence = _normalize_linux_ci_api(reconstructed_run, reconstructed_jobs)
+    if (
+        document["schema_version"] != LINUX_CI_SCHEMA
+        or document["status"] != "passed" or document["passed"] is not True
+        or document["provider"] != "github_actions"
+        or document["repository"] != GITHUB_REPOSITORY
+        or document["api_version"] != GITHUB_API_VERSION
+        or evidence != {
+            "workflow": document["workflow"], "run": document["run"],
+            "linux_jobs": document["linux_jobs"],
+        }
+        or document["api_evidence_sha256"] != _digest(evidence)
+        or document["run"]["head_sha"] != preflight["commit_sha"]
+        or document["live_model_calls"] != 0
+    ):
+        raise NextStudyLiveError("Linux CI reproduction does not represent a pass")
+    _timestamp(document["collected_at"], "Linux CI collection")
+    _sha256(document["api_evidence_sha256"], "Linux CI API evidence")
+    return document
+
+
+def verify_linux_ci_reproduction(document, preflight, *, session=None):
+    """Refetch the run before authorization so self-authored JSON cannot pass."""
+
+    validated = validate_linux_ci_reproduction(document, preflight)
+    refreshed = collect_linux_ci_reproduction(
+        preflight, validated["run"]["id"], session=session,
+        collected_at=validated["collected_at"],
+    )
+    if refreshed != validated:
+        raise NextStudyLiveError("published Linux CI evidence differs from GitHub")
+    return validated
+
+
 def build_research_authorization(
-    preflight, clean_checkout, schedules, shakeout_authorization,
+    preflight, clean_checkout, linux_ci, schedules, shakeout_authorization,
     shakeout_decision, *, native_preflight_artifact_sha256,
-    clean_checkout_artifact_sha256, issued_at, issuer,
+    clean_checkout_artifact_sha256, linux_ci_artifact_sha256,
+    issued_at, issuer, github_session=None,
 ):
     """Build the marker-last v0.13.0 authorization after all external gates."""
 
     validate_native_preflight(preflight)
     validate_clean_checkout_reproduction(clean_checkout, preflight)
+    verify_linux_ci_reproduction(linux_ci, preflight, session=github_session)
     validate_shakeout_authorization(shakeout_authorization)
     validate_shakeout_decision(shakeout_decision)
     if (
@@ -480,6 +675,9 @@ def build_research_authorization(
     )
     artifact_digests["clean_checkout_reproduction"] = _sha256(
         clean_checkout_artifact_sha256, "clean checkout artifact"
+    )
+    artifact_digests["linux_ci_reproduction"] = _sha256(
+        linux_ci_artifact_sha256, "Linux CI artifact"
     )
     if set(artifact_digests) != REQUIRED_ARTIFACT_DIGESTS:
         raise NextStudyLiveError("authorization artifact inventory drifted")
@@ -1193,9 +1391,15 @@ def main(argv=None):
     decide.add_argument("--run-id", required=True)
     decide.add_argument("--decided-at")
     decide.add_argument("--output", type=Path, required=True)
+    linux = commands.add_parser("collect-linux-ci")
+    linux.add_argument("--preflight", type=Path, required=True)
+    linux.add_argument("--run-id", type=int, required=True)
+    linux.add_argument("--collected-at")
+    linux.add_argument("--output", type=Path, required=True)
     research = commands.add_parser("authorize-research")
     research.add_argument("--preflight", type=Path, required=True)
     research.add_argument("--clean-checkout", type=Path, required=True)
+    research.add_argument("--linux-ci", type=Path, required=True)
     research.add_argument("--schedules-dir", type=Path, required=True)
     research.add_argument("--shakeout-authorization", type=Path, required=True)
     research.add_argument("--shakeout-decision", type=Path, required=True)
@@ -1294,10 +1498,19 @@ def main(argv=None):
         decided = args.decided_at or datetime.datetime.now(datetime.timezone.utc).isoformat()
         document = build_shakeout_decision(store, schedule, authorization, decided)
         _publish_marker_last(args.output, document); result = document
+    elif args.command == "collect-linux-ci":
+        preflight_document = validate_native_preflight(_load_published(args.preflight))
+        document = collect_linux_ci_reproduction(
+            preflight_document, args.run_id, collected_at=args.collected_at,
+        )
+        _publish_marker_last(args.output, document); result = document
     elif args.command == "authorize-research":
         preflight_document = validate_native_preflight(_load_published(args.preflight))
         clean = validate_clean_checkout_reproduction(
             _load_published(args.clean_checkout), preflight_document,
+        )
+        linux_ci = validate_linux_ci_reproduction(
+            _load_published(args.linux_ci), preflight_document,
         )
         schedules_documents = {
             name: load_canonical_json(args.schedules_dir / (name + ".json"))
@@ -1305,11 +1518,12 @@ def main(argv=None):
         }
         issued = args.issued_at or datetime.datetime.now(datetime.timezone.utc).isoformat()
         document = build_research_authorization(
-            preflight_document, clean, schedules_documents,
+            preflight_document, clean, linux_ci, schedules_documents,
             validate_shakeout_authorization(_load_published(args.shakeout_authorization)),
             validate_shakeout_decision(_load_published(args.shakeout_decision)),
             native_preflight_artifact_sha256=_file_digest(args.preflight),
             clean_checkout_artifact_sha256=_file_digest(args.clean_checkout),
+            linux_ci_artifact_sha256=_file_digest(args.linux_ci),
             issued_at=issued, issuer=args.issuer,
         )
         _publish_marker_last(args.output, document)
@@ -1410,8 +1624,9 @@ __all__ = [
     "MODEL_TAGS", "NextStudyLiveError", "build_execution_protocol",
     "build_research_authorization", "build_shakeout_authorization",
     "build_shakeout_decision", "collect_clean_checkout_reproduction",
-    "collect_native_preflight", "execute_schedule",
+    "collect_linux_ci_reproduction", "collect_native_preflight", "execute_schedule",
     "seal_descriptives", "seal_execution_phase", "seal_primary_analysis",
     "validate_clean_checkout_reproduction", "validate_native_preflight",
-    "validate_shakeout_authorization", "validate_shakeout_decision",
+    "validate_linux_ci_reproduction", "validate_shakeout_authorization",
+    "validate_shakeout_decision", "verify_linux_ci_reproduction",
 ]

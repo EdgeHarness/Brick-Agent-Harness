@@ -101,6 +101,7 @@ def test_next_study_design_is_exact_counted_and_fail_closed():
         "independent_oracle_complete": True,
         "independent_validated_outcomes_complete": True,
         "live_execution_authorized": False,
+        "linux_ci_reproduction_complete": False,
         "native_windows_clean_checkout_complete": False,
         "power_and_cluster_analysis_frozen": True,
         "semantic_internal_validity_complete": True,

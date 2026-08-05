@@ -5,8 +5,9 @@ import pytest
 
 from bench.next_study_live import (
     NextStudyLiveError, _attempt_key, _condition, _producer, build_execution_protocol,
-    build_shakeout_authorization, validate_native_preflight,
-    validate_shakeout_authorization,
+    build_shakeout_authorization, collect_linux_ci_reproduction,
+    validate_native_preflight, validate_linux_ci_reproduction,
+    validate_shakeout_authorization, verify_linux_ci_reproduction,
 )
 from bench.next_study_program import (
     HOST_FINGERPRINT_SCHEMA, REQUIRED_ARTIFACT_DIGESTS,
@@ -53,6 +54,68 @@ def test_successor_execution_protocol_has_exact_budget_and_runtime_role_names():
     assert set(roles) == {"driver", "plan", "completion"}
     assert sum(item["model_calls"] for item in roles.values()) == 18
     assert sum(item["generated_tokens"] for item in roles.values()) == 6144
+
+
+def test_linux_ci_evidence_is_exact_commit_bound_and_required():
+    preflight = _preflight()
+    run = {
+        "id": 123, "run_attempt": 1, "name": "Offline test suite",
+        "path": ".github/workflows/ci.yml", "event": "push",
+        "status": "completed", "conclusion": "success",
+        "head_sha": preflight["commit_sha"],
+        "html_url": "https://github.com/EdgeHarness/Brick-Agent-Harness/actions/runs/123",
+        "updated_at": "2026-08-05T10:00:00Z",
+    }
+    jobs = []
+    for index, version in enumerate(("3.9", "3.10", "3.11", "3.12", "3.13"), 1):
+        jobs.append({
+            "id": 1000 + index, "name": "Python " + version,
+            "head_sha": preflight["commit_sha"], "status": "completed",
+            "conclusion": "success", "labels": ["ubuntu-latest"],
+            "started_at": "2026-08-05T09:00:00Z",
+            "completed_at": "2026-08-05T09:10:00Z",
+            "steps": [{
+                "number": 4, "name": "Run offline tests", "status": "completed",
+                "conclusion": "success",
+            }],
+        })
+
+    class Response:
+        def __init__(self, payload): self.payload = payload
+        def raise_for_status(self): return None
+        def json(self): return self.payload
+
+    class Session:
+        def get(self, url, **_kwargs):
+            return Response(
+                {"total_count": len(jobs), "jobs": jobs}
+                if "/jobs?" in url else run
+            )
+
+    document = collect_linux_ci_reproduction(
+        preflight, 123, session=Session(), collected_at="2026-08-05T10:01:00Z",
+    )
+    assert validate_linux_ci_reproduction(document, preflight) == document
+    assert verify_linux_ci_reproduction(document, preflight, session=Session()) == document
+    from harness.evidence import canonical_json_bytes
+    from harness.instances import sha256_bytes
+    forged = copy.deepcopy(document)
+    forged["linux_jobs"][0]["id"] = 9999
+    forged["api_evidence_sha256"] = sha256_bytes(canonical_json_bytes({
+        "workflow": forged["workflow"], "run": forged["run"],
+        "linux_jobs": forged["linux_jobs"],
+    }))
+    unsigned_forged = dict(forged); unsigned_forged.pop("attestation_sha256")
+    forged["attestation_sha256"] = sha256_bytes(canonical_json_bytes(unsigned_forged))
+    assert validate_linux_ci_reproduction(forged, preflight) == forged
+    with pytest.raises(NextStudyLiveError, match="differs from GitHub"):
+        verify_linux_ci_reproduction(forged, preflight, session=Session())
+    wrong_preflight = copy.deepcopy(preflight)
+    wrong_preflight["commit_sha"] = "c" * 40
+    unsigned = dict(wrong_preflight); unsigned.pop("preflight_sha256")
+    wrong_preflight["preflight_sha256"] = sha256_bytes(canonical_json_bytes(unsigned))
+    with pytest.raises(NextStudyLiveError, match="does not represent a pass"):
+        validate_linux_ci_reproduction(document, wrong_preflight)
 
 
 def test_shakeout_authorization_is_exact_and_cannot_authorize_research():

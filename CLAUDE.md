@@ -123,9 +123,10 @@ independently compiled public-packet outcomes, and
 targeted mutations, and 1,392 benign controls. Protocol `1.3.0` binds the claim
 contract, 50,000-draw bootstrap, LOFO, reliability metrics, and the 222-cell
 descriptive matrix. The full model-free rehearsal passes. Human-review
-utilities are advisory and cannot authorize the study. Live execution remains
-disabled pending native qualification and the separately authorized 22-cell
-score-masked development shakeout. Read
+utilities are advisory and cannot authorize the study. A Windows shakeout
+passed on a superseded fingerprint, but current-source execution remains
+disabled pending exact-commit GitHub Actions Linux evidence, fresh native
+qualification, and a fresh 22-cell score-masked development shakeout. Read
 [`bench/NEXT_STUDY_IMPLEMENTATION.md`](bench/NEXT_STUDY_IMPLEMENTATION.md) and
 run both offline verify commands before changing it.
 

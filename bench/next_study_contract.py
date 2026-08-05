@@ -89,6 +89,7 @@ _EXPECTED_GATES = {
     "independent_oracle_complete": True,
     "independent_validated_outcomes_complete": True,
     "live_execution_authorized": False,
+    "linux_ci_reproduction_complete": False,
     "native_windows_clean_checkout_complete": False,
     "power_and_cluster_analysis_frozen": True,
     "semantic_internal_validity_complete": True,
@@ -206,6 +207,8 @@ def build_design():
             "external_plugin_discovery_in_research": False,
             "attempt_records_derived_from_marker_last_evidence": True,
             "authorization_artifact_exact_key_validation": True,
+            "github_actions_linux_matrix_required": True,
+            "authorization_refetches_linux_ci_evidence": True,
         },
         "advisory_human_review": {
             "authorization_gate": False,

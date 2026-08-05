@@ -37,7 +37,8 @@ def build_readiness_report():
     rehearsal = load_canonical_json(REHEARSAL_PATH)
     external_gates = {
         "score_masked_22_cell_development_shakeout": False,
-        "clean_checkout_cross_platform_reproduction": False,
+        "native_windows_clean_checkout_reproduction": False,
+        "github_actions_linux_python_3_9_through_3_13": False,
         "native_lenovo_preflight": False,
         "pinned_2b_4b_9b_model_digests": False,
         "host_and_runtime_fingerprints": False,
@@ -64,10 +65,10 @@ def build_readiness_report():
         "model_free_rehearsal_passed": rehearsal.get("status") == "passed",
         "human_review_authorization_gate": False,
         "next_transition": (
-            "complete native clean-checkout qualification, then separately authorize the score-masked 22-cell development shakeout"
+            "commit the authorization-gate repair; obtain exact-commit GitHub Actions Linux evidence and fresh native qualification"
         ),
         "later_transition": (
-            "after a zero-invalid shakeout, bind host/model/schedules and issue the annotated v0.13.0 instrument authorization"
+            "rerun the score-masked 22-cell shakeout for that fingerprint, then bind the tag, evidence, host, models, and schedules"
         ),
     }
 

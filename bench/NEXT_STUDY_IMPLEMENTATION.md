@@ -72,16 +72,33 @@ release verification. It creates no tag and writes no production evidence.
 
 ## Remaining live gates
 
-The next goal is native qualification followed by a separately authorized,
-score-masked 22-cell development shakeout (one case per family and condition,
-at most 44 physical attempts). Zero instrument-invalid cells are required.
-Only after that pass may a clean commit receive the local annotated `v0.13.0`
-instrument tag and a marker-last authorization binding the real host, runtime,
-models, schedules, artifacts, descriptive selection, and annotated-tag object.
-The native execution surface is `python -m bench.next_study_live --help`; it
-builds the 22-cell shakeout and all four research schedules, performs the clean
-checkout qualification, issues fail-closed authorizations, and executes only
-the phase named by the sealed program state.
+Candidate commit `e7ca30c` passed native Windows qualification and completed a
+score-masked 22-cell development shakeout: all 22 cells committed and zero were
+instrument-invalid. During the later gate audit, an operator command
+inadvertently displayed raw records from that already-invalidated run. It is
+therefore retained only as diagnostic history and is not treated as an
+operator-masked qualification. It cannot authorize the current source fingerprint: a
+review found that Linux CI was documented but not required by the authorization
+builder. The premature local tag was deleted and its authorization was retained
+under `results-next-study/authorization-invalidated-linux-gate/` for audit.
+
+The repaired authorization now requires all five Ubuntu jobs (Python 3.9
+through 3.13) from GitHub Actions for the exact native-preflight commit. The
+collector reads the GitHub Actions run and attempt-specific jobs API, retains a
+canonical projection, and hashes it. Authorization refetches that run and
+rejects absent, stale, hand-authored, wrong-commit, failed, incomplete, or
+non-Ubuntu evidence. The exact commit must also pass the native Windows clean
+checkout and a fresh score-masked 22-cell shakeout because the authorization
+repair changed the fingerprint.
+
+After committing and pushing the candidate so CI can run, the remaining order
+is: collect exact-commit Linux evidence; repeat native preflight and clean
+checkout qualification; rebuild schedules; rerun the zero-invalid shakeout;
+create the local annotated `v0.13.0` tag; then issue marker-last authorization
+binding the tag object, host, runtime, model digests, schedules, artifacts,
+descriptive selection, and both platform gates. Calibration remains
+mechanically blocked until those steps pass. The execution surface is
+`python -m bench.next_study_live --help`.
 
 Release verification recomputes an exact-key archive from artifact bytes,
 cross-binds every phase, requires `authorized_research` context, and checks that

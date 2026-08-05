@@ -45,7 +45,7 @@ REQUIRED_ARTIFACT_DIGESTS = frozenset((
     "construct_contract", "semantic_simulation", "validated_outcomes",
     "grader_implementation", "grader_mutation_audit",
     "grader_machine_conformance", "native_preflight",
-    "clean_checkout_reproduction",
+    "clean_checkout_reproduction", "linux_ci_reproduction",
     "runtime_implementation", "schedule_implementation",
     "descriptive_selection",
 ))

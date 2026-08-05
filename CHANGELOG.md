@@ -42,6 +42,10 @@
   host/model-bound 22-cell shakeout, exact schedule and annotated-tag binding,
   score-masked phase execution, attested same-seed recovery, grader-free
   sentinel verification, primary sealing/analysis, and descriptive sealing.
+- Made exact-commit Linux CI a non-optional authorization artifact. Its
+  collector derives evidence from the GitHub Actions run and attempt-specific
+  job APIs for the Python 3.9-3.13 Ubuntu matrix, and authorization refetches
+  the run before accepting it. A Windows-only authorization is impossible.
 - `v0.12.0` remains permanently unissued. Future targets are `v0.13.0` for an
   authorized instrument, `v0.14.0` for a completed study, and `v0.15.0` for the
   separately developed Brix demo.
