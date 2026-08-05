@@ -54,6 +54,18 @@ def test_reviewer_a_handoff_is_blind_complete_and_reproducible(tmp_path):
         assert prohibited not in combined
 
 
+def test_reviewer_export_does_not_require_python_310_path_write_text(
+    tmp_path, monkeypatch,
+):
+    def reject_write_text(*_args, **_kwargs):
+        raise AssertionError("export must use the Python 3.9-compatible open API")
+
+    monkeypatch.setattr(Path, "write_text", reject_write_text)
+    directory, archive = export_handoff(tmp_path / "brick-office-v2-reviewer-a")
+    assert validate_handoff(directory)["packet_count"] == 44
+    assert archive.is_file()
+
+
 def test_submission_validation_requires_every_answer(tmp_path):
     directory, _archive = export_handoff(tmp_path / "brick-office-v2-reviewer-a")
     response = directory / "RESPONSES.csv"

@@ -511,7 +511,10 @@ def export_handoff(directory=DEFAULT_HANDOFF, *, overwrite=False):
         "SUBMISSION_CHECKLIST.md": _submission_checklist(),
     }
     for name, content in files.items():
-        (directory / name).write_text(content.replace("\r\n", "\n"), encoding="utf-8", newline="\n")
+        with (directory / name).open(
+            "w", encoding="utf-8", newline="\n"
+        ) as target:
+            target.write(content.replace("\r\n", "\n"))
     manifest = build_handoff_manifest(directory, packets)
     replace_canonical_json(directory / "MANIFEST.json", manifest)
     validate_handoff(directory)
