@@ -15,6 +15,11 @@
   and 1,392 benign controls.
 - Reclassified the existing human-review tooling and public answer key as
   advisory-only fixtures. They cannot authorize execution or supply outcomes.
+- Added a bound advisory hybrid-validation protocol: two independent humans on
+  the 44-case pilot, independent adjudication, two non-Qwen agent lineages over
+  the claim-bearing scope, and a 66-case balanced valid/invalid challenge
+  blueprint. It explicitly prohibits real-world, population-rate, or universal
+  human-equivalence claims.
 - Froze protocol `1.3.0` with rejection-sampled exact-uniform bootstrap indices,
   first-100-vector digest, nearest-rank interval, conditional power sensitivity,
   LOFO diagnostics, reliability, per-instance trial-order reversal, and sealed

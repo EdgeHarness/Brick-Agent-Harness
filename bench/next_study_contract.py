@@ -7,6 +7,10 @@ from bench.next_study_schedule import verify_descriptive_selection
 from bench.next_study_statistics import load_protocol
 from bench.next_study_claim import load_claim_contract
 from bench.next_study_construct import load_contract as load_construct_contract
+from bench.next_study_hybrid_validation import (
+    build_protocol as build_hybrid_validation_protocol,
+    validate_challenge_blueprint, validate_pending_result,
+)
 from bench.next_study_validated_outcomes import validate_validated_outcomes
 from bench.s7_contract import load_protocol as load_s7_protocol
 from bench.s7_contract import s7_protocol_sha256
@@ -58,6 +62,10 @@ _ARTIFACT_PATHS = {
     "program_implementation": "bench/next_study_program.py",
     "runtime_implementation": "bench/next_study_runtime.py",
     "readiness_implementation": "bench/next_study_readiness.py",
+    "hybrid_validation_implementation": "bench/next_study_hybrid_validation.py",
+    "hybrid_validation_protocol": "bench/next_study_hybrid_validation_protocol.json",
+    "hybrid_challenge_blueprint": "evidence/next-study/office-v2-hybrid-challenge-blueprint.json",
+    "hybrid_validation_result": "evidence/next-study/office-v2-hybrid-validation-result.json",
 }
 
 _EXPECTED_GATES = {
@@ -194,7 +202,12 @@ def build_design():
         "advisory_human_review": {
             "authorization_gate": False,
             "may_change_or_supply_validated_outcomes": False,
-            "utilities_retained_for_optional_external_validity_work": True,
+            "supports_real_world_performance_claim": False,
+            "initial_double_review_cases": 44,
+            "minimum_planned_human_judgments": 176,
+            "balanced_challenge_cases": 66,
+            "minimum_distinct_agent_model_lineages": 2,
+            "confirmed_defect_routes_into_existing_construct_gate": True,
         },
         "successor_artifacts": _artifact_bindings(),
     }
@@ -336,6 +349,25 @@ def _validate_successor_semantics():
     protocol = load_protocol(ROOT / _ARTIFACT_PATHS["protocol"])
     if protocol["version"] != "1.3.0":
         raise NextStudyDesignError("successor protocol version drifted")
+    challenge = validate_challenge_blueprint(
+        load_canonical_json(ROOT / _ARTIFACT_PATHS["hybrid_challenge_blueprint"]),
+        manifests,
+    )
+    hybrid = load_canonical_json(
+        ROOT / _ARTIFACT_PATHS["hybrid_validation_protocol"]
+    )
+    selection = load_canonical_json(
+        ROOT / "evidence" / "next-study" / "office-v2-review-selection.json"
+    )
+    if hybrid != build_hybrid_validation_protocol(
+        selection["selection_sha256"], challenge["blueprint_sha256"]
+    ) or hybrid["authorization_gate"] is not False:
+        raise NextStudyDesignError("advisory hybrid validation protocol drifted")
+    validate_pending_result(
+        load_canonical_json(ROOT / _ARTIFACT_PATHS["hybrid_validation_result"]),
+        hybrid,
+        challenge,
+    )
     verify_descriptive_selection()
 
 

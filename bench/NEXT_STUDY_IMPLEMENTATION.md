@@ -29,6 +29,13 @@ Human-review, staffing, pilot, and adjudication utilities remain available as
 public advisory fixtures. They cannot satisfy an authorization gate, supply a
 validated outcome, or change the fixed synthetic-suite claim.
 
+The optional hybrid content-validity track uses two independent humans on the
+existing 44-case pilot, an independent adjudicator, two version-bound agent
+auditors, and a balanced 66-case valid/invalid challenge blueprint. Its minimum
+human workload is 176 judgments. It may support only audited-sample clarity and
+human-consensus reproduction statements; it cannot establish real-world value
+or a population defect rate. See `NEXT_STUDY_HYBRID_VALIDATION.md`.
+
 ## Statistics and evidence
 
 Protocol `1.3.0`, design `0.7.0`, construct contract
