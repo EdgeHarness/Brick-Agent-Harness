@@ -210,11 +210,14 @@ def validate_instance(instance):
         _text(prompt, "prompt")
 
     budget = content["opportunity_budget"]
-    _exact_keys(
-        budget,
-        {"model_calls", "generated_tokens", "shared_across_subepisodes"},
-        "opportunity_budget",
-    )
+    required_budget_keys = {
+        "model_calls", "generated_tokens", "shared_across_subepisodes",
+    }
+    allowed_budget_keys = required_budget_keys | {"generated_tokens_per_request"}
+    if not isinstance(budget, dict) or not required_budget_keys <= set(budget):
+        raise InstanceContractError("opportunity_budget is missing required fields")
+    if not set(budget) <= allowed_budget_keys:
+        raise InstanceContractError("opportunity_budget has unexpected fields")
     for field in ("model_calls", "generated_tokens"):
         value = budget[field]
         if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
@@ -223,8 +226,18 @@ def validate_instance(instance):
         raise InstanceContractError(
             "opportunity_budget.shared_across_subepisodes must be boolean"
         )
-    if budget["shared_across_subepisodes"] != bool(subepisodes):
-        raise InstanceContractError("opportunity budget sharing disagrees with episode shape")
+    if subepisodes and not budget["shared_across_subepisodes"]:
+        raise InstanceContractError("multi-episode opportunity budget must be shared")
+    if "generated_tokens_per_request" in budget:
+        value = budget["generated_tokens_per_request"]
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise InstanceContractError(
+                "opportunity_budget.generated_tokens_per_request must be positive"
+            )
+        if value > budget["generated_tokens"]:
+            raise InstanceContractError(
+                "per-request generated-token cap exceeds the shared cap"
+            )
 
     _string_list(content["tool_names"], "tool_names", nonempty=True, identifiers=True)
     _string_list(content["entity_keys"], "entity_keys", nonempty=True, identifiers=True)

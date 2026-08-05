@@ -247,6 +247,7 @@ def _producer(instance, condition, protocol, transport, grading_mode="immediate"
             world = _world_from_initial(workdir, content["initial_state"])
             memory = AttemptMemory(
                 content["initial_state"]["memory"],
+                visible_initial=content["initial_state"]["memory"],
                 bridge_enabled=not condition.has(
                     "attempt_scoped_memory_bridge_disabled"
                 ),

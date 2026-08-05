@@ -35,7 +35,8 @@ audit raised three ceiling flags and one floor flag. S8/S9 are blocked, retained
 execution remains disabled, and no condition-level or confirmatory effect
 estimate exists.
 
-The successor is currently an offline proposal, not a continuation or release.
+The successor is currently an offline execution candidate blocked on genuine
+human review and authorization, not a continuation or release.
 Its contract binds the terminal S7 decision/audit/postmortem, requires a fresh
 generator namespace and independent outcome oracle, and starts every execution
 gate closed. The retired office grader has complete generated-case mutation
@@ -246,21 +247,32 @@ The default retained design has 20 cases per family, 220 pairs, and 440 model
 attempts. D0 may select the predeclared 12-per-family fallback using runtime
 only.
 
-The inferential gate for the equal-family estimand is a predeclared 95%
+### Retired S7 analysis rule (historical only)
+
+The following paragraph records the retired S7 design and does not govern the
+successor study. The inferential gate for that retired equal-family estimand was a predeclared 95%
 within-family percentile-bootstrap interval. It uses 20,000 draws, seed
 `20260729`, NumPy `Generator(PCG64)`, draw-major/family-major resampling of paired
 case differences, and Hyndman–Fan type-7 quantiles. Families and cases are sorted
 by frozen IDs. Every family contributes `N` replacement draws and equal weight;
 constant families remain as point masses rather than being dropped or jittered.
 
-A two-sided exact paired sign-flip p-value is retained only as a diagnostic under
+A two-sided exact paired sign-flip p-value was retained only as a diagnostic under
 the sharp pairwise-exchangeability null. It is numerically McNemar with complete
 equal allocation, but it is not an exact test of the weaker null `Delta=0` when
-family effects differ. A positive claim still requires a positive effect,
+family effects differ. The retired joint hurdle nevertheless required a positive effect,
 diagnostic `p < 0.05`, and a bootstrap lower bound above zero. Publish all family
 effects and leave-one-family-out sensitivity. The pinned analysis environment and
 golden fixtures must reproduce the draw indices, p-values, estimates, and
 interval endpoints exactly.
+
+### Active successor claim rule
+
+`bench/next_study_claim_contract.json` is the single machine-readable successor
+claim contract. A directional claim requires the two-sided 95% exact-uniform
+hash-bootstrap interval to exclude zero in that direction and the inclusive
+observed-effect threshold `abs(Delta) >= 0.12`. The sign-flip result is diagnostic
+only. The claim is restricted to the fixed eleven-family synthetic benchmark.
 
 There is one stochastic draw per retained cell. Report the success distribution
 across independent cases; do not report pass-at-\(k\), run-to-run reliability, or

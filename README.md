@@ -39,14 +39,15 @@ D0-B completed but its direction-blind audit raised three ceiling flags and one
 floor flag. S7 is terminal without a condition comparison or confirmatory
 estimate.
 
-The offline successor build now contains 528 fresh
-`office-generators/2.0.0` cases, an independently implemented
-prompt-to-outcome oracle, a pending two-reviewer ledger, and frozen
-repeated-trial calibration, sentinel, power, and clustered-analysis protocols.
-Five artifact-backed design gates are complete. Human prompt/outcome review,
-the fresh grader mutation matrix, and explicit live authorization remain open,
-so live and retained execution remain mechanically disabled. The Mac is a
-source-development and offline-test host only.
+The offline-qualified successor contains 528 split-neutral
+`office-generators/2.1.0` cases, 176 outcome-distinct policy triplets,
+condition-aware burden audits, independently compiled public outcomes,
+`office-strict-grader/3.0.0`, protocol `1.3.0` LOFO/exact-uniform bootstrap
+analysis, and the frozen 222-cell descriptive matrix. The 1,056-trace semantic
+gate, 2,976-mutation/1,392-benign grader gate, and model-free rehearsal pass.
+Human-review utilities are advisory only. Live execution remains disabled
+pending native qualification and the score-masked 22-cell shakeout. See
+[`bench/NEXT_STUDY_IMPLEMENTATION.md`](bench/NEXT_STUDY_IMPLEMENTATION.md).
 
 Annotated tags and bound evidence are release-authoritative. The tagged S4
 release commit `R` adds only `evidence/s4/v0.5.0.json` and intentionally retains

@@ -146,15 +146,15 @@ no further correction cohort, and retained execution remains mechanically
 disabled. The next legitimate work is postmortem/research redesign under a new
 study, not continuation of this preregistered experiment.
 
-The first offline redesign scaffold is now executable and fail closed. Verify
-it with `python -m pytest tests/test_next_study.py -q`. It binds the terminal S7
-artifacts, reproduces a condition-blind postmortem, reruns 1,984 targeted grader
-mutation probes across all 352 retired-suite cases, reconciles a proposed fresh
-528-case suite, and refuses every live execution. The next implementation goal
-is a new generator plus a genuinely independent prompt-to-outcome oracle and
-two-reviewer adjudication ledger, followed by a frozen repeat-aware power and
-analysis protocol. No model call is allowed merely because the offline design
-exists. See `bench/NEXT_STUDY_RESEARCH_BASIS.md`.
+The strengthened offline successor candidate is implemented and fail closed.
+Verify it with `python -m bench.generate_next_study --verify`,
+`python -m bench.next_study_schedule --verify`, and the full test suite. The
+next operational work is native clean-checkout qualification, followed by a
+separately authorized score-masked 22-cell development shakeout. The all-528
+public-outcome grader certificate has passed 2,976 mutations and 1,392 benign
+controls; optional human-review utilities cannot authorize or alter it. A later
+fingerprint-bound `v0.13.0` authorization is separately required. See
+`bench/NEXT_STUDY_IMPLEMENTATION.md`.
 
 Do not import or synchronize the moving `SMalshe/Brick` product tree into the
 research instrument or a retained condition. `PROJECT_GUIDE.md` defines the convergence

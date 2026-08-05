@@ -38,12 +38,15 @@ no condition-level or confirmatory effect estimate exists.
 
 A separate offline successor-design contract records the verified causes and
 necessary controls without reopening S7. The successor now implements 528
-fresh `office-generators/2.0.0` cases, an independently implemented
-prompt-to-outcome oracle, a blind two-reviewer/adjudication ledger, and frozen
-repeated-trial calibration, sentinel, power, and clustered-analysis protocols.
-Five artifact-backed gates are complete. The human ledger remains pending, the
-fresh grader mutation matrix is unfinished, and live authorization is false;
-therefore all live and retained model execution remains disabled.
+split-neutral `office-generators/2.1.0` cases, 176 outcome-distinct decision
+policy triplets, condition-aware burden gates, independently compiled public
+outcomes, `office-strict-grader/3.0.0`, protocol `1.3.0` LOFO/exact-uniform
+bootstrap statistics, a frozen 222-cell descriptive matrix, and
+fingerprint-bound runtime controls. Human-review utilities are advisory only.
+Offline semantic, grader-conformance, and model-free rehearsal gates pass; all
+model execution remains disabled pending native qualification and the
+score-masked 22-cell development shakeout.
+The operational specification is `bench/NEXT_STUDY_IMPLEMENTATION.md`.
 
 Release identity is authoritative in annotated Git tags and their bound
 evidence, not in mutable current-status prose. S4 uses three commits/states:
@@ -105,7 +108,7 @@ with Snapdragon X Elite, 32 GB RAM, and native Windows 11 ARM64.
 | S6C | `v0.11.0` | Shared native-tool transport, condition registry, opportunity ledger, standalone scheduler, telemetry, rules reference, and descriptive ablations. | Primary conditions share the exact model transport, schemas, validators, tasks, and budgets; every condition has an immutable mechanism digest. |
 | Pre-D0 | `v0.11.1` | Fresh balanced D0 cohorts, immutable exposure accounting, and corrected Brix grading. | Each D0 cohort has 44 pairs/88 primary attempts with matched marginals and disjoint structures; all exposed-material reuse channels fail closed; all 352 rules-reference cases pass strictly. |
 | D0/S7 | not released | Terminal score-masked development calibration under protocol 1.0.2. | The direction-blind floor/ceiling audit failed, so no freeze or efficacy contrast exists. |
-| Successor design | not assigned | Fresh tasks, independent oracle and human review, mutation matrix, repeated-trial statistics, and sentinel protocol. | Every reviewed design gate closes before any live model execution is authorized. |
+| Successor design | target `v0.13.0` | Generator 2.1.0, independent public outcomes, strict grader, repeated-trial statistics, rehearsal, and sentinel protocol. | Offline gates, native qualification, and the 22-cell shakeout close before live study authorization. |
 | Successor sentinel | not assigned | Disposable sentinel across every successor retained condition. | The frozen sentinel's instrument-validity rule and error bound pass without an instrument change. |
 | Successor retained run | not assigned | New sealed primary experiment, bounded descriptives, evidence bundle, and report. | A clean checkout reproduces the result from validated committed bundles; this row is unreachable until the successor sentinel passes. |
 
@@ -943,7 +946,10 @@ No observed efficacy outcome may influence the sample-size choice.
 - reporting: pooled equal-family-weight effect, all 11 family effects, and
   leave-one-family-out sensitivity.
 
-A positive claim requires all three:
+#### Retired S7 claim hurdle (historical only)
+
+The following three-part rule governed the retired S7 design and does not govern
+the successor. A positive S7 claim required all three:
 
 1. `Delta > 0`;
 2. sharp-null diagnostic `p < 0.05`; and
@@ -957,8 +963,13 @@ exact only for the sharp pairwise-exchangeability null. Independence of generate
 cases and equal allocation do not make it an exact test of the weaker null
 `Delta=0` when family-specific effects differ. AB/BA execution order does not
 randomize condition identity. The diagnostic is therefore an additional
-predeclared hurdle, not the inferential justification for the equal-family
+predeclared hurdle, not the inferential justification for the retired equal-family
 estimand.
+
+The active successor instead derives its claim from
+`bench/next_study_claim_contract.json`: the two-sided 95% stratified bootstrap
+interval must exclude zero in the claimed direction and the inclusive observed
+effect must satisfy `abs(Delta) >= 0.12`. Sign-flip is diagnostic only.
 
 The interval is the inferential gate for `Delta`. For every bootstrap draw,
 process families in frozen family-ID order; within each family, sample that

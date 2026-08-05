@@ -1,4 +1,4 @@
-"""Offline gates for office-generators/2.0.0 and its frozen protocols."""
+"""Offline gates for office-generators/2.0.1 and its frozen protocols."""
 
 import copy
 import inspect
@@ -13,6 +13,7 @@ from bench.next_study_review import (
     refresh_status,
     review_complete,
     review_packet,
+    seal_submission,
     validate_ledger,
 )
 from bench.next_study_statistics import (
@@ -78,8 +79,8 @@ def test_successor_generation_is_deterministic_and_semantically_disjoint():
         "splits": list(NEXT_SPLITS),
         "instances": 528,
         "structures": 528,
-        "entity_keys": 1272,
-        "entity_surfaces": 2256,
+        "entity_keys": 1800,
+        "entity_surfaces": 3120,
     }
 
 
@@ -104,19 +105,19 @@ def test_successor_lock_records_complete_balance_and_zero_predecessor_reuse():
         [2, 2, 2, 2], [2, 2, 2, 2], [1, 1, 1, 1],
         [1, 1, 1, 1], [5, 5, 5, 5], [1, 1, 1, 1],
     ]
-    assert lock["balance_review"]["minimum_model_facing_tool_calls_by_family"] == {
-        "cal_add": {"minimum": 2, "maximum": 2},
-        "cal_brief": {"minimum": 2, "maximum": 2},
-        "cal_freeslot": {"minimum": 2, "maximum": 2},
-        "email_reply": {"minimum": 4, "maximum": 4},
-        "multi_offsite": {"minimum": 5, "maximum": 5},
-        "pptx_basic": {"minimum": 1, "maximum": 1},
+    balance = lock["balance_review"]
+    assert balance["maximum_expected_native_requests"] == 9
+    assert balance["maximum_expected_harness_requests"] == 12
+    assert balance["normalized_two_x_headroom_claimed"] is False
+    assert balance["direction_blind_corrections"] == {
+        "cal_brief": {"minimum": 3, "maximum": 3},
+            "email_reply": {"minimum": 6, "maximum": 6},
         "pptx_from_email": {"minimum": 5, "maximum": 8},
-        "preference_learning": {"minimum": 2, "maximum": 2},
-        "remind_msg": {"minimum": 2, "maximum": 2},
-        "xlsx_basic": {"minimum": 1, "maximum": 1},
-        "xlsx_from_email": {"minimum": 3, "maximum": 3},
+            "preference_learning": {"minimum": 2, "maximum": 2},
+            "xlsx_from_email": {"minimum": 5, "maximum": 8},
     }
+    assert lock["split_leakage_review"]["finding_count"] == 0
+    assert lock["split_leakage_review"]["scanned_strings"] > 17000
 
 
 def test_independent_oracle_api_cannot_accept_hidden_effects_or_grader_output():
@@ -128,9 +129,12 @@ def test_independent_oracle_api_cannot_accept_hidden_effects_or_grader_output():
     assert "required_effects" not in packet
     assert "grader" not in packet
     assert set(packet) == {
-        "schema_version", "instance_id", "family", "today", "prompt",
-        "subepisode_prompts", "initial_state", "available_tools",
+        "schema_version", "packet_id", "family", "today", "prompt",
+        "subepisode_prompts", "initial_state", "tool_schemas",
     }
+    assert "v2.development" not in repr(packet).casefold()
+    assert all(set(tool) == {"name", "description", "parameters"}
+               for tool in packet["tool_schemas"])
 
 
 def test_hidden_outcome_or_prompt_tampering_is_rejected_by_independent_oracle():
@@ -153,7 +157,7 @@ def test_hidden_outcome_or_prompt_tampering_is_rejected_by_independent_oracle():
         validate_office_instance_v2(changed)
 
 
-def test_two_distinct_human_reviews_are_required_and_ledger_remains_open():
+def test_tiered_human_review_accepts_single_and_enforces_double_independence():
     manifests = _committed_manifests()
     ledger = load_canonical_json(
         generate_next_study.EVIDENCE_DIRECTORY
@@ -162,10 +166,15 @@ def test_two_distinct_human_reviews_are_required_and_ledger_remains_open():
     validate_ledger(ledger, manifests)
     assert review_complete(ledger, manifests) is False
 
-    instance = sorted(
-        [item for manifest in manifests for item in manifest["instances"]],
-        key=lambda item: item["content"]["id"],
-    )[0]
+    entry_index = next(
+        index for index, entry in enumerate(ledger["entries"])
+        if not entry["fixed_double_review"]
+    )
+    entry = ledger["entries"][entry_index]
+    instance = next(
+        item for manifest in manifests for item in manifest["instances"]
+        if item["content"]["id"] == entry["instance_id"]
+    )
     content = instance["content"]
     outcome = derive_outcome(
         content["family"], content["prompt"],
@@ -173,28 +182,58 @@ def test_two_distinct_human_reviews_are_required_and_ledger_remains_open():
         content["initial_state"], content["today"],
     )
     changed = copy.deepcopy(ledger)
-    for slot, reviewer in (("reviewer_a", "human-001"), ("reviewer_b", "human-002")):
-        changed["entries"][0]["reviews"][slot] = {
-            "reviewer_id": reviewer,
-            "prompt_valid": True,
-            "outcome": outcome,
-            "accepted_alternatives": [],
-            "rationale": "Independently derived prompt and authoritative outcome.",
-        }
+    packet = review_packet(instance)
+    attestations = {
+        "identity_confirmed": True,
+        "no_source_access": True,
+        "no_generative_ai": True,
+        "no_case_discussion": True,
+        "independent_response": True,
+    }
+    response = {
+        "reviewer_id": "human-001", "prompt_valid": True,
+        "outcome": outcome, "accepted_alternatives": [],
+        "rationale": "Independently derived prompt and authoritative outcome.",
+    }
+    changed["entries"][entry_index]["reviews"]["primary"] = seal_submission(
+        packet, "human-001", "primary", response,
+        "2026-08-05T10:00:00Z", "2026-08-05T10:04:00Z", attestations,
+    )
     changed = refresh_status(changed, manifests)
-    assert changed["entries"][0]["status"] == "agreed"
+    assert changed["entries"][entry_index]["status"] == "accepted_single"
     assert changed["completed_cases"] == 1
     assert changed["status"] == "pending_human_review"
 
+    fixed_index = next(
+        index for index, item in enumerate(ledger["entries"])
+        if item["fixed_double_review"]
+    )
+    fixed_entry = ledger["entries"][fixed_index]
+    fixed_instance = next(
+        item for manifest in manifests for item in manifest["instances"]
+        if item["content"]["id"] == fixed_entry["instance_id"]
+    )
+    fixed_packet = review_packet(fixed_instance)
+    fixed_content = fixed_instance["content"]
+    fixed_outcome = derive_outcome(
+        fixed_content["family"], fixed_content["prompt"],
+        [item["prompt"] for item in fixed_content["ordered_subepisodes"]],
+        fixed_content["initial_state"], fixed_content["today"],
+    )
     duplicate = copy.deepcopy(ledger)
-    for slot in ("reviewer_a", "reviewer_b"):
-        duplicate["entries"][0]["reviews"][slot] = {
+    for slot in ("primary", "secondary"):
+        response = {
             "reviewer_id": "same-human",
             "prompt_valid": True,
-            "outcome": outcome,
+            "outcome": fixed_outcome,
             "accepted_alternatives": [],
             "rationale": "This must fail the independence rule.",
         }
+        duplicate["entries"][fixed_index]["reviews"][slot] = seal_submission(
+            fixed_packet, "same-human", slot, response,
+            "2026-08-05T10:00:00Z", "2026-08-05T10:04:00Z",
+            attestations,
+        )
     with pytest.raises(ReviewLedgerError, match="same reviewer"):
         refresh_status(duplicate, manifests)
 
@@ -206,7 +245,7 @@ def test_frozen_repeat_aware_protocol_reconciles_and_stays_fail_closed():
     assert protocol["primary"]["instance_clusters"] == 220
     assert protocol["primary"]["model_attempts"] == 880
     assert protocol["power"]["minimum_clusters_for_target_power"] == 205
-    assert protocol["power"]["normal_approximation_power_at_relevant_effect"] == (
+    assert protocol["power"]["normal_approximation_zero_exclusion_probability_at_true_0_12"] == (
         "0.828074238908"
     )
     assert protocol["sentinel"]["condition_cells"] == 88
@@ -215,7 +254,7 @@ def test_frozen_repeat_aware_protocol_reconciles_and_stays_fail_closed():
     changed = copy.deepcopy(protocol)
     changed["primary"]["model_attempts"] = 879
     with pytest.raises(NextStudyStatisticsError):
-        analyze_primary([], _committed_manifests()[4], changed)
+        analyze_primary([], _committed_manifests()[4], {}, changed)
 
 
 def test_existing_rules_reference_strictly_passes_all_successor_cases():

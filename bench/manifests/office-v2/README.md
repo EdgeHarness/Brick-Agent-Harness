@@ -1,7 +1,7 @@
 # Successor office manifests
 
 This directory is the canonical, model-free output of
-`office-generators/2.0.0`. Regenerate or verify it from the repository root:
+`office-generators/2.0.1`. Regenerate or verify it from the repository root:
 
 ```powershell
 python -m bench.generate_next_study --write
@@ -13,7 +13,7 @@ calibration, 44 validation, 44 sentinel, 220 retained, and 44 adversarial.
 Each family uses every member of a 4 workload × 4 distractor × 3 constraint
 factorial exactly once. The lock binds all manifest bytes, generator/oracle
 source digests, split-overlap review, predecessor-reuse review, explicit
-difficulty axes, and balance counts.
+difficulty axes, the split-leakage scan, and condition-aware request bounds.
 
 The corresponding independent-oracle audit and pending human-review ledger are
 under `evidence/next-study/`. Neither this directory nor its verification

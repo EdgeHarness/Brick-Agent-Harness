@@ -77,8 +77,8 @@ def test_retired_suite_grader_mutation_audit_replays_all_applicable_checks():
 
 def test_next_study_design_is_exact_counted_and_fail_closed():
     design = load_design()
-    assert design["status"] == "offline_instrument_build"
-    assert design["version"] == "0.2.0"
+    assert design["status"] == "offline_qualified_pending_development_shakeout"
+    assert design["version"] == "0.7.0"
     assert design["fresh_suite"]["generator_version"] == (
         design["fresh_suite"]["seed_namespace"]
     )
@@ -90,13 +90,27 @@ def test_next_study_design_is_exact_counted_and_fail_closed():
     assert design["sentinel"]["primary_condition_cells"] == 88
     assert design["execution_gates"] == {
         "calibration_protocol_frozen": True,
+        "condition_aware_burden_complete": True,
+        "construct_contract_complete": True,
+        "descriptive_selection_frozen": True,
         "fresh_generator_complete": True,
-        "grader_mutation_matrix_complete": False,
+        "grader_mutation_matrix_complete": True,
+        "grader_mutation_harness_complete": True,
+        "grader_machine_conformance_complete": True,
+        "independent_grader_implementation_complete": True,
         "independent_oracle_complete": True,
+        "independent_validated_outcomes_complete": True,
         "live_execution_authorized": False,
+        "native_windows_clean_checkout_complete": False,
         "power_and_cluster_analysis_frozen": True,
-        "prompt_ground_truth_review_complete": False,
+        "semantic_internal_validity_complete": True,
+        "development_shakeout_complete": False,
+        "scheduler_implementation_complete": True,
+        "evidence_derived_attempt_extractor_complete": True,
+        "authorization_readiness_implementation_complete": True,
+        "descriptive_post_primary_gate_complete": True,
         "sentinel_protocol_frozen": True,
+        "split_leakage_audit_complete": True,
     }
     assert design["live_model_execution_enabled"] is False
     assert design["retained_execution_enabled"] is False
@@ -137,8 +151,8 @@ def test_next_study_canonical_json_is_lf_only_on_windows_checkout():
         lambda value: value["sentinel"].__setitem__(
             "primary_condition_cells", 87
         ),
-        lambda value: value["required_controls"].__setitem__(
-            "old_suite_model_reuse_allowed", True
+        lambda value: value["program"].__setitem__(
+            "external_plugin_discovery_in_research", True
         ),
         lambda value: value["execution_gates"].pop(
             "independent_oracle_complete"

@@ -1,5 +1,41 @@
 # Changelog
 
+## Unreleased
+
+### Strengthened successor program
+
+- Permanently retired `office-generators/2.0.1` and implemented the final
+  split-neutral `2.1.0` remediation with 528 cases, 176 outcome-distinct policy
+  triplets, visible initial memory, leakage scanning, and executable
+  condition-aware 9-native/12-harness request maxima.
+- Added the frozen `office-construct/1.0.0` and machine-readable claim
+  contracts, an independent public-packet outcome compiler, and
+  `office-strict-grader/3.0.0`. Both primary conditions pass all 1,056 typed
+  positive traces; grader conformance passes 528 baselines, 2,976 mutations,
+  and 1,392 benign controls.
+- Reclassified the existing human-review tooling and public answer key as
+  advisory-only fixtures. They cannot authorize execution or supply outcomes.
+- Froze protocol `1.3.0` with rejection-sampled exact-uniform bootstrap indices,
+  first-100-vector digest, nearest-rank interval, conditional power sensitivity,
+  LOFO diagnostics, reliability, per-instance trial-order reversal, and sealed
+  schedule-bound evidence-ledger analysis, and corrected joint-claim power
+  language.
+- Restored and froze the 22-case/222-cell descriptive matrix and implemented
+  exact calibration, sentinel, retained, retry/resume, masking/unmasking,
+  explicit post-primary descriptive eligibility and paired resource reporting,
+  exact-key fingerprint authorization, an actually-held machine lease,
+  authorization-bound sealed preflight gates, phase and descriptive marker-last
+  evidence extraction, mandatory 4B descriptive-cell minima, plugin isolation,
+  `/2` execution-context and attempt schemas, evidence-derived resource rows,
+  study-report generation, and byte-recomputed annotated-tag release controls
+  under 1,542 logical/3,084 physical ceilings.
+- Added a full model-free `mock-v0.14.0` rehearsal covering positive, negative,
+  null, threshold, incomplete, and exact 52/440/53/440 boundaries. Synthetic
+  artifacts are rejected by production release verification.
+- `v0.12.0` remains permanently unissued. Future targets are `v0.13.0` for an
+  authorized instrument, `v0.14.0` for a completed study, and `v0.15.0` for the
+  separately developed Brix demo.
+
 All notable changes to this repository are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions use
 `MAJOR.MINOR.PATCH`.
@@ -48,9 +84,9 @@ condition comparison, or retained execution is permitted.
   subepisode prompts, initial state, and date. Its canonical audit independently
   reproduces all 528 hidden outcomes without accepting `required_effects` or
   grader output.
-- A canonical 528-entry blind two-reviewer/adjudication ledger. It is
-  deliberately `pending_human_review`; no human judgment or accepted
-  alternative is fabricated by software.
+- A canonical blind human-review/adjudication ledger. Its initial exhaustive
+  draft was superseded by the proportionate tiered protocol above; no human
+  judgment or accepted alternative is fabricated by software.
 - A frozen successor protocol with two trials per condition, 352 calibration
   attempts, 880 retained-primary attempts, an 88-cell sentinel, a stratified
   instance-cluster bootstrap, an exact cluster sign-flip diagnostic, and

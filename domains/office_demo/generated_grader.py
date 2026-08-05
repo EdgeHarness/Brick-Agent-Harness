@@ -143,6 +143,19 @@ def _presentation_matches(payload, effect):
         for index, minimum in enumerate(minimums)
     ):
         return False
+    by_slide = effect.get("required_values_by_slide")
+    if by_slide is not None:
+        if len(by_slide) != len(slides):
+            return False
+        for (_title, bullets), values in zip(slides, by_slide):
+            normalized_slide = re.sub(
+                r"[,\s$]", "", " ".join(bullets).casefold()
+            )
+            if any(
+                re.sub(r"[,\s$]", "", str(value).casefold()) not in normalized_slide
+                for value in values
+            ):
+                return False
     blob = " ".join(
         title + " " + " ".join(bullets) for title, bullets in slides
     )
@@ -214,6 +227,10 @@ def _effect_outcome(effect, state, memory, artifacts):
             and _text(effect.get("subject_contains", ""))
             in _text(item.get("subject", ""))
             and _intent(item.get("body", ""), effect["body_intent"])
+            and all(
+                _text(value) in _text(item.get("body", ""))
+                for value in effect.get("required_mentions", [])
+            )
         ]
         return len(matches) == effect["exact_count"]
     if kind == "event_created":
@@ -239,9 +256,11 @@ def _effect_outcome(effect, state, memory, artifacts):
                 continue
             if effect.get("include_start_times"):
                 expected_times = [
-                    event["start"]
-                    for event in state["events"]
-                    if event["title"] in effect["ordered_mentions"]
+                    next(
+                        event["start"] for event in state["events"]
+                        if event["title"] == mention
+                    )
+                    for mention in effect["ordered_mentions"]
                 ]
                 if not _contains_in_order(text, expected_times):
                     continue

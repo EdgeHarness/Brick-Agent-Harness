@@ -59,12 +59,16 @@ def execute(instance, workdir):
         elif kind == "presentation_created":
             slides = []
             values = list(effect.get("required_values", []))
+            values_by_slide = effect.get(
+                "required_values_by_slide",
+                [[] for _ in range(effect["exact_slide_count"])],
+            )
             minimums = effect.get(
                 "minimum_bullets_by_slide",
                 [0] * effect["exact_slide_count"],
             )
             for index, title in enumerate(effect["ordered_titles"]):
-                bullets = []
+                bullets = [str(value) for value in values_by_slide[index]]
                 if len(values) == effect["exact_slide_count"] - 1 and index:
                     bullets.append(str(values[index - 1]))
                 elif effect["exact_slide_count"] == 1:
@@ -108,7 +112,9 @@ def execute(instance, workdir):
             _action(actions, "create_spreadsheet", args)
         elif kind == "email_sent":
             subject = "Re: %s" % effect.get("subject_contains", "attendance")
-            body = "I confirm that I will attend. Count me in."
+            body = "I confirm that I will attend. Count me in. %s" % " ".join(
+                str(value) for value in effect.get("required_mentions", [])
+            )
             record = {"to": effect["to"], "subject": subject, "body": body}
             state["sent_emails"].append(record)
             _action(actions, "send_email", record)

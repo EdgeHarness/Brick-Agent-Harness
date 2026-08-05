@@ -67,9 +67,20 @@ does not close independent-oracle or prompt-validity gates for a new suite.
   [SWE-Bench Pro audit](https://openai.com/index/separating-signal-from-noise-coding-evaluations/)
   reports overly strict tests, underspecified prompts, low-coverage tests, and
   misleading prompts, with independent review by experienced engineers. Brick
-  adopts the useful process, not its domain-specific numbers: two independent
-  prompt/oracle reviews, recorded disagreements, and adjudication over accepted
-  alternatives.
+  adopts the useful process, not its domain-specific numbers: independent cold
+  review, recorded disagreements, and adjudication over accepted alternatives.
+- NIST's draft
+  [AI 800-2](https://nvlpubs.nist.gov/nistpubs/ai/NIST.AI.800-2.ipd.pdf)
+  treats benchmark validity as evidence for an intended interpretation and use;
+  it does not prescribe duplicate annotation of every non-claim cohort. The
+  308 calibration/retained claim cases therefore receive human review, while
+  the other 220 cases remain explicitly machine-only conformance evidence.
+- Partial double annotation is a recognized way to estimate reliability under
+  constrained annotation budgets (for example,
+  [NAACL Findings 2025](https://aclanthology.org/anthology-files/pdf/naacl/2025.naacl-findings.185.pdf)).
+  Brick freezes 88 factor-balanced second reviews and automatically expands to
+  all 308 after two reliability events; this is a study-specific control, not a
+  claim that partial review is universally sufficient.
 - The maintained
   [tau2/tau3 repository](https://github.com/sierra-research/tau2-bench) records
   more than 75 corrections for wrong expected actions, ambiguity, impossible
@@ -137,8 +148,8 @@ does not close independent-oracle or prompt-validity gates for a new suite.
 ## Fail-closed successor architecture
 
 `next_study_design.json` is an offline instrument-build contract, version
-0.2.0. It binds the terminal S7 artifacts and postmortem plus a genuinely fresh
-generator namespace. `office-generators/2.0.0` now implements this allocation
+0.5.0. It binds the terminal S7 artifacts and postmortem plus a genuinely fresh
+generator namespace. `office-generators/2.1.0` now implements this allocation
 across 11 families:
 
 | Split | Cases per family | Total cases |
@@ -179,15 +190,16 @@ reviewed, versioned artifacts:
 7. sentinel protocol frozen; and
 8. explicit live-execution authorization.
 
-Five gates are now artifact-backed: fresh generator, independent oracle,
+Six gates are now artifact-backed: fresh generator, independent oracle,
 calibration protocol, repeat-aware power/clustered analysis, and sentinel
-protocol. The canonical review ledger has 528 entries and two independent
-review slots per entry, but remains `pending_human_review` with zero completed
-cases. Software does not impersonate reviewers. The new grader mutation matrix
-also remains unfinished, and live authorization is false.
+protocol, plus full-suite machine grader conformance. The canonical review
+ledger has 308 claim-relevant entries, 88 frozen double-review cases, and a
+two-event expansion rule, but remains `pending_human_review` with zero completed
+cases. Software does not impersonate reviewers. The human-backed grader
+certificate remains unfinished, and live authorization is false.
 
 The contract therefore still returns `execution_allowed=false`; retained
 execution is separately false. Reproduce the completed offline work with
 `python -m bench.generate_next_study --verify`. The next implementation
-milestone is independent human review plus a fresh-suite grader/mutation matrix,
+milestone is independent tiered human review plus its grader/mutation certificate,
 not a model run.

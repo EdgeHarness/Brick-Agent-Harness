@@ -1,46 +1,89 @@
-"""Fail-closed contract for the post-S7 successor instrument build."""
+"""Fail-closed contract for the strengthened post-S7 successor program."""
 
 import hashlib
 from pathlib import Path
 
+from bench.next_study_schedule import verify_descriptive_selection
 from bench.next_study_statistics import load_protocol
-from bench.s7_postmortem import build_postmortem
+from bench.next_study_claim import load_claim_contract
+from bench.next_study_construct import load_contract as load_construct_contract
+from bench.next_study_validated_outcomes import validate_validated_outcomes
 from bench.s7_contract import load_protocol as load_s7_protocol
 from bench.s7_contract import s7_protocol_sha256
+from bench.s7_postmortem import build_postmortem
 from harness.evidence import canonical_json_bytes
-from harness.instances import load_canonical_json
+from harness.instances import load_canonical_json, replace_canonical_json
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DESIGN_PATH = ROOT / "bench" / "next_study_design.json"
 
-_CONDITIONS = ["native_tools", "harness_full"]
+_PREDECESSOR = {
+    "floor_ceiling_audit_path": "evidence/s7/d0b-floor-ceiling-audit.json",
+    "floor_ceiling_audit_sha256": "361132449a778d3906b6a095c1c89ea2df2e69f23ca5c2bcb184c42cc4ef2337",
+    "postmortem_path": "evidence/s7/d0b-direction-blind-postmortem.json",
+    "postmortem_sha256": "9b5b0f87340877b0fdcaada3ca2a4a40fc6bc557407debeed9b01f20cfe23805",
+    "retired_generator_version": "office-generators/1.1.0",
+    "run_id": "s7-d0b-20260804T025010Z",
+    "runtime_decision_path": "evidence/s7/d0b-runtime-decision.json",
+    "runtime_decision_sha256": "d46e07476040bc3833a314ae2f382c49525496b1afec2f706a4b3fd54c4d670f",
+    "s7_protocol_path": "bench/s7_protocol.json",
+    "s7_protocol_sha256": "c4a409144f197d3b43e70d27b50b764cade3ecca4c236a01937dfc440218249d",
+}
+
+_ARTIFACT_PATHS = {
+    "retired_2_0_1": "evidence/next-study/office-v2.0.1-retirement.json",
+    "manifest_lock": "bench/manifests/office-v2/manifest-lock.json",
+    "oracle_audit": "evidence/next-study/office-v2-oracle-audit.json",
+    "validated_outcomes": "evidence/next-study/office-v2-validated-outcomes.json",
+    "outcome_compiler": "domains/office_demo/outcome_oracle_v2.py",
+    "claim_contract": "bench/next_study_claim_contract.json",
+    "claim_implementation": "bench/next_study_claim.py",
+    "construct_contract": "bench/next_study_construct_contract.json",
+    "construct_implementation": "bench/next_study_construct.py",
+    "semantic_simulation": "evidence/next-study/office-v2-semantic-simulation.json",
+    "semantic_implementation": "bench/next_study_semantic_simulation.py",
+    "semantic_rendered_report": "evidence/next-study/semantic-validation-report/artifact.json",
+    "rehearsal": "evidence/next-study/office-v2-model-free-rehearsal.json",
+    "rehearsal_implementation": "bench/next_study_rehearsal.py",
+    "report_implementation": "bench/next_study_report.py",
+    "protocol": "bench/next_study_protocol.json",
+    "statistics_implementation": "bench/next_study_statistics.py",
+    "descriptive_selection": "bench/next_study_descriptive_selection.json",
+    "descriptive_implementation": "bench/next_study_descriptive.py",
+    "schedule_implementation": "bench/next_study_schedule.py",
+    "grader_implementation": "domains/office_demo/reviewed_grader_v2.py",
+    "grader_audit_implementation": "bench/next_study_grader_audit.py",
+    "grader_machine_conformance": "evidence/next-study/office-v2-grader-machine-conformance.json",
+    "program_implementation": "bench/next_study_program.py",
+    "runtime_implementation": "bench/next_study_runtime.py",
+    "readiness_implementation": "bench/next_study_readiness.py",
+}
+
 _EXPECTED_GATES = {
     "calibration_protocol_frozen": True,
+    "condition_aware_burden_complete": True,
+    "construct_contract_complete": True,
+    "descriptive_selection_frozen": True,
     "fresh_generator_complete": True,
-    "grader_mutation_matrix_complete": False,
+    "grader_mutation_matrix_complete": True,
+    "grader_mutation_harness_complete": True,
+    "grader_machine_conformance_complete": True,
+    "independent_grader_implementation_complete": True,
     "independent_oracle_complete": True,
+    "independent_validated_outcomes_complete": True,
     "live_execution_authorized": False,
+    "native_windows_clean_checkout_complete": False,
     "power_and_cluster_analysis_frozen": True,
-    "prompt_ground_truth_review_complete": False,
+    "semantic_internal_validity_complete": True,
+    "development_shakeout_complete": False,
+    "scheduler_implementation_complete": True,
+    "evidence_derived_attempt_extractor_complete": True,
+    "authorization_readiness_implementation_complete": True,
+    "descriptive_post_primary_gate_complete": True,
     "sentinel_protocol_frozen": True,
+    "split_leakage_audit_complete": True,
 }
-_DIFFICULTY_AXES = [
-    "minimum_discovery_calls",
-    "minimum_source_reads",
-    "minimum_mutating_calls",
-    "artifact_rows_or_slides",
-    "source_items",
-    "constraint_branches",
-    "subepisodes",
-]
-_IDENTITY_REUSE_CHANNELS = [
-    "instance_id",
-    "content_sha256",
-    "structure_sha256",
-    "entity_key",
-    "entity_surface",
-]
 
 
 class NextStudyDesignError(ValueError):
@@ -48,232 +91,270 @@ class NextStudyDesignError(ValueError):
 
 
 def _sha256(path):
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    path = Path(path)
+    payload = path.read_bytes()
+    if path.suffix.lower() in {".json", ".md", ".py", ".txt"}:
+        try:
+            payload = payload.decode("utf-8").replace("\r\n", "\n").encode("utf-8")
+        except UnicodeDecodeError:
+            pass
+    return hashlib.sha256(payload).hexdigest()
 
 
-def _bound_path(record, path_key, digest_key):
-    path = ROOT / record.get(path_key, "")
-    if not path.is_file() or _sha256(path) != record.get(digest_key):
-        raise NextStudyDesignError("artifact binding failed for %s" % path_key)
-    return path
+def _artifact_bindings():
+    result = {}
+    for name, relative_path in sorted(_ARTIFACT_PATHS.items()):
+        path = ROOT / relative_path
+        if not path.is_file():
+            raise NextStudyDesignError("missing successor artifact %s" % relative_path)
+        result["%s_path" % name] = relative_path
+        result["%s_sha256" % name] = _sha256(path)
+    return result
 
 
-def load_design(path=DESIGN_PATH):
-    design = load_canonical_json(path)
-    validate_design(design)
-    return design
+def build_design():
+    return {
+        "schema_version": "brick.next-study.design/5",
+        "version": "0.7.0",
+        "status": "offline_qualified_pending_development_shakeout",
+        "release_sequence": {
+            "v0.12.0": "permanently_unissued_terminal_s7",
+            "v0.13.0": "authorized_successor_instrument_target",
+            "v0.14.0": "completed_study_target",
+            "v0.15.0": "isolated_product_demo_target",
+        },
+        "live_model_execution_enabled": False,
+        "retained_execution_enabled": False,
+        "execution_gates": dict(_EXPECTED_GATES),
+        "predecessor": dict(_PREDECESSOR),
+        "fresh_suite": {
+            "generator_version": "office-generators/2.1.0",
+            "seed_namespace": "office-generators/2.1.0",
+            "families": 11,
+            "development_cases_per_family": 8,
+            "calibration_cases_per_family": 8,
+            "validation_cases_per_family": 4,
+            "sentinel_cases_per_family": 4,
+            "retained_cases_per_family": 20,
+            "adversarial_cases_per_family": 4,
+            "total_cases": 528,
+            "model_and_reviewer_visible_split_leakage": 0,
+        },
+        "calibration": {
+            "cases_per_family": 8,
+            "conditions": ["native_tools", "harness_full"],
+            "independent_trials_per_cell": 2,
+            "model_attempts": 352,
+            "combined_outcomes_per_family": 32,
+            "direction_blind": True,
+            "acceptable_combined_successes_minimum": 10,
+            "acceptable_combined_successes_maximum": 22,
+            "outcome_granularity_percentage_points": "3.125",
+            "any_family_outside_band_retires_complete_generator_version": True,
+        },
+        "primary_design": {
+            "cases_per_family": 20,
+            "instance_clusters": 220,
+            "conditions": ["native_tools", "harness_full"],
+            "independent_trials_per_cell": 2,
+            "model_attempts": 880,
+            "paired_seed_across_conditions": True,
+            "minimum_relevant_absolute_effect": "0.12",
+            "planning_power_is_conditional": True,
+            "normal_approximation_power": "0.828074238908",
+            "leave_one_family_out_descriptive_records": 11,
+            "every_instance_order_reversed_on_trial_one": True,
+        },
+        "sentinel": {
+            "cases_per_family": 4,
+            "trials_per_cell": 1,
+            "primary_condition_cells": 88,
+            "instrument_invalid_cells_allowed": 0,
+            "zero_failure_one_sided_95_upper_bound": "0.03346948891663748",
+            "bound_is_diagnostic_not_efficacy_claim": True,
+        },
+        "descriptive_matrix": {
+            "selected_retained_cases": 22,
+            "maximum_logical_cells": 222,
+            "runs_only_after_sealed_primary_analysis": True,
+            "may_alter_primary_claim": False,
+            "sealed_primary_eligibility_required": True,
+            "paired_descriptive_differences_required": True,
+        },
+        "program": {
+            "maximum_logical_cells": 1542,
+            "maximum_physical_attempts": 3084,
+            "same_seed_environment_retry_limit": 1,
+            "auto_advance_on_sealed_pass": True,
+            "machine_wide_benchmark_lease_required": True,
+            "external_plugin_discovery_in_research": False,
+            "attempt_records_derived_from_marker_last_evidence": True,
+            "authorization_artifact_exact_key_validation": True,
+        },
+        "advisory_human_review": {
+            "authorization_gate": False,
+            "may_change_or_supply_validated_outcomes": False,
+            "utilities_retained_for_optional_external_validity_work": True,
+        },
+        "successor_artifacts": _artifact_bindings(),
+    }
 
 
 def _validate_predecessor(design):
-    predecessor = design.get("predecessor", {})
-    for path_key, digest_key in (
-        ("runtime_decision_path", "runtime_decision_sha256"),
-        ("floor_ceiling_audit_path", "floor_ceiling_audit_sha256"),
+    predecessor = design["predecessor"]
+    for path_name in (
+        "runtime_decision", "floor_ceiling_audit", "postmortem",
     ):
-        _bound_path(predecessor, path_key, digest_key)
-    postmortem_path = _bound_path(
-        predecessor, "postmortem_path", "postmortem_sha256"
-    )
-    protocol_path = ROOT / predecessor.get("s7_protocol_path", "")
-    if (
-        not protocol_path.is_file()
-        or s7_protocol_sha256(load_s7_protocol(protocol_path))
-        != predecessor.get("s7_protocol_sha256")
-    ):
-        raise NextStudyDesignError("predecessor binding failed for s7_protocol_path")
-    postmortem_bytes = canonical_json_bytes(build_postmortem(), newline=True)
-    postmortem_sha256 = hashlib.sha256(postmortem_bytes).hexdigest()
-    if (
-        postmortem_sha256 != predecessor.get("postmortem_sha256")
-        or postmortem_path.read_bytes() != postmortem_bytes
-    ):
-        raise NextStudyDesignError("direction-blind postmortem digest drifted")
+        path = ROOT / predecessor["%s_path" % path_name]
+        if not path.is_file() or _sha256(path) != predecessor["%s_sha256" % path_name]:
+            raise NextStudyDesignError("predecessor artifact binding drifted")
+    s7_path = ROOT / predecessor["s7_protocol_path"]
+    if s7_protocol_sha256(load_s7_protocol(s7_path)) != predecessor["s7_protocol_sha256"]:
+        raise NextStudyDesignError("S7 protocol binding drifted")
+    postmortem = canonical_json_bytes(build_postmortem(), newline=True)
+    if hashlib.sha256(postmortem).hexdigest() != predecessor["postmortem_sha256"]:
+        raise NextStudyDesignError("S7 postmortem replay drifted")
 
 
-def _validate_successor_artifacts(design):
-    artifacts = design.get("successor_artifacts", {})
-    expected_keys = {
-        "manifest_lock_path", "manifest_lock_sha256", "oracle_audit_path",
-        "oracle_audit_sha256", "review_ledger_path", "review_ledger_sha256",
-        "review_ledger_status", "review_implementation_path",
-        "review_implementation_sha256", "protocol_path", "protocol_sha256",
-        "statistics_implementation_path", "statistics_implementation_sha256",
-    }
-    if not isinstance(artifacts, dict) or set(artifacts) != expected_keys:
-        raise NextStudyDesignError("successor artifact bindings have unexpected keys")
-    lock_path = _bound_path(artifacts, "manifest_lock_path", "manifest_lock_sha256")
-    audit_path = _bound_path(artifacts, "oracle_audit_path", "oracle_audit_sha256")
-    ledger_path = _bound_path(artifacts, "review_ledger_path", "review_ledger_sha256")
-    protocol_path = _bound_path(artifacts, "protocol_path", "protocol_sha256")
-    _bound_path(
-        artifacts, "review_implementation_path", "review_implementation_sha256"
-    )
-    _bound_path(
-        artifacts,
-        "statistics_implementation_path",
-        "statistics_implementation_sha256",
-    )
-
-    lock = load_canonical_json(lock_path)
+def _validate_successor_semantics():
+    retired = load_canonical_json(ROOT / _ARTIFACT_PATHS["retired_2_0_1"])
     if (
-        lock.get("schema_version") != "brick.next-study.manifest-lock/1"
-        or lock.get("generator_version") != "office-generators/2.0.0"
-        or [item.get("split") for item in lock.get("manifests", [])]
-        != [
+        retired.get("generator_version") != "office-generators/2.0.1"
+        or retired.get("status") != "permanently_retired"
+        or retired.get("execution_enabled") is not False
+        or retired.get("packet_export_enabled") is not False
+    ):
+        raise NextStudyDesignError("2.0.1 retirement evidence drifted")
+    lock = load_canonical_json(ROOT / _ARTIFACT_PATHS["manifest_lock"])
+    if (
+        lock.get("generator_version") != "office-generators/2.1.0"
+        or sum(item["instances"] for item in lock.get("manifests", [])) != 528
+        or lock.get("split_leakage_review", {}).get("finding_count") != 0
+        or lock.get("split_leakage_review", {}).get("passed") is not True
+        or lock.get("balance_review", {}).get("maximum_expected_native_requests") != 9
+        or lock.get("balance_review", {}).get("maximum_expected_harness_requests") != 12
+        or lock.get("balance_review", {}).get("matched_policy_triplets") != 176
+        or lock.get("balance_review", {}).get("normalized_two_x_headroom_claimed") is not False
+    ):
+        raise NextStudyDesignError("successor generator audits are incomplete")
+    audit = load_canonical_json(ROOT / _ARTIFACT_PATHS["oracle_audit"])
+    if (
+        audit.get("generator_version") != "office-generators/2.1.0"
+        or audit.get("case_count") != 528 or audit.get("all_exact_matches") is not True
+        or audit.get("live_model_calls") != 0
+    ):
+        raise NextStudyDesignError("successor oracle audit is incomplete")
+    manifests = [
+        load_canonical_json(ROOT / "bench" / "manifests" / "office-v2" / (split + ".json"))
+        for split in (
             "development", "calibration", "validation", "sentinel",
             "retained", "adversarial",
-        ]
-        or sum(item.get("instances", 0) for item in lock.get("manifests", []))
-        != 528
-        or lock.get("overlap_review", {}).get("structures") != 528
-        or lock.get("predecessor_reuse_review", {}).get("overlap_counts")
-        != {
-            "content_sha256": 0,
-            "entity_key": 0,
-            "entity_surface": 0,
-            "instance_id": 0,
-            "structure_sha256": 0,
-        }
-    ):
-        raise NextStudyDesignError("fresh generator lock is incomplete")
-
-    audit = load_canonical_json(audit_path)
+        )
+    ]
+    validate_validated_outcomes(
+        load_canonical_json(ROOT / _ARTIFACT_PATHS["validated_outcomes"]),
+        manifests,
+    )
+    load_claim_contract(ROOT / _ARTIFACT_PATHS["claim_contract"])
+    load_construct_contract(ROOT / _ARTIFACT_PATHS["construct_contract"])
+    semantic = load_canonical_json(ROOT / _ARTIFACT_PATHS["semantic_simulation"])
     if (
-        audit.get("schema_version") != "brick.next-study.oracle-audit/1"
-        or audit.get("generator_version") != "office-generators/2.0.0"
-        or audit.get("case_count") != 528
-        or audit.get("prompt_to_hidden_outcome_exact_matches") != 528
-        or audit.get("all_exact_matches") is not True
-        or audit.get("oracle_accepts_required_effects_parameter") is not False
-        or audit.get("required_effects_consumed_by_oracle") is not False
-        or audit.get("grader_output_consumed_by_oracle") is not False
-        or audit.get("live_model_calls") != 0
-        or audit.get("manifest_lock_sha256") != artifacts["manifest_lock_sha256"]
+        semantic.get("status") != "passed"
+        or semantic.get("scope", {}).get("case_count") != 528
+        or semantic.get("simulation", {}).get("typed_positive_workflows_strict_successes") != 1056
+        or semantic.get("finding_severity_counts", {}).get("critical", 0) != 0
+        or semantic.get("finding_severity_counts", {}).get("high", 0) != 0
+        or semantic.get("finding_severity_counts", {}).get("medium", 0) != 0
+        or semantic.get("assessment", {}).get("confirmatory_execution_recommended") is not True
     ):
-        raise NextStudyDesignError("independent oracle audit is incomplete")
-
-    ledger = load_canonical_json(ledger_path)
+        raise NextStudyDesignError("semantic internal-validity gate is incomplete")
+    rendered = load_canonical_json(
+        ROOT / _ARTIFACT_PATHS["semantic_rendered_report"]
+    )
+    try:
+        summary = rendered["snapshot"]["datasets"]["summary"]
+        profiles = rendered["snapshot"]["datasets"]["profile_sensitivity"]
+        findings = rendered["snapshot"]["datasets"]["findings"]
+        source = next(
+            item for item in rendered["sources"]
+            if item.get("id") == "semantic_simulation"
+        )
+    except (KeyError, StopIteration, TypeError):
+        raise NextStudyDesignError("semantic rendered report is incomplete")
     if (
-        ledger.get("schema_version") != "brick.next-study.review-ledger/1"
-        or ledger.get("generator_version") != "office-generators/2.0.0"
-        or ledger.get("cases") != 528
-        or ledger.get("completed_cases") != 0
-        or ledger.get("status") != "pending_human_review"
-        or artifacts.get("review_ledger_status") != ledger.get("status")
+        rendered.get("surface") != "report"
+        or rendered.get("snapshot", {}).get("status") != "ready"
+        or summary != [{
+            "typed_workflows": 1056,
+            "high_findings": 0,
+            "memory_failures": 0,
+            "nominal_families": 0,
+            "families_total": 11,
+        }]
+        or len(profiles) != 11
+        or any(
+            item.get("decision_sensitive_cells") != 16
+            or item.get("matched_cells") != 16
+            or item.get("classification") != "decision-rule sensitive"
+            for item in profiles
+        )
+        or findings != []
+        or source.get("path")
+        != "evidence/next-study/office-v2-semantic-simulation.json"
+        or "office-generators/2.1.0"
+        not in rendered.get("manifest", {}).get("description", "")
     ):
-        raise NextStudyDesignError("human review ledger status is inconsistent")
-
-    if protocol_path.resolve() != (ROOT / "bench" / "next_study_protocol.json").resolve():
-        raise NextStudyDesignError("next-study protocol path drifted")
-    protocol = load_protocol(protocol_path)
-    if protocol["execution_controls"]["live_model_execution_enabled"] is not False:
-        raise NextStudyDesignError("successor protocol enables live execution")
-    return lock, audit, ledger, protocol
+        raise NextStudyDesignError("semantic rendered report drifted")
+    rehearsal = load_canonical_json(ROOT / _ARTIFACT_PATHS["rehearsal"])
+    if (
+        rehearsal.get("status") != "passed"
+        or rehearsal.get("execution_context", {}).get("value") != "synthetic_rehearsal"
+        or rehearsal.get("descriptive_cells") != 222
+        or rehearsal.get("git_tags_created") != 0
+        or rehearsal.get("live_model_calls") != 0
+        or not all(rehearsal.get("release_rejections", {}).values())
+    ):
+        raise NextStudyDesignError("model-free rehearsal is incomplete")
+    machine = load_canonical_json(ROOT / _ARTIFACT_PATHS["grader_machine_conformance"])
+    machine_marker = Path(
+        str(ROOT / _ARTIFACT_PATHS["grader_machine_conformance"]) + ".complete"
+    )
+    if (
+        not machine_marker.is_file() or machine_marker.read_bytes() != b""
+        or
+        machine.get("schema_version")
+        != "brick.next-study.grader-validated-conformance/1"
+        or machine.get("case_count") != 528
+        or machine.get("positive_baselines") != 528
+        or machine.get("targeted_mutations") != 2976
+        or machine.get("benign_non_rejection_controls") != 1392
+        or machine.get("passed") is not True
+        or machine.get("may_satisfy_human_ground_truth_gate") is not False
+        or machine.get("live_model_calls") != 0
+    ):
+        raise NextStudyDesignError("full-suite machine conformance is incomplete")
+    protocol = load_protocol(ROOT / _ARTIFACT_PATHS["protocol"])
+    if protocol["version"] != "1.3.0":
+        raise NextStudyDesignError("successor protocol version drifted")
+    verify_descriptive_selection()
 
 
 def validate_design(design):
-    if design.get("schema_version") != "brick.next-study.design/1":
-        raise NextStudyDesignError("unexpected next-study design schema")
-    if (
-        design.get("version") != "0.2.0"
-        or design.get("status") != "offline_instrument_build"
-    ):
-        raise NextStudyDesignError("next-study design is not the frozen offline build")
-    if design.get("live_model_execution_enabled") is not False:
-        raise NextStudyDesignError("next-study live model execution must remain disabled")
-    if design.get("retained_execution_enabled") is not False:
-        raise NextStudyDesignError("next-study retained execution must remain disabled")
-    if design.get("execution_gates") != _EXPECTED_GATES:
-        raise NextStudyDesignError("next-study execution gates do not match artifacts")
-
+    if design != build_design():
+        raise NextStudyDesignError("next-study design or artifact binding drifted")
     _validate_predecessor(design)
-    _lock, _audit, _ledger, protocol = _validate_successor_artifacts(design)
-
-    fresh = design.get("fresh_suite", {})
-    expected_fresh = {
-        "generator_version": "office-generators/2.0.0",
-        "seed_namespace": "office-generators/2.0.0",
-        "families": 11,
-        "development_cases_per_family": 8,
-        "calibration_cases_per_family": 8,
-        "validation_cases_per_family": 4,
-        "sentinel_cases_per_family": 4,
-        "retained_cases_per_family": 20,
-        "adversarial_cases_per_family": 4,
-        "total_cases": 528,
-    }
-    if fresh != expected_fresh:
-        raise NextStudyDesignError("fresh-suite allocation drifted")
-    if fresh["generator_version"] == design["predecessor"]["retired_generator_version"]:
-        raise NextStudyDesignError("successor reuses the retired generator namespace")
-
-    calibration = design.get("calibration", {})
-    if (
-        calibration.get("cases_per_family") != 8
-        or calibration.get("conditions") != _CONDITIONS
-        or calibration.get("independent_trials_per_cell") != 2
-        or calibration.get("model_attempts") != 352
-        or calibration.get("combined_outcomes_per_family") != 32
-        or calibration.get("direction_blind") is not True
-        or calibration.get("acceptable_combined_successes_minimum") != 10
-        or calibration.get("acceptable_combined_successes_maximum") != 22
-        or calibration.get("outcome_granularity_percentage_points") != "3.125"
-        or calibration.get(
-            "task_shape_selection_may_use_only_direction_blind_development_and_calibration_aggregates"
-        ) is not True
-        or calibration.get("any_family_outside_band_retires_complete_generator_version")
-        is not True
-    ):
-        raise NextStudyDesignError("calibration design drifted")
-    if protocol["calibration"]["model_attempts"] != calibration["model_attempts"]:
-        raise NextStudyDesignError("calibration protocol/design mismatch")
-
-    primary = design.get("primary_design", {})
-    if (
-        primary.get("cases_per_family") != 20
-        or primary.get("instance_clusters") != 220
-        or primary.get("conditions") != _CONDITIONS
-        or primary.get("independent_trials_per_cell") != 2
-        or primary.get("model_attempts") != 880
-        or primary.get("paired_seed_across_conditions") is not True
-        or primary.get("minimum_relevant_absolute_effect") != "0.12"
-        or primary.get("normal_approximation_power") != "0.828074238908"
-        or "instance-clustered paired effect" not in primary.get("required_analysis", "")
-    ):
-        raise NextStudyDesignError("primary design drifted")
-    if protocol["primary"]["model_attempts"] != primary["model_attempts"]:
-        raise NextStudyDesignError("primary protocol/design mismatch")
-
-    sentinel = design.get("sentinel", {})
-    if (
-        sentinel.get("cases_per_family") != 4
-        or sentinel.get("trials_per_cell") != 1
-        or sentinel.get("primary_condition_cells") != 88
-        or sentinel.get("instrument_invalid_cells_allowed") != 0
-        or sentinel.get("zero_failure_one_sided_95_upper_bound")
-        != "0.03346948891663748"
-        or sentinel.get("bound_is_diagnostic_not_efficacy_claim") is not True
-    ):
-        raise NextStudyDesignError("sentinel design drifted")
-    if protocol["sentinel"]["condition_cells"] != sentinel["primary_condition_cells"]:
-        raise NextStudyDesignError("sentinel protocol/design mismatch")
-
-    controls = design.get("required_controls", {})
-    if controls.get("difficulty_axes") != _DIFFICULTY_AXES:
-        raise NextStudyDesignError("required difficulty axes drifted")
-    if controls.get("identity_reuse_channels") != _IDENTITY_REUSE_CHANNELS:
-        raise NextStudyDesignError("identity reuse controls drifted")
-    if controls.get("old_suite_model_reuse_allowed") is not False:
-        raise NextStudyDesignError("retired-suite model-result reuse enabled")
-    if "must not consume required_effects or grader output" not in controls.get(
-        "oracle_independence", ""
-    ):
-        raise NextStudyDesignError("independent-oracle requirement weakened")
-    if "two independent reviewers with adjudication" not in controls.get(
-        "human_review", ""
-    ):
-        raise NextStudyDesignError("human-review requirement weakened")
+    _validate_successor_semantics()
     return design
+
+
+def load_design(path=DESIGN_PATH):
+    return validate_design(load_canonical_json(path))
+
+
+def write_design(path=DESIGN_PATH):
+    document = build_design()
+    replace_canonical_json(path, document)
+    return document
 
 
 def execution_allowed(design=None):
@@ -282,9 +363,6 @@ def execution_allowed(design=None):
 
 
 __all__ = [
-    "DESIGN_PATH",
-    "NextStudyDesignError",
-    "execution_allowed",
-    "load_design",
-    "validate_design",
+    "DESIGN_PATH", "NextStudyDesignError", "build_design", "execution_allowed",
+    "load_design", "validate_design", "write_design",
 ]

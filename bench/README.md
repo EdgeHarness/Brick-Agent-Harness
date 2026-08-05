@@ -617,16 +617,20 @@ python -m bench.generate_next_study --verify
 python -m pytest tests/test_next_study.py tests/test_next_study_v2.py -q
 ```
 
-`bench/next_study_design.json` is the artifact-bound
-`offline_instrument_build` at version `0.2.0`. Six canonical manifests hold 528
-fresh cases. The independent oracle matches every hidden outcome without an API
-for `required_effects` or grader output. Calibration (352 attempts), primary
-(880 attempts), and sentinel (88 cells) counts and repeated-trial analysis are
-frozen in `next_study_protocol.json`. The human ledger is still pending and the
-fresh grader mutation matrix does not exist, so those two gates and explicit
-live authorization remain false. `execution_allowed()` still always returns
-false. The research basis and unresolved gates are documented in
-`NEXT_STUDY_RESEARCH_BASIS.md`.
+`bench/next_study_design.json` is the artifact-bound offline candidate at
+version `0.7.0`. Six canonical manifests hold 528 split-neutral
+`office-generators/2.1.0` cases. Protocol `1.3.0` freezes calibration (352),
+sentinel (88), retained primary (880), and at most 222 descriptive cells, with
+exact-uniform bootstrap sampling and descriptive-only LOFO sensitivity. The
+semantic and grader-conformance gates pass, while explicit live authorization
+remains false pending native qualification and the 22-cell development
+shakeout. `execution_allowed()` still returns false. See
+`NEXT_STUDY_IMPLEMENTATION.md` for the implemented controls and remaining gates.
+
+`python -m bench.next_study_readiness` reports the exact boundary between
+completed instrument construction and the live host/model evidence still
+required. It must continue to report that neither a benchmark nor the
+confirmatory experiment is running before authorization.
 
 ## Unexecuted historical descriptive matrix
 

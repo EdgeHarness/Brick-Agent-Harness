@@ -115,16 +115,19 @@ completed all 44 pairs/88 attempts as `s7-d0b-20260804T025010Z` from commit
 there is no `v0.12.0`, no S8 handoff, no condition-level result, and retained
 execution remains mechanically disabled.
 
-The active successor is an offline instrument build. It contains 528 fresh,
-split-isolated `office-generators/2.0.0` cases; 528 independent
-prompt-to-hidden-outcome comparisons; a blind two-reviewer/adjudication ledger;
-and frozen repeated-trial calibration, sentinel, power, and clustered-analysis
-protocols. The ledger is deliberately `pending_human_review`, and the fresh
-grader mutation matrix is unfinished. Five artifact-backed gates are true;
-human review, grader mutation, and live authorization remain false. Live and
-retained execution are still mechanically disabled. Read
-[`bench/NEXT_STUDY_RESEARCH_BASIS.md`](bench/NEXT_STUDY_RESEARCH_BASIS.md) and
-run `python -m bench.generate_next_study --verify` before changing it.
+The active successor is the offline-qualified `office-generators/2.1.0`
+instrument: 528 split-neutral cases, 176 outcome-distinct policy triplets,
+condition-aware 9/12-call maxima, 1,056 legal typed positive traces,
+independently compiled public-packet outcomes, and
+`office-strict-grader/3.0.0`. Its conformance gate passed 528 baselines, 2,976
+targeted mutations, and 1,392 benign controls. Protocol `1.3.0` binds the claim
+contract, 50,000-draw bootstrap, LOFO, reliability metrics, and the 222-cell
+descriptive matrix. The full model-free rehearsal passes. Human-review
+utilities are advisory and cannot authorize the study. Live execution remains
+disabled pending native qualification and the separately authorized 22-cell
+score-masked development shakeout. Read
+[`bench/NEXT_STUDY_IMPLEMENTATION.md`](bench/NEXT_STUDY_IMPLEMENTATION.md) and
+run both offline verify commands before changing it.
 
 For S4, release state is authoritative in the annotated tag and bound evidence.
 Direct descendant `R` adds only the regular file
@@ -201,9 +204,11 @@ native_tools  versus  harness_full
 ```
 
 Outcome is strict whole-task success over 11 fixed synthetic task families. The
-estimand is the equal-family mean difference. A positive claim requires all
-three: `Delta > 0`, the sharp sign-flip diagnostic below `p = 0.05`, and a
-bootstrap 95% lower bound above zero.
+estimand is the equal-family mean difference. The active successor claim rule is
+defined by `bench/next_study_claim_contract.json`: a directional claim requires
+the two-sided 95% stratified bootstrap interval to exclude zero in that direction
+and the inclusive observed-effect threshold `abs(Delta) >= 0.12`. The exact
+sign-flip calculation is diagnostic only and cannot alter the claim.
 
 ## What completing the plan produces
 
