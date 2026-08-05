@@ -126,7 +126,7 @@ def test_authorization_and_program_state_are_exact_and_history_derived():
     host = build_fingerprint(HOST_FINGERPRINT_SCHEMA, {"host": "lenovo-test"})
     runtime = build_fingerprint(RUNTIME_FINGERPRINT_SCHEMA, {"ollama": "pinned"})
     authorization = build_authorization(
-        tag="v0.13.0", commit_sha="a" * 40,
+        tag="v0.13.0", tag_object_sha="9" * 40, commit_sha="a" * 40,
         artifact_digests={name: "b" * 64 for name in REQUIRED_ARTIFACT_DIGESTS},
         host_fingerprint=host, runtime_fingerprint=runtime,
         schedule_digests={name: "c" * 64 for name in (
@@ -317,7 +317,7 @@ def test_preflight_requires_the_actually_held_machine_lease(tmp_path):
     runtime = build_fingerprint(RUNTIME_FINGERPRINT_SCHEMA, {"ollama": "pinned"})
     artifacts = {name: "a" * 64 for name in REQUIRED_ARTIFACT_DIGESTS}
     authorization = build_authorization(
-        tag="v0.13.0", commit_sha="b" * 40,
+        tag="v0.13.0", tag_object_sha="9" * 40, commit_sha="b" * 40,
         artifact_digests=artifacts, host_fingerprint=host,
         runtime_fingerprint=runtime, schedule_digests=schedule_digests,
         model_digests=model_digests,
@@ -326,7 +326,7 @@ def test_preflight_requires_the_actually_held_machine_lease(tmp_path):
     )
     current = {
         "host_fingerprint": host, "runtime_fingerprint": runtime,
-        "commit_sha": "b" * 40, "tag": "v0.13.0",
+        "commit_sha": "b" * 40, "tag": "v0.13.0", "tag_object_sha": "9" * 40,
         "artifact_digests": artifacts, "model_digests": model_digests,
         "descriptive_selection_sha256": schedules["descriptives"]["selection_sha256"],
     }

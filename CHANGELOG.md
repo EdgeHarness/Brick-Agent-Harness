@@ -15,11 +15,12 @@
   and 1,392 benign controls.
 - Reclassified the existing human-review tooling and public answer key as
   advisory-only fixtures. They cannot authorize execution or supply outcomes.
-- Added a bound advisory hybrid-validation protocol: two independent humans on
-  the 44-case pilot, independent adjudication, two non-Qwen agent lineages over
-  the claim-bearing scope, and a 66-case balanced valid/invalid challenge
-  blueprint. It explicitly prohibits real-world, population-rate, or universal
-  human-equivalence claims.
+- Added a bound advisory hybrid-validation protocol and distribution-ready,
+  blinded 44-case Reviewer A package. One reviewer provides defect discovery,
+  not reliability; a second independent reviewer is required for agreement and
+  adjudication for consensus. The 66-case balanced valid/invalid challenge set
+  is materialized with a separately sealed key. The track explicitly prohibits
+  real-world, population-rate, or universal human-equivalence claims.
 - Froze protocol `1.3.0` with rejection-sampled exact-uniform bootstrap indices,
   first-100-vector digest, nearest-rank interval, conditional power sensitivity,
   LOFO diagnostics, reliability, per-instance trial-order reversal, and sealed
@@ -37,6 +38,10 @@
 - Added a full model-free `mock-v0.14.0` rehearsal covering positive, negative,
   null, threshold, incomplete, and exact 52/440/53/440 boundaries. Synthetic
   artifacts are rejected by production release verification.
+- Added the native successor execution surface for clean-checkout qualification,
+  host/model-bound 22-cell shakeout, exact schedule and annotated-tag binding,
+  score-masked phase execution, attested same-seed recovery, grader-free
+  sentinel verification, primary sealing/analysis, and descriptive sealing.
 - `v0.12.0` remains permanently unissued. Future targets are `v0.13.0` for an
   authorized instrument, `v0.14.0` for a completed study, and `v0.15.0` for the
   separately developed Brix demo.

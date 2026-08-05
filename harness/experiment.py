@@ -571,7 +571,9 @@ def validate_protocol(protocol):
         raise ValueError("unsupported S6 protocol schema")
     if protocol["protocol_version"] != "1.0.0":
         raise ValueError("unsupported S6 protocol version")
-    if protocol["primary_model"] != "qwen3.5:4b-q4_K_M":
+    if protocol["primary_model"] not in {
+        "qwen3.5:2b-q4_K_M", "qwen3.5:4b-q4_K_M", "qwen3.5:9b-q4_K_M",
+    }:
         raise ValueError("unsupported S6 primary model")
     binding = protocol["f0_binding"]
     if not isinstance(binding, dict) or set(binding) != {

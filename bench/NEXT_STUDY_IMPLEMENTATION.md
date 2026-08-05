@@ -25,16 +25,15 @@ not authorize a model call and it does not report an empirical model result.
   mutations, and 1,392 benign controls. Placeholder presentations and
   alternate-policy outcomes fail.
 
-Human-review, staffing, pilot, and adjudication utilities remain available as
-public advisory fixtures. They cannot satisfy an authorization gate, supply a
-validated outcome, or change the fixed synthetic-suite claim.
-
-The optional hybrid content-validity track uses two independent humans on the
-existing 44-case pilot, an independent adjudicator, two version-bound agent
-auditors, and a balanced 66-case valid/invalid challenge blueprint. Its minimum
-human workload is 176 judgments. It may support only audited-sample clarity and
-human-consensus reproduction statements; it cannot establish real-world value
-or a population defect rate. See `NEXT_STUDY_HYBRID_VALIDATION.md`.
+Human review remains advisory. Reviewer A now has a blinded, outcome-free,
+family-balanced 44-case package under `reviewer-handoff/`. One completed review
+can find content defects and support statements about that reviewer's audited
+sample, but it is not an inter-rater reliability estimate. A second independent
+reviewer is required before any agreement claim, and an independent adjudicator
+is required before a consensus claim. No human response may silently supply an
+answer key, satisfy authorization, or change the fixed synthetic-suite result.
+The separately materialized 66-case valid/invalid challenge set remains internal
+and sealed from Reviewer A. See `NEXT_STUDY_HYBRID_VALIDATION.md`.
 
 ## Statistics and evidence
 
@@ -78,7 +77,11 @@ score-masked 22-cell development shakeout (one case per family and condition,
 at most 44 physical attempts). Zero instrument-invalid cells are required.
 Only after that pass may a clean commit receive the local annotated `v0.13.0`
 instrument tag and a marker-last authorization binding the real host, runtime,
-models, schedules, artifacts, and descriptive selection.
+models, schedules, artifacts, descriptive selection, and annotated-tag object.
+The native execution surface is `python -m bench.next_study_live --help`; it
+builds the 22-cell shakeout and all four research schedules, performs the clean
+checkout qualification, issues fail-closed authorizations, and executes only
+the phase named by the sealed program state.
 
 Release verification recomputes an exact-key archive from artifact bytes,
 cross-binds every phase, requires `authorized_research` context, and checks that
@@ -98,5 +101,6 @@ python -m bench.next_study_schedule --verify
 python -m bench.next_study_semantic_simulation --verify
 python -m bench.next_study_rehearsal --write
 python -m bench.next_study_readiness
+python -m bench.next_study_reviewer_handoff verify-reviewer-a
 python -m pytest -q
 ```

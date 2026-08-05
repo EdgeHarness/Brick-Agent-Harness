@@ -168,9 +168,10 @@ def validate_attempt_record(record, scheduled_cell):
         raise NextStudyRuntimeError("attempt failure origin is invalid")
     if type(record["retryable"]) is not bool:
         raise NextStudyRuntimeError("attempt retryable flag must be boolean")
-    if record["failure_origin"] in ("environment", "instrument"):
+    sentinel = scheduled_cell.get("phase") == "sentinel"
+    if record["failure_origin"] in ("environment", "instrument") or sentinel:
         if record["strict_success"] is not None:
-            raise NextStudyRuntimeError("invalid attempt success must be null")
+            raise NextStudyRuntimeError("ungraded or invalid attempt success must be null")
     elif type(record["strict_success"]) is not bool:
         raise NextStudyRuntimeError("valid/model attempt success must be boolean")
     if record["marker_last_verified"] is not True:
@@ -366,10 +367,20 @@ def extract_attempt_records(
         if identity in seen:
             raise NextStudyRuntimeError("committed physical attempt is duplicated")
         seen.add(identity)
-        evidence_digest = _digest(committed)
+        # The immutable evidence projection may contain measured durations and
+        # diagnostic fractions. Hash those canonical bytes explicitly rather
+        # than pretending the upstream evidence schema is integer-only.
+        evidence_digest = sha256_bytes(
+            canonical_json_bytes(committed, allow_float=True)
+        )
         raw_origin = committed.get("failure_origin")
         grader_status = committed.get("grader_status")
-        if raw_origin in ("runner", "operator") or grader_status != "graded":
+        sentinel_ungraded = (
+            schedule.get("phase") == "sentinel" and grader_status == "not_run"
+        )
+        if raw_origin in ("runner", "operator") or (
+            grader_status != "graded" and not sentinel_ungraded
+        ):
             origin = "instrument"
         elif raw_origin in ("none", "model", "environment"):
             origin = raw_origin
@@ -384,7 +395,7 @@ def extract_attempt_records(
                 raise NextStudyRuntimeError("recovery attestation evidence drifted")
             retryable = True
         strict_success = committed.get("strict_success")
-        if origin in ("environment", "instrument"):
+        if origin in ("environment", "instrument") or sentinel_ungraded:
             strict_success = None
         record = {
             "schema_version": ATTEMPT_RECORD_SCHEMA,
@@ -395,7 +406,9 @@ def extract_attempt_records(
             "retryable": retryable,
             "strict_success": strict_success,
             "evidence_sha256": evidence_digest,
-            "grade_record_sha256": _digest(committed.get("grade")),
+            "grade_record_sha256": sha256_bytes(
+                canonical_json_bytes(committed.get("grade"), allow_float=True)
+            ),
             "marker_last_verified": True,
         }
         candidate = (

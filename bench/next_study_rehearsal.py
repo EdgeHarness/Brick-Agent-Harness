@@ -213,7 +213,7 @@ def _program_to_release(schedule, descriptive_schedule):
         "primary": _digest(schedule), "descriptives": _digest(descriptive_schedule),
     }
     authorization = build_authorization(
-        tag="v0.13.0", commit_sha="a" * 40,
+        tag="v0.13.0", tag_object_sha="9" * 40, commit_sha="a" * 40,
         artifact_digests={name: "b" * 64 for name in REQUIRED_ARTIFACT_DIGESTS},
         host_fingerprint=build_fingerprint(HOST_FINGERPRINT_SCHEMA, {"host": "mock"}),
         runtime_fingerprint=build_fingerprint(RUNTIME_FINGERPRINT_SCHEMA, {"runtime": "mock"}),

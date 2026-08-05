@@ -18,22 +18,27 @@ ground truth: agents can share training-data, rubric, and reasoning failures.
 Agreement with humans shows reproduction on the audited task and version only;
 it does not establish correctness or human-equivalent intelligence.
 
-## Frozen economical design
+## Staged economical design
 
-- Two qualified humans independently review the existing outcome-blind
-  44-case pilot: four cases per family and 88 judgments.
-- A third human independently adjudicates every disagreement before seeing the
-  oracle. All reviewers are prohibited from using generative AI.
+- Reviewer A independently reviews an outcome-blind 44-case audit: four cases
+  per family and 44 judgments. This first stage is for defect discovery and is
+  not an inter-rater reliability estimate.
+- If an agreement claim is wanted, Reviewer B reviews the same packets without
+  seeing Reviewer A's answers. A third independent person adjudicates any
+  disagreement before seeing the oracle. All reviewers are prohibited from
+  using generative AI.
 - Two agents from distinct, non-Qwen model lineages review all 308
   claim-bearing packets. Model, prompt, runtime, public inputs, and outputs are
   hash-bound; generator, oracle, and grader access is prohibited.
-- The challenge blueprint selects 66 bases: one case per family and split.
-  Family-specific materialization must produce 33 valid controls and 33 invalid
-  challenges before any review packet is exported.
+- The challenge blueprint selects 66 bases: one case per family and split. It
+  has been materialized into 33 valid controls and 33 invalid challenges, with
+  the truth key stored separately from public challenge packets.
 - Humans primary-review all 66 challenges; a fixed 22 are independently
   secondary-reviewed. Agent auditors review all 66.
-- Minimum human work is 176 judgments: 88 original-case judgments, 66 challenge
-  primaries, and 22 challenge secondaries, plus disagreement adjudication.
+- The initial human work is 44 judgments. The stronger two-coder agreement
+  stage requires 88 original-case judgments. Challenge review is a later,
+  separately distributed stage and is not needed to use Reviewer A's defect
+  report.
 
 The original sample is coverage-optimized, not a probability sample. It cannot
 support a population defect-rate bound. Krippendorff's alpha and exact agreement
@@ -83,6 +88,7 @@ Relevant guidance and evidence:
 
 ## Current status
 
-The protocol and challenge selection are frozen, but challenges are not yet
-materialized and no human or agent judgment is recorded. No validity claim may
-be made from this pending artifact.
+The 66 challenges are materialized and the 44-case Reviewer A package is ready
+at `reviewer-handoff/brick-office-v2-reviewer-a.zip`. No human or agent judgment
+has yet been recorded, so no human-reviewed validity or agreement claim may be
+made. The benchmark authorization remains independent of this advisory track.

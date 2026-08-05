@@ -29,9 +29,10 @@ def test_hybrid_protocol_is_advisory_and_does_not_overclaim():
     blueprint = build_challenge_blueprint(_manifests())
     protocol = build_protocol("a" * 64, blueprint["blueprint_sha256"])
     assert protocol["authorization_gate"] is False
-    assert protocol["human_design"]["minimum_real_humans"] == 3
-    assert protocol["human_design"]["initial_double_review_cases"] == 44
-    assert protocol["human_design"]["minimum_planned_human_judgments"] == 176
+    assert protocol["human_design"]["minimum_real_humans_for_initial_content_audit"] == 1
+    assert protocol["human_design"]["initial_single_review_cases"] == 44
+    assert protocol["human_design"]["initial_human_judgments"] == 44
+    assert protocol["human_design"]["initial_audit_is_reliability_estimate"] is False
     assert protocol["agent_design"]["minimum_distinct_model_lineages"] == 2
     assert protocol["acceptance"]["agent_invalid_challenges_detected_required"] == 33
     assert protocol["acceptance"]["tost_equivalence"].startswith("prohibited")

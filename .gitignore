@@ -22,6 +22,9 @@ agents/*/memory/
 results/
 results_smoke/
 results-dev*/
+results-next-study/
+/.qualification-tmp-*/
+/.test-tmp-*/
 agents/*/workspace/
 agents/*/logs/
 agents/*/runtime/

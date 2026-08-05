@@ -19,7 +19,7 @@ from harness.instances import (
 
 
 PROTOCOL_SCHEMA = "brick.next-study.hybrid-validation-protocol/1"
-PROTOCOL_VERSION = "office-hybrid-content-validation/1.0.0"
+PROTOCOL_VERSION = "office-hybrid-content-validation/1.1.0"
 CHALLENGE_SCHEMA = "brick.next-study.hybrid-challenge-blueprint/1"
 RESULT_SCHEMA = "brick.next-study.hybrid-validation-result/1"
 ROOT = Path(__file__).resolve().parents[1]
@@ -229,7 +229,7 @@ def build_protocol(review_selection_sha256, challenge_blueprint_sha256):
         "schema_version": PROTOCOL_SCHEMA,
         "version": PROTOCOL_VERSION,
         "generator_version": GENERATOR_VERSION,
-        "status": "advisory_pending_real_humans_and_challenge_materialization",
+        "status": "advisory_reviewer_a_packet_ready",
         "authorization_gate": False,
         "review_selection_sha256": review_selection_sha256,
         "challenge_blueprint_sha256": challenge_blueprint_sha256,
@@ -249,16 +249,18 @@ def build_protocol(review_selection_sha256, challenge_blueprint_sha256):
             "a population defect-rate bound from the coverage-optimized sample",
         ],
         "human_design": {
-            "minimum_real_humans": 3,
-            "independent_primary_reviewers": 2,
-            "independent_adjudicator_on_disagreement": True,
+            "minimum_real_humans_for_initial_content_audit": 1,
+            "initial_audit_is_reliability_estimate": False,
+            "second_independent_reviewer_required_for_agreement_claim": True,
+            "independent_adjudicator_required_for_consensus_claim": True,
             "generative_ai_use_prohibited": True,
-            "initial_double_review_cases": 44,
+            "initial_single_review_cases": 44,
             "expanded_double_review_cases": 88,
             "full_claim_bearing_scope_cases": 308,
             "challenge_primary_cases": 66,
             "challenge_fixed_secondary_cases": 22,
-            "minimum_planned_human_judgments": 176,
+            "initial_human_judgments": 44,
+            "minimum_judgments_for_two_coder_agreement": 88,
         },
         "agent_design": {
             "minimum_distinct_model_lineages": 2,
@@ -386,8 +388,8 @@ def main(argv=None):
         )
     print(json.dumps({
         "status": protocol["status"],
-        "human_pilot_cases": protocol["human_design"]["initial_double_review_cases"],
-        "minimum_human_judgments": protocol["human_design"]["minimum_planned_human_judgments"],
+        "human_pilot_cases": protocol["human_design"]["initial_single_review_cases"],
+        "initial_human_judgments": protocol["human_design"]["initial_human_judgments"],
         "challenge_cases": blueprint["case_count"],
         "authorization_gate": protocol["authorization_gate"],
     }, sort_keys=True))

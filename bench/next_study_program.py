@@ -119,7 +119,8 @@ def build_fingerprint(schema_version, details):
 
 def validate_authorization(document):
     expected = {
-        "schema_version", "status", "protocol_version", "tag", "commit_sha",
+        "schema_version", "status", "protocol_version", "tag", "tag_object_sha",
+        "commit_sha",
         "artifact_digests", "host_fingerprint", "runtime_fingerprint",
         "schedule_digests", "model_digests", "descriptive_selection_sha256",
         "maximum_logical_cells", "maximum_physical_attempts",
@@ -141,6 +142,11 @@ def validate_authorization(document):
         raise NextStudyProgramError("program authorization protocol drifted")
     if document["tag"] != "v0.13.0":
         raise NextStudyProgramError("successor instrument authorization must bind v0.13.0")
+    if (
+        not isinstance(document["tag_object_sha"], str)
+        or re.fullmatch(r"[0-9a-f]{40}", document["tag_object_sha"]) is None
+    ):
+        raise NextStudyProgramError("authorization annotated-tag object SHA is invalid")
     if not isinstance(document["commit_sha"], str) or re.fullmatch(r"[0-9a-f]{40}", document["commit_sha"]) is None:
         raise NextStudyProgramError("authorization commit SHA is invalid")
     if document["maximum_logical_cells"] != MAXIMUM_LOGICAL_CELLS:
@@ -182,7 +188,7 @@ def validate_authorization(document):
 
 
 def build_authorization(
-    *, tag, commit_sha, artifact_digests, host_fingerprint,
+    *, tag, tag_object_sha, commit_sha, artifact_digests, host_fingerprint,
     runtime_fingerprint, schedule_digests, model_digests,
     descriptive_selection_sha256, issued_at, issuer,
     execution_context="authorized_research",
@@ -192,6 +198,7 @@ def build_authorization(
         "status": "authorized",
         "protocol_version": PROTOCOL_VERSION,
         "tag": tag,
+        "tag_object_sha": tag_object_sha,
         "commit_sha": commit_sha,
         "artifact_digests": copy.deepcopy(artifact_digests),
         "host_fingerprint": copy.deepcopy(host_fingerprint),
@@ -218,6 +225,7 @@ def execution_allowed(authorization, current_fingerprint, schedule_digests):
             return False
         if not isinstance(current_fingerprint, dict) or set(current_fingerprint) != {
             "host_fingerprint", "runtime_fingerprint", "commit_sha", "tag",
+            "tag_object_sha",
             "artifact_digests", "model_digests",
             "descriptive_selection_sha256",
         }:
@@ -238,6 +246,7 @@ def execution_allowed(authorization, current_fingerprint, schedule_digests):
             "runtime_fingerprint": authorization["runtime_fingerprint"],
             "commit_sha": authorization["commit_sha"],
             "tag": authorization["tag"],
+            "tag_object_sha": authorization["tag_object_sha"],
             "artifact_digests": authorization["artifact_digests"],
             "model_digests": authorization["model_digests"],
             "descriptive_selection_sha256": authorization[

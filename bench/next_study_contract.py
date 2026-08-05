@@ -11,6 +11,9 @@ from bench.next_study_hybrid_validation import (
     build_protocol as build_hybrid_validation_protocol,
     validate_challenge_blueprint, validate_pending_result,
 )
+from bench.next_study_reviewer_handoff import (
+    validate_challenges, validate_handoff,
+)
 from bench.next_study_validated_outcomes import validate_validated_outcomes
 from bench.s7_contract import load_protocol as load_s7_protocol
 from bench.s7_contract import s7_protocol_sha256
@@ -66,6 +69,11 @@ _ARTIFACT_PATHS = {
     "hybrid_validation_protocol": "bench/next_study_hybrid_validation_protocol.json",
     "hybrid_challenge_blueprint": "evidence/next-study/office-v2-hybrid-challenge-blueprint.json",
     "hybrid_validation_result": "evidence/next-study/office-v2-hybrid-validation-result.json",
+    "hybrid_challenge_set": "evidence/next-study/office-v2-hybrid-challenge-set.json",
+    "hybrid_challenge_key": "evidence/next-study/office-v2-hybrid-challenge-key.json",
+    "reviewer_handoff_implementation": "bench/next_study_reviewer_handoff.py",
+    "reviewer_handoff_manifest": "reviewer-handoff/brick-office-v2-reviewer-a/MANIFEST.json",
+    "live_implementation": "bench/next_study_live.py",
 }
 
 _EXPECTED_GATES = {
@@ -203,8 +211,10 @@ def build_design():
             "authorization_gate": False,
             "may_change_or_supply_validated_outcomes": False,
             "supports_real_world_performance_claim": False,
-            "initial_double_review_cases": 44,
-            "minimum_planned_human_judgments": 176,
+            "reviewer_a_packets_ready": True,
+            "initial_single_review_cases": 44,
+            "initial_human_judgments": 44,
+            "second_reviewer_required_for_agreement_claim": True,
             "balanced_challenge_cases": 66,
             "minimum_distinct_agent_model_lineages": 2,
             "confirmed_defect_routes_into_existing_construct_gate": True,
@@ -363,6 +373,17 @@ def _validate_successor_semantics():
         selection["selection_sha256"], challenge["blueprint_sha256"]
     ) or hybrid["authorization_gate"] is not False:
         raise NextStudyDesignError("advisory hybrid validation protocol drifted")
+    validate_challenges(
+        load_canonical_json(ROOT / _ARTIFACT_PATHS["hybrid_challenge_set"]),
+        load_canonical_json(ROOT / _ARTIFACT_PATHS["hybrid_challenge_key"]),
+        manifests,
+        challenge,
+    )
+    handoff = validate_handoff(
+        (ROOT / _ARTIFACT_PATHS["reviewer_handoff_manifest"]).parent
+    )
+    if handoff.get("packet_count") != 44:
+        raise NextStudyDesignError("reviewer-A handoff is incomplete")
     validate_pending_result(
         load_canonical_json(ROOT / _ARTIFACT_PATHS["hybrid_validation_result"]),
         hybrid,

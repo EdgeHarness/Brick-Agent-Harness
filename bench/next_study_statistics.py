@@ -252,7 +252,7 @@ def build_protocol():
                         "native_equal_action", "harness_full_equal_action",
                     ],
                 },
-                "planning": {
+                "plan": {
                     "model_calls": 1,
                     "generated_tokens": 672,
                     "available_to": ["harness_full_equal_action"],

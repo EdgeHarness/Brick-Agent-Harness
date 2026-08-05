@@ -154,6 +154,76 @@ def build_phase_schedule(manifest, phase, model_digest):
     }
 
 
+def build_development_shakeout_schedule(manifest, model_digest):
+    """Freeze one outcome-blind development case per family and condition."""
+
+    validate_manifest(manifest)
+    if manifest["split"] != "development":
+        raise NextStudyScheduleError("development shakeout requires development cases")
+    _validate_sha256(model_digest, "model digest")
+    records = []
+    for family_index, family in enumerate(sorted(FAMILIES)):
+        candidates = [
+            item for item in manifest["instances"]
+            if item["content"]["family"] == family
+        ]
+        if len(candidates) != 8:
+            raise NextStudyScheduleError("development family allocation drifted")
+        instance = min(candidates, key=lambda item: _digest({
+            "namespace": "brick.next-study.development-shakeout/1",
+            "protocol_sha256": protocol_digest(),
+            "family": family,
+            "instance_id": item["content"]["id"],
+            "content_sha256": item["content_sha256"],
+        }))
+        order = "AB" if family_index % 2 == 0 else "BA"
+        conditions = CONDITIONS if order == "AB" else tuple(reversed(CONDITIONS))
+        seed = trial_seed(instance["content"]["id"], 0, model_digest)
+        for order_position, condition in enumerate(conditions):
+            records.append({
+                "logical_cell_id": _digest({
+                    "phase": "development_shakeout",
+                    "instance_id": instance["content"]["id"],
+                    "condition": condition,
+                }),
+                "phase": "development_shakeout",
+                "instance_id": instance["content"]["id"],
+                "content_sha256": instance["content_sha256"],
+                "family": family,
+                "condition": condition,
+                "trial_index": 0,
+                "order_stratum": order,
+                "order_position": order_position,
+                "trial_seed": seed,
+            })
+    if len(records) != 22 or len({item["logical_cell_id"] for item in records}) != 22:
+        raise NextStudyScheduleError("development shakeout must contain 22 unique cells")
+    return {
+        "schema_version": SCHEDULE_SCHEMA,
+        "protocol_version": PROTOCOL_VERSION,
+        "protocol_sha256": protocol_digest(),
+        "generator_version": GENERATOR_VERSION,
+        "model_sha256": model_digest,
+        "phase": "development_shakeout",
+        "split": "development",
+        "logical_cell_count": 22,
+        "maximum_physical_attempts": 44,
+        "same_seed_retry_limit": 1,
+        "records": records,
+    }
+
+
+def validate_development_shakeout_schedule(schedule, manifest):
+    if not isinstance(schedule, dict):
+        raise NextStudyScheduleError("development shakeout schedule must be an object")
+    expected = build_development_shakeout_schedule(
+        manifest, schedule.get("model_sha256")
+    )
+    if schedule != expected:
+        raise NextStudyScheduleError("development shakeout schedule drifted")
+    return schedule
+
+
 def validate_phase_schedule(schedule, manifest):
     """Rebuild a phase schedule and require byte-semantic equality."""
 
@@ -344,11 +414,13 @@ __all__ = [
     "SCHEDULE_SCHEMA",
     "NextStudyScheduleError",
     "build_descriptive_schedule",
+    "build_development_shakeout_schedule",
     "build_phase_schedule",
     "protocol_digest",
     "select_descriptive_cases",
     "trial_seed",
     "validate_descriptive_schedule",
+    "validate_development_shakeout_schedule",
     "validate_phase_schedule",
     "verify_descriptive_selection",
     "write_descriptive_selection",
