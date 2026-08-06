@@ -26,10 +26,10 @@ from .next_study_claim import load_claim_contract
 ROOT = Path(__file__).resolve().parents[1]
 PROTOCOL_PATH = ROOT / "bench" / "next_study_protocol.json"
 PROTOCOL_SCHEMA = "brick.next-study.protocol/2"
-PROTOCOL_VERSION = "1.3.0"
+PROTOCOL_VERSION = "1.4.0"
 CONDITIONS = ("native_tools", "harness_full")
 GRADE_LEDGER_SCHEMA = "brick.next-study.grade-ledger/2"
-PRIMARY_ANALYSIS_SCHEMA = "brick.next-study.primary-analysis/2"
+PRIMARY_ANALYSIS_SCHEMA = "brick.next-study.primary-analysis/3"
 
 
 class NextStudyStatisticsError(ValueError):
@@ -288,7 +288,7 @@ def build_protocol():
 
 def validate_protocol(protocol):
     if protocol != build_protocol():
-        raise NextStudyStatisticsError("next-study protocol differs from frozen 1.3.0")
+        raise NextStudyStatisticsError("next-study protocol differs from frozen 1.4.0")
     power = protocol["power"]
     variance_bound = 0.375
     standard_error = math.sqrt(variance_bound / 220)
@@ -681,6 +681,10 @@ def analyze_primary(grade_ledger, retained_manifest, primary_schedule, protocol=
         "schema_version": PRIMARY_ANALYSIS_SCHEMA,
         "execution_context": grade_ledger["execution_context"],
         "protocol_version": PROTOCOL_VERSION,
+        "primary_grade_ledger_sha256": _digest(grade_ledger),
+        "primary_schedule_sha256": _digest(primary_schedule),
+        "retained_manifest_sha256": _digest(retained_manifest),
+        "claim_contract_sha256": _digest(load_claim_contract()),
         "instance_clusters": 220,
         "model_attempts": 880,
         "paired_effect": _decimal(estimate),

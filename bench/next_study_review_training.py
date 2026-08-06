@@ -230,7 +230,10 @@ def build_artifacts():
     protocol = {
         "schema_version": REVIEW_PROTOCOL_SCHEMA,
         "version": REVIEW_PROTOCOL_VERSION,
-        "generator_version": "office-generators/2.1.0",
+        # This remains an advisory, out-of-suite reviewer fixture.  Keep its
+        # metadata aligned with the visible packet version even though it is
+        # not an authorization input.
+        "generator_version": "office-generators/2.1.1",
         "blind_packet_schema": "brick.next-study.blind-review-packet/2",
         "sealed_submission_schema": "brick.next-study.sealed-review-submission/3",
         "derived_ledger_schema": "brick.next-study.review-ledger/3",

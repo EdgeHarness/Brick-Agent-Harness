@@ -1,6 +1,6 @@
 # Project Guide
 
-Last reconciled with the local project tree: 4 August 2026.
+Last reconciled with the local project tree: 5 August 2026.
 
 The canonical execution plan is [`PROJECT_SETUP.md`](PROJECT_SETUP.md). This
 guide defines the durable evidence, architecture, and claim rules. Released
@@ -35,13 +35,16 @@ audit raised three ceiling flags and one floor flag. S8/S9 are blocked, retained
 execution remains disabled, and no condition-level or confirmatory effect
 estimate exists.
 
-The successor is currently an offline execution candidate blocked on genuine
-human review and authorization, not a continuation or release.
-Its contract binds the terminal S7 decision/audit/postmortem, requires a fresh
-generator namespace and independent outcome oracle, and starts every execution
-gate closed. The retired office grader has complete generated-case mutation
-coverage (352 cases and 1,984 applicable probes), but that does not validate a
-fresh grader or remove the need for independent prompt/ground-truth review.
+The tagged `v0.13.0` successor candidate is invalidated before calibration, and
+no live study cell ran. Its replacement is the offline
+`office-generators/2.1.1` candidate for target tag `v0.13.1`. The generator
+retains the 2.1.0 seed namespace deliberately: 384 public packets remain
+byte-identical and 144 repaired packets have changed contents and hashes. The
+current machine gates use independently compiled public outcomes, 1,056
+production-runner positive traces, 4,104 targeted grader mutations, and 1,872
+benign controls. Human and agent packet review is advisory and cannot satisfy or
+alter an authorization gate. Live execution remains disabled pending the
+remaining Fable finding reconciliation and replacement qualification evidence.
 
 Annotated tags and their bound evidence are authoritative. The tagged S4 release
 commit `R` adds only `evidence/s4/v0.5.0.json` to tested candidate `C`; docs-only
@@ -105,8 +108,8 @@ systems.
 
 The synthetic pack is not a selected Brix production workflow. Actual workflow
 discovery, data authorization, integration, shadow evaluation, pilot, and
-deployment remain future work outside the blocked S7 lineage. A successor
-research release sequence has not been assigned.
+deployment remain future work outside the blocked S7 lineage. The successor
+instrument targets `v0.13.1`; a completed, sealed study targets `v0.14.0`.
 
 ### Repository roles and convergence
 
@@ -127,7 +130,7 @@ working trees:
    adapter version, schema digest, and conformance result;
 4. evaluate that integration separately through approved synthetic or redacted
    shadow data before any pilot; and
-5. never change the frozen retained instrument to match observed product or
+5. never change an authorized retained instrument to match observed product or
    benchmark outcomes.
 
 Mechanisms that survive the research gates may later be ported into, packaged

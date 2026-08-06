@@ -13,6 +13,7 @@ from bench.next_study_descriptive import (
     build_report, eligible_schedule, extract_descriptive_results,
     extract_primary_trial_0_controls,
     seal_descriptive_eligibility,
+    validate_eligible_schedule,
 )
 from bench.next_study_program import (
     BenchmarkLease, calibration_decision, research_catalog, retry_decision,
@@ -39,7 +40,8 @@ from bench.next_study_statistics import (
 from domains.office_demo.generators_v2 import FAMILIES, GENERATOR_VERSION
 from domains.office_demo.outcome_oracle_v2 import derive_outcome
 from domains.office_demo.reviewed_grader_v2 import build_grader
-from harness.instances import load_canonical_json
+from harness.evidence import canonical_json_bytes
+from harness.instances import load_canonical_json, sha256_bytes
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -261,14 +263,14 @@ def test_independent_grader_import_boundary_and_full_mutation_matrix():
     manifests = _manifests()
     synthetic = _synthetic_outcomes_for_grader_test(manifests)
     human = audit_all(manifests, synthetic)
-    assert human["targeted_mutations"] == 1736
-    assert human["benign_non_rejection_controls"] == 812
+    assert human["targeted_mutations"] == 2394
+    assert human["benign_non_rejection_controls"] == 1092
     assert human["may_satisfy_human_ground_truth_gate"] is True
     audit = audit_machine_conformance(manifests)
-    assert audit["targeted_mutations"] == 2976
+    assert audit["targeted_mutations"] == 4104
     assert audit["benign_control_counts"] == {
         "equivalent_serialization": 528, "failed_unauthorized_call": 528,
-        "repeated_safe_read": 336,
+        "repeated_safe_read": 336, "nonbusiness_scratch_memory": 480,
     }
     assert audit["may_satisfy_human_ground_truth_gate"] is False
     assert audit["passed"] is True
@@ -293,6 +295,7 @@ def test_schedules_descriptives_and_closed_research_catalog_are_exact(monkeypatc
         "protocol_version": load_protocol()["version"],
         "status": "sealed_complete",
         "cell_count": 880,
+        "schedule_sha256": sha256_bytes(canonical_json_bytes(primary)),
         "records": [
             {
                 "instance_id": cell["instance_id"],
@@ -307,9 +310,13 @@ def test_schedules_descriptives_and_closed_research_catalog_are_exact(monkeypatc
         ],
     }
     primary_analysis = {
-        "schema_version": "brick.next-study.primary-analysis/2",
+        "schema_version": "brick.next-study.primary-analysis/3",
         "execution_context": {"schema_version": "brick.next-study.execution-context/1", "value": "synthetic_rehearsal"},
         "protocol_version": load_protocol()["version"],
+        "primary_grade_ledger_sha256": sha256_bytes(
+            canonical_json_bytes(grade_ledger)
+        ),
+        "primary_schedule_sha256": grade_ledger["schedule_sha256"],
     }
     binding = seal_descriptive_eligibility(primary_analysis, grade_ledger, matrix)
     eligible = eligible_schedule(
@@ -317,6 +324,26 @@ def test_schedules_descriptives_and_closed_research_catalog_are_exact(monkeypatc
     )
     assert eligible["eligible_cells"] == 178
     assert eligible["removed_blocks"] == ["2b_native_full"]
+    full = eligible_schedule(
+        matrix, {"2b": True, "4b": True, "9b": True}, binding,
+    )
+    forged = copy.deepcopy(full)
+    remove = {
+        item["logical_cell_id"]
+        for role in ("2b", "9b")
+        for item in [
+            value for value in full["records"] if value["model_role"] == role
+        ][:22]
+    }
+    forged["records"] = [
+        item for item in forged["records"]
+        if item["logical_cell_id"] not in remove
+    ]
+    forged["eligible_cells"] = forged["logical_cell_count"] = 178
+    forged["maximum_physical_attempts"] = 356
+    forged["removed_blocks"] = ["2b_native_full", "9b_native_full"]
+    with pytest.raises(ValueError, match="partially removed"):
+        validate_eligible_schedule(forged, matrix)
     first = eligible["records"][0]
     controls = extract_primary_trial_0_controls(grade_ledger, matrix)
     evidence = extract_descriptive_results(eligible, [{
@@ -433,13 +460,14 @@ def test_masked_primary_must_be_complete_before_unmask_and_analysis():
             "model_time_ms": 1, "wall_time_ms": 1,
         })
     assert resume_queue(schedule, attempts) == []
+    key = "7" * 64
     masked = build_masked_grade_ledger(
-        schedule, attempts, retained, "2026-08-04T13:00:00Z"
+        schedule, attempts, retained, "2026-08-04T13:00:00Z", key
     )
     assert masked["status"] == "sealed_complete_masked"
     assert "condition" not in masked["records"][0]
     grade_ledger = unmask_primary(
-        masked, schedule, retained, "2026-08-04T13:01:00Z"
+        masked, schedule, retained, attempts, key, "2026-08-04T13:01:00Z"
     )
     analysis = analyze_primary(grade_ledger, retained, schedule, load_protocol())
     assert analysis == load_canonical_json(
@@ -452,7 +480,19 @@ def test_masked_primary_must_be_complete_before_unmask_and_analysis():
     )
     reordered = copy.deepcopy(grade_ledger)
     reordered["records"].reverse()
-    assert analyze_primary(reordered, retained, schedule, load_protocol()) == analysis
+    reordered_analysis = analyze_primary(
+        reordered, retained, schedule, load_protocol()
+    )
+    assert reordered_analysis["primary_grade_ledger_sha256"] != analysis[
+        "primary_grade_ledger_sha256"
+    ]
+    assert {
+        key: value for key, value in reordered_analysis.items()
+        if key != "primary_grade_ledger_sha256"
+    } == {
+        key: value for key, value in analysis.items()
+        if key != "primary_grade_ledger_sha256"
+    }
 
     reversed_labels = copy.deepcopy(grade_ledger)
     values = {

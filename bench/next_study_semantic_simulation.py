@@ -33,7 +33,9 @@ from harness.instances import (
     sha256_bytes,
     validate_manifest,
 )
-from harness.memory import MemoryStore
+from harness.experiment import (
+    AttemptMemory, ExecutionContext, condition_registry, run_attempt,
+)
 
 from .next_study_review import digest_review_artifact, review_packet
 
@@ -66,6 +68,31 @@ _SOURCE_TYPES = frozenset(("source_read", "sources_read", "calendar_read"))
 
 class SemanticSimulationError(ValueError):
     """The corpus or simulation violated a fail-closed invariant."""
+
+
+class _ScriptedTransport:
+    """Deterministic model substitute that exercises the production runner."""
+
+    def __init__(self, calls):
+        self.calls = list(calls)
+
+    def chat(self, payload):
+        if not self.calls:
+            raise SemanticSimulationError("reference transport exhausted")
+        name, args = self.calls.pop(0)
+        return {
+            "model": payload["model"],
+            "created_at": "2026-08-05T00:00:00Z",
+            "message": {
+                "role": "assistant", "content": "", "thinking": None,
+                "tool_calls": [{"function": {
+                    "name": name, "arguments": copy.deepcopy(args),
+                }}],
+            },
+            "done": True, "done_reason": "stop", "total_duration": 10,
+            "load_duration": 1, "prompt_eval_count": 1,
+            "prompt_eval_duration": 1, "eval_count": 1, "eval_duration": 1,
+        }
 
 
 def _digest(value):
@@ -123,9 +150,14 @@ def _column_name(index):
 def _effect_call(effect, state):
     kind = effect["type"]
     if kind == "source_read":
-        return "read_email", {"id": effect["id"]}
+        calls = []
+        if effect.get("list_required"):
+            calls.append(("list_emails", {}))
+        calls.append(("read_email", {"id": effect["id"]}))
+        return calls
     if kind == "sources_read":
-        return [
+        calls = ([('list_emails', {})] if effect.get("list_required") else [])
+        return calls + [
             ("read_email", {"id": identifier}) for identifier in effect["ids"]
         ]
     if kind == "calendar_read":
@@ -217,57 +249,64 @@ def _effect_call(effect, state):
     raise SemanticSimulationError("unsupported effect %r" % kind)
 
 
-class _ExecutionContext:
-    def __init__(self, world, memory):
-        self.world = world
-        self.memory = memory
-
-
 def _execute_through_typed_tools(instance, packet, outcome, workdir, condition):
+    from .next_study_live import build_execution_protocol, _implementation_sha256
+
     initial = packet["initial_state"]
     world = World(str(workdir), persistent=False)
     for field in ("emails", "events", "sent_emails", "messages", "reminders"):
         setattr(world, field, copy.deepcopy(initial[field]))
-    memory = MemoryStore(str(Path(workdir) / "memory.jsonl"))
-    memory.facts = list(initial["memory"])
-    context = _ExecutionContext(world, memory)
-    registry = build_registry(alias_recovery=False)
-    actions = []
-    memory_saved = False
-    for effect in outcome:
-        if (
-            condition == "native_tools" and memory_saved
-            and effect["type"] == "event_created"
+    memory = AttemptMemory(
+        initial["memory"], visible_initial=initial["memory"], bridge_enabled=True,
+    )
+    context = ExecutionContext(world, memory, world.files_dir)
+    protocol = build_execution_protocol("4b")
+    condition_spec = condition_registry(
+        protocol, _implementation_sha256()
+    )[condition]
+    registry = build_registry(alias_recovery=condition_spec.has("known_alias_recovery"))
+    episodes = (
+        [{"id": str(index), "prompt": value} for index, value in enumerate(
+            packet["subepisode_prompts"]
+        )]
+        if packet["subepisode_prompts"] else [{"id": "main", "prompt": packet["prompt"]}]
+    )
+    effect_groups = (
+        [[outcome[0]], outcome[1:]] if len(episodes) == 2 else [outcome]
+    )
+    scripted = []
+    for episode_index, effects in enumerate(effect_groups):
+        business = []
+        if condition == "native_tools" and episode_index and any(
+            item["type"] == "event_created" for item in effects
         ):
-            result = registry.invoke(
-                "recall_memories", {"query": effect["attendees"][0]}, context
-            )
-            if result.status != "ok":
-                raise SemanticSimulationError("native memory recall failed")
-            actions.append({
-                "tool": "recall_memories", "args": {"query": effect["attendees"][0]},
-                "ok": True, "result": "typed semantic simulation",
-            })
-        calls = _effect_call(effect, {
-            "events": world.events,
-        })
-        if isinstance(calls, tuple):
-            calls = [calls]
-        for name, args in calls:
-            result = registry.invoke(name, args, context)
-            if result.status != "ok":
-                raise SemanticSimulationError(
-                    "%s typed execution failed for %s: %s"
-                    % (name, packet["packet_id"], result.observation)
-                )
-            actions.append({
-                "tool": name,
-                "args": copy.deepcopy(args),
-                "ok": True,
-                "result": "typed semantic simulation",
-            })
-        if effect["type"] == "memory_saved":
-            memory_saved = True
+            event = next(item for item in effects if item["type"] == "event_created")
+            business.append(("recall_memories", {"query": event["attendees"][0]}))
+        for effect in effects:
+            calls = _effect_call(effect, {"events": world.events})
+            business.extend([calls] if isinstance(calls, tuple) else calls)
+        if condition == "harness_full":
+            scripted.extend([("think", {"thought": "plan every explicit requirement"})])
+            scripted.extend(business)
+            scripted.extend([
+                ("done", {"summary": "complete"}),
+                ("think", {"thought": "review every explicit requirement"}),
+                ("done", {"summary": "complete after review"}),
+            ])
+        else:
+            scripted.extend(business)
+            scripted.append(("done", {"summary": "complete"}))
+    transport = _ScriptedTransport(scripted)
+    runtime = run_attempt(
+        protocol=protocol, condition=condition_spec, model=protocol["primary_model"],
+        registry=registry, transport=transport, context=context, episodes=episodes,
+        today=packet["today"], seed=1,
+    )
+    if runtime["execution_status"] != "done" or transport.calls:
+        raise SemanticSimulationError(
+            "production runner reference path failed for %s/%s: %s"
+            % (instance["content"]["id"], condition, runtime["failure"])
+        )
     state = {
         "emails": copy.deepcopy(world.emails),
         "events": copy.deepcopy(world.events),
@@ -285,7 +324,7 @@ def _execute_through_typed_tools(instance, packet, outcome, workdir, condition):
         domain_version="0.1.0",
         task_id=task_id_for(packet, machine),
         state=state,
-        actions=actions,
+        actions=context.actions,
         memory=memory.all(),
         artifacts=artifacts,
     )
@@ -295,7 +334,7 @@ def _execute_through_typed_tools(instance, packet, outcome, workdir, condition):
             "typed positive workflow failed independent grader for %s"
             % instance["content"]["id"]
         )
-    return len(actions)
+    return runtime["ledger"]["model_calls"]
 
 
 def _reordered_packet(packet):
@@ -312,14 +351,14 @@ def _irrelevant_packet(packet):
     changed["initial_state"]["emails"].append({
         "id": "semantic-simulation-irrelevant-email",
         "from": "unrelated@semantic-simulation.example",
-        "date": "2027-01-01 00:00",
+        "date": "1900-01-01 00:00",
         "subject": "UNRELATED SEMANTIC SIMULATION CONTROL",
         "body": "This control is unrelated to every task selector.",
     })
     changed["initial_state"]["events"].append({
         "id": "semantic-simulation-irrelevant-event",
         "title": "Unrelated semantic simulation control",
-        "date": "2027-01-01",
+        "date": "1900-01-01",
         "start": "00:00",
         "end": "00:30",
         "location": "",
@@ -488,14 +527,46 @@ def _construct_findings(instances, profile_sensitivity, memory_failures):
     return []
 
 
-def audit_all(directory=MANIFEST_DIRECTORY):
-    manifests, instances = _load_instances(directory)
+def audit_all(directory=MANIFEST_DIRECTORY, *, manifests=None):
+    if manifests is None:
+        manifests, instances = _load_instances(directory)
+    else:
+        manifests = list(manifests)
+        if len(manifests) != len(_SPLITS):
+            raise SemanticSimulationError("semantic simulation requires six manifests")
+        by_split = {}
+        for manifest in manifests:
+            validate_manifest(manifest)
+            split = manifest.get("split")
+            if split in by_split or split not in _SPLITS:
+                raise SemanticSimulationError("manifest split binding drifted")
+            by_split[split] = manifest
+        if set(by_split) != set(_SPLITS):
+            raise SemanticSimulationError("semantic simulation split set drifted")
+        manifests = [by_split[split] for split in _SPLITS]
+        instances = sorted(
+            (
+                instance for manifest in manifests
+                for instance in manifest["instances"]
+            ),
+            key=lambda item: item["content"]["id"],
+        )
+        if (
+            len(instances) != 528
+            or len({item["content"]["id"] for item in instances}) != 528
+            or len({item["content_sha256"] for item in instances}) != 528
+        ):
+            raise SemanticSimulationError("semantic simulation requires 528 unique cases")
     family_counts = Counter()
     split_counts = Counter()
     structure_hashes, prompt_surfaces = set(), set()
     oracle_matches = reordered_passes = irrelevant_passes = 0
     dependency_passes = dependency_probes = memory_failures = 0
     typed_executions = typed_actions = 0
+    request_counts = {
+        condition: defaultdict(list)
+        for condition in ("native_tools", "harness_full")
+    }
     logic_by_cell = defaultdict(dict)
 
     with tempfile.TemporaryDirectory(prefix="brick-semantic-simulation-") as root:
@@ -550,10 +621,12 @@ def audit_all(directory=MANIFEST_DIRECTORY):
                     else:
                         dependency_passes += 1
             for condition in ("native_tools", "harness_full"):
-                typed_actions += _execute_through_typed_tools(
+                calls = _execute_through_typed_tools(
                     instance, packet, outcome,
                     root_path / ("case-%03d-%s" % (index, condition)), condition,
                 )
+                typed_actions += calls
+                request_counts[condition][content["family"]].append(calls)
                 typed_executions += 1
             structure = content["structure"]
             logic_by_cell[content["family"]][(
@@ -581,6 +654,25 @@ def audit_all(directory=MANIFEST_DIRECTORY):
         }
 
     findings = _construct_findings(instances, profile_sensitivity, memory_failures)
+    request_bounds = {
+        family: {
+            condition: {
+                "minimum": min(request_counts[condition][family]),
+                "maximum": max(request_counts[condition][family]),
+                "cap": 18,
+                "minimum_absolute_slack": (
+                    18 - max(request_counts[condition][family])
+                ),
+            }
+            for condition in ("native_tools", "harness_full")
+        }
+        for family in sorted(FAMILIES)
+    }
+    if (
+        max(value["native_tools"]["maximum"] for value in request_bounds.values()) > 9
+        or max(value["harness_full"]["maximum"] for value in request_bounds.values()) > 12
+    ):
+        raise SemanticSimulationError("production-runner request bound drifted")
     severity_counts = Counter(item["severity"] for item in findings)
     claim_cases = sum(
         count for split, count in split_counts.items()
@@ -608,6 +700,13 @@ def audit_all(directory=MANIFEST_DIRECTORY):
             "typed_positive_workflows_executed": typed_executions,
             "typed_tool_actions_executed": typed_actions,
             "typed_positive_workflows_strict_successes": typed_executions,
+            "production_runner_request_bounds_by_family": request_bounds,
+            "maximum_native_requests": max(
+                value["native_tools"]["maximum"] for value in request_bounds.values()
+            ),
+            "maximum_harness_requests": max(
+                value["harness_full"]["maximum"] for value in request_bounds.values()
+            ),
             "live_model_calls": 0,
         },
         "constraint_profile_sensitivity": profile_sensitivity,

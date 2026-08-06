@@ -1,12 +1,14 @@
 # Brick successor study: implemented state
 
-This document describes the offline-qualified successor instrument. It does
-not authorize a model call and it does not report an empirical model result.
+This document describes the replacement successor instrument under offline
+qualification. It does not authorize a model call or report a model result.
 
 ## Qualified instrument
 
-- `office-generators/2.1.0` produces 528 unique, split-neutral cases across 11
-  fixed synthetic families. `office-generators/2.0.1` is permanently retired.
+- `office-generators/2.1.1` produces 528 unique, split-neutral cases across 11
+  fixed synthetic families. It deliberately retains the 2.1.0 seed namespace:
+  384 visible packets remain byte-identical and 144 repaired packets change.
+  Generator 2.1.0 and tag `v0.13.0` are invalidated before calibration.
 - The construct contract freezes three genuine decision policies per family.
   All 176 workload/distractor-matched triplets produce three distinct outcomes
   with equal non-policy burden.
@@ -21,24 +23,19 @@ not authorize a model call and it does not report an empirical model result.
   conditions for every case), verifies every relevant dependency and
   record-order/distractor invariance, and reports no critical, high, or medium
   internal-validity finding.
-- Grader conformance passes 528 positive baselines, exactly 2,976 targeted
-  mutations, and 1,392 benign controls. Placeholder presentations and
+- Grader conformance passes 528 positive baselines, exactly 4,104 targeted
+  mutations, and 1,872 benign controls. Placeholder presentations and
   alternate-policy outcomes fail.
 
-Human review remains advisory. Reviewer A now has a blinded, outcome-free,
-family-balanced 44-case package under `reviewer-handoff/`. One completed review
-can find content defects and support statements about that reviewer's audited
-sample, but it is not an inter-rater reliability estimate. A second independent
-reviewer is required before any agreement claim, and an independent adjudicator
-is required before a consensus claim. No human response may silently supply an
-answer key, satisfy authorization, or change the fixed synthetic-suite result.
-The separately materialized 66-case valid/invalid challenge set remains internal
-and sealed from Reviewer A. See `NEXT_STUDY_HYBRID_VALIDATION.md`.
+Human and agent packet-review utilities are advisory and outside authorization.
+They can surface hypotheses, but every accepted finding must be reduced to a
+deterministic counterexample or test. Pending Fable reports are a pre-freeze QA
+hold, not a substitute answer key or a real-world validity claim.
 
 ## Statistics and evidence
 
-Protocol `1.3.0`, design `0.7.0`, construct contract
-`office-construct/1.0.0`, and grader `office-strict-grader/3.0.0` are active.
+Protocol `1.4.0`, design `0.8.0`, construct contract
+`office-construct/1.1.0`, and grader `office-strict-grader/3.1.0` are active.
 The machine-readable claim contract is authoritative: a directional claim
 requires an inclusive `abs(Delta) >= 0.12` and a two-sided 95% stratified
 cluster-bootstrap interval excluding zero in that direction. The exact
@@ -72,7 +69,7 @@ release verification. It creates no tag and writes no production evidence.
 
 ## Remaining live gates
 
-Candidate commit `e7ca30c` passed native Windows qualification and completed a
+The invalidated 2.1.0 candidate passed native Windows qualification and completed a
 score-masked 22-cell development shakeout: all 22 cells committed and zero were
 instrument-invalid. During the later gate audit, an operator command
 inadvertently displayed raw records from that already-invalidated run. It is
@@ -91,19 +88,22 @@ non-Ubuntu evidence. The exact commit must also pass the native Windows clean
 checkout and a fresh score-masked 22-cell shakeout because the authorization
 repair changed the fingerprint.
 
-After committing and pushing the candidate so CI can run, the remaining order
-is: collect exact-commit Linux evidence; repeat native preflight and clean
-checkout qualification; rebuild schedules; rerun the zero-invalid shakeout;
-create the local annotated `v0.13.0` tag; then issue marker-last authorization
+After every remaining Fable finding is reproduced or refuted and all offline
+tests pass, the remaining order is: commit and push; collect exact-commit Linux
+evidence; repeat native preflight and clean-checkout qualification; rebuild
+schedules; rerun the zero-invalid shakeout; create the local annotated
+`v0.13.1` tag; then issue marker-last authorization
 binding the tag object, host, runtime, model digests, schedules, artifacts,
 descriptive selection, and both platform gates. Calibration remains
 mechanically blocked until those steps pass. The execution surface is
 `python -m bench.next_study_live --help`.
 
-Release verification recomputes an exact-key archive from artifact bytes,
-cross-binds every phase, requires `authorized_research` context, and checks that
-an actual annotated `v0.14.0` tag object peels to the archived commit. Caller
-supplied state or arbitrary digest maps cannot satisfy it.
+Release verification recomputes an exact-key archive from canonical artifact
+bytes, proves every artifact equals its Git blob at the archived commit,
+cross-binds every phase and the archived authorization, requires
+`authorized_research` context, rechecks the annotated `v0.13.1` instrument tag,
+and checks that annotated `v0.14.0` peels to the archived commit. Caller-supplied
+state, uncommitted files, or arbitrary digest maps cannot satisfy it.
 
 The result is limited to this fixed synthetic benchmark. It cannot establish
 generalized real-world performance without a later external-task replication.
@@ -118,6 +118,5 @@ python -m bench.next_study_schedule --verify
 python -m bench.next_study_semantic_simulation --verify
 python -m bench.next_study_rehearsal --write
 python -m bench.next_study_readiness
-python -m bench.next_study_reviewer_handoff verify-reviewer-a
 python -m pytest -q
 ```

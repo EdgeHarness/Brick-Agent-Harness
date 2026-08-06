@@ -1,4 +1,4 @@
-"""Frozen construct contract for office-generators/2.1.0."""
+"""Frozen construct contract for office-generators/2.1.1."""
 
 from pathlib import Path
 
@@ -9,7 +9,7 @@ from harness.instances import load_canonical_json
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = ROOT / "bench" / "next_study_construct_contract.json"
 SCHEMA_VERSION = "brick.next-study.construct-contract/1"
-VERSION = "office-construct/1.0.0"
+VERSION = "office-construct/1.1.0"
 
 POLICIES = {
     "pptx_basic": ["brief_sequence", "risk_descending", "owner_alphabetical"],
@@ -47,6 +47,10 @@ def build_contract():
             "both_primary_conditions_have_legal_within_budget_positive_trace": True,
             "placeholder_presentations_rejected": True,
             "stored_preference_required_by_use_subepisode": True,
+            "ordinary_case_scratch_memory_is_grading_neutral": True,
+            "email_discovery_is_enforced_when_prompt_requires_listing": True,
+            "every_graded_presentation_fact_is_mutation_tested": True,
+            "semantic_negation_and_numeric_superstrings_are_rejected": True,
             "critical_high_medium_internal_validity_findings_allowed": 0,
         },
         "external_validity": {
@@ -58,7 +62,7 @@ def build_contract():
             "this_is_final_remediation_version": True,
             "unresolved_deterministic_construct_blocker": "construct_gate_failed",
             "automatic_family_removal_allowed": False,
-            "automatic_2_2_0_allowed": False,
+            "automatic_2_3_0_allowed": False,
         },
     }
 

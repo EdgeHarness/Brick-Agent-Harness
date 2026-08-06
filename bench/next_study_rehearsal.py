@@ -19,7 +19,8 @@ from .next_study_descriptive import (
 from .next_study_program import (
     REQUIRED_ARTIFACT_DIGESTS, SEALED_GATE_SCHEMA, advance_program,
     build_authorization, build_fingerprint, initial_program_state,
-    HOST_FINGERPRINT_SCHEMA, RUNTIME_FINGERPRINT_SCHEMA,
+    HOST_FINGERPRINT_SCHEMA, primary_mask_key_commitment,
+    RUNTIME_FINGERPRINT_SCHEMA,
 )
 from .next_study_report import build_study_report
 from .next_study_runtime import (
@@ -34,6 +35,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = ROOT / "evidence" / "next-study" / "office-v2-model-free-rehearsal.json"
 SCHEMA_VERSION = "brick.next-study.model-free-rehearsal/1"
 CONTEXT = "synthetic_rehearsal"
+MASKING_KEY = "7" * 64
 CONTEXT_DOCUMENT = {
     "schema_version": "brick.next-study.execution-context/1", "value": CONTEXT,
 }
@@ -130,6 +132,7 @@ def _analyze(retained, schedule, values, *, omit_smallest=False):
     try:
         masked = build_masked_grade_ledger(
             schedule, attempts, retained, "2026-08-05T10:00:00Z",
+            MASKING_KEY,
             execution_context=CONTEXT,
         )
     except ValueError:
@@ -143,7 +146,10 @@ def _analyze(retained, schedule, values, *, omit_smallest=False):
                 "release_attempted": False,
             }, None, None
         raise
-    ledger = unmask_primary(masked, schedule, retained, "2026-08-05T10:01:00Z")
+    ledger = unmask_primary(
+        masked, schedule, retained, attempts, MASKING_KEY,
+        "2026-08-05T10:01:00Z",
+    )
     analysis = analyze_primary(ledger, retained, schedule)
     return {
         "status": "sealed_complete",
@@ -159,10 +165,10 @@ def _evidence_store_smoke(directory, schedule):
     key = AttemptKey(
         domain_name="office_demo", domain_version="0.1.0",
         domain_content_sha256="a" * 64, task_family=cell["family"],
-        task_version="2.1.0", generator_version="office-generators/2.1.0",
-        grader_version="3.0.0", model_tag="mock:4b",
+        task_version="2.1.1", generator_version="office-generators/2.1.1",
+        grader_version="3.1.0", model_tag="mock:4b",
         model_digest="sha256:" + schedule["model_sha256"],
-        condition_name=cell["condition"], condition_version="1.3.0",
+        condition_name=cell["condition"], condition_version="1.4.0",
         mechanism_sha256="b" * 64, instance_id=cell["instance_id"],
         instance_content_sha256=cell["content_sha256"], ordered_subepisodes=(),
         repeat=0, sampling={"seed": cell["trial_seed"], "temperature": "0"},
@@ -206,19 +212,29 @@ def _evidence_store_smoke(directory, schedule):
     }
 
 
-def _program_to_release(schedule, descriptive_schedule):
+def _program_to_release(
+    schedule, descriptive_schedule, primary_analysis, descriptive_report,
+    manifest_lock,
+):
     model_digests = {"2b": "2" * 64, "4b": "4" * 64, "9b": "9" * 64}
     schedules = {
         "calibration": "1" * 64, "sentinel": "2" * 64,
         "primary": _digest(schedule), "descriptives": _digest(descriptive_schedule),
     }
+    artifact_digests = {name: "b" * 64 for name in REQUIRED_ARTIFACT_DIGESTS}
+    artifact_digests["manifest_lock"] = sha256_bytes(
+        canonical_json_bytes(manifest_lock, allow_float=False, newline=True)
+    )
     authorization = build_authorization(
-        tag="v0.13.0", tag_object_sha="9" * 40, commit_sha="a" * 40,
-        artifact_digests={name: "b" * 64 for name in REQUIRED_ARTIFACT_DIGESTS},
+        tag="v0.13.1", tag_object_sha="9" * 40, commit_sha="a" * 40,
+        artifact_digests=artifact_digests,
         host_fingerprint=build_fingerprint(HOST_FINGERPRINT_SCHEMA, {"host": "mock"}),
         runtime_fingerprint=build_fingerprint(RUNTIME_FINGERPRINT_SCHEMA, {"runtime": "mock"}),
         schedule_digests=schedules, model_digests=model_digests,
         descriptive_selection_sha256=descriptive_schedule["selection_sha256"],
+        primary_mask_key_commitment_sha256=primary_mask_key_commitment(
+            MASKING_KEY
+        ),
         issued_at="2026-08-05T10:00:00Z", issuer="model-free rehearsal",
         execution_context=CONTEXT,
     )
@@ -233,7 +249,11 @@ def _program_to_release(schedule, descriptive_schedule):
             "phase": phase, "status": "sealed_pass",
             "logical_cells_completed": logical,
             "physical_attempts_completed": logical,
-            "sealed_artifact_sha256": _digest({"phase": phase}),
+            "sealed_artifact_sha256": (
+                _digest(primary_analysis) if phase == "primary_analysis"
+                else _digest(descriptive_report) if phase == "descriptives"
+                else _digest({"phase": phase})
+            ),
         })
     return authorization, state
 
@@ -278,14 +298,17 @@ def run_rehearsal(output_root=None):
     descriptive_evidence = extract_descriptive_results(eligible, descriptive_attempts)
     controls = extract_primary_trial_0_controls(ledgers, descriptive_schedule)
     descriptive_report = build_descriptive_report(eligible, descriptive_evidence, controls)
-    burden = load_canonical_json(ROOT / "bench" / "manifests" / "office-v2" / "manifest-lock.json")["balance_review"]
-    study_report = build_study_report(
-        analyses, descriptive_report, burden,
-        {"model_free_fixture": 0},
-        ["Synthetic outcomes are pipeline fixtures, not empirical findings."],
-        {"display_label": "mock-v0.14.0", "authorization": "synthetic"},
+    manifest_lock = load_canonical_json(
+        ROOT / "bench" / "manifests" / "office-v2" / "manifest-lock.json"
     )
-    authorization, state = _program_to_release(primary_schedule, descriptive_schedule)
+    authorization, state = _program_to_release(
+        primary_schedule, descriptive_schedule, analyses, descriptive_report,
+        manifest_lock,
+    )
+    study_report, resource_report, failure_taxonomy, program_bindings = build_study_report(
+        analyses, descriptive_report, manifest_lock, ledgers, authorization, state,
+        ["Synthetic outcomes are pipeline fixtures, not empirical findings."],
+    )
     release_rejections = {}
     for attack in ("renamed", "rehashed", "copied"):
         try:

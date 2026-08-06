@@ -2,7 +2,7 @@
 
 This module does not weaken authorization.  Development calls require a
 clean-commit, host-bound shakeout authorization.  Research phases require the
-existing v0.13.0 program authorization.  Console output never contains task
+replacement v0.13.1 program authorization. Console output never contains task
 scores; all evidence is marker-last and resumable.
 """
 
@@ -30,13 +30,18 @@ from bench.next_study_program import (
     REQUIRED_ARTIFACT_DIGESTS, SEALED_GATE_SCHEMA, advance_program,
     build_authorization, build_fingerprint, calibration_decision,
     execution_allowed, initial_program_state, sentinel_decision,
-    validate_authorization, validate_program_state,
+    primary_mask_key_commitment, validate_authorization, validate_program_state,
+)
+from bench.next_study_fable_reconciliation import (
+    DEFAULT_PATH as FABLE_RECONCILIATION_PATH,
+    load_reconciliation,
 )
 from bench.next_study_review import review_packet
+from bench.next_study_report import build_study_report
 from bench.next_study_descriptive import (
     build_report as build_descriptive_report, eligible_schedule,
     extract_descriptive_results, extract_primary_trial_0_controls,
-    seal_descriptive_eligibility,
+    seal_descriptive_eligibility, validate_eligible_schedule,
 )
 from bench.next_study_schedule import (
     build_development_shakeout_schedule, build_descriptive_schedule,
@@ -45,8 +50,9 @@ from bench.next_study_schedule import (
 )
 from bench.next_study_statistics import build_protocol as build_analysis_protocol
 from bench.next_study_runtime import (
-    build_masked_grade_ledger, extract_attempt_records, resume_queue,
-    seal_recovery_attestation, unmask_primary,
+    build_masked_grade_ledger, build_release_archive_manifest,
+    extract_attempt_records, resume_queue, seal_recovery_attestation,
+    unmask_primary, verify_release,
 )
 from bench.next_study_statistics import analyze_primary
 from bench.next_study_validated_outcomes import (
@@ -84,6 +90,9 @@ SHAKEOUT_DECISION_SCHEMA = "brick.next-study.shakeout-decision/1"
 RUN_METADATA_SCHEMA = "brick.next-study.live-run-metadata/1"
 CLEAN_CHECKOUT_SCHEMA = "brick.next-study.clean-checkout-reproduction/1"
 LINUX_CI_SCHEMA = "brick.next-study.linux-ci-reproduction/1"
+DESCRIPTIVE_MODEL_PREFLIGHT_SCHEMA = (
+    "brick.next-study.descriptive-model-preflight/1"
+)
 GITHUB_API_VERSION = "2026-03-10"
 GITHUB_REPOSITORY = "EdgeHarness/Brick-Agent-Harness"
 LINUX_CI_JOB_NAMES = tuple("Python " + version for version in (
@@ -101,6 +110,7 @@ _LIVE_IMPLEMENTATION_PATHS = (
     "domains/office_demo/contracts.py", "domains/office_demo/reviewed_grader_v2.py",
     "bench/next_study_live.py", "bench/next_study_runtime.py",
     "bench/next_study_program.py", "bench/next_study_schedule.py",
+    "bench/next_study_fable_reconciliation.py",
     "bench/next_study_protocol.json",
 )
 _AUTHORIZATION_ARTIFACT_PATHS = {
@@ -117,6 +127,7 @@ _AUTHORIZATION_ARTIFACT_PATHS = {
     "runtime_implementation": "bench/next_study_runtime.py",
     "schedule_implementation": "bench/next_study_schedule.py",
     "descriptive_selection": "bench/next_study_descriptive_selection.json",
+    "fable_reconciliation": FABLE_RECONCILIATION_PATH,
 }
 
 
@@ -130,6 +141,18 @@ def _digest(value, allow_float=False):
 
 def _file_digest(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def _load_mask_key(path):
+    try:
+        value = Path(path).read_text(encoding="ascii").strip()
+    except (OSError, UnicodeError):
+        raise NextStudyLiveError("primary mask-key file is unreadable")
+    if re.fullmatch(r"[0-9a-f]{64}", value or "") is None:
+        raise NextStudyLiveError(
+            "primary mask-key file must contain 32-byte lowercase hex"
+        )
+    return value
 
 
 def _git(*args):
@@ -368,6 +391,93 @@ def validate_native_preflight(document):
         "runtime_fingerprint"
     ] != document["runtime_fingerprint"]:
         raise NextStudyLiveError("native preflight fingerprint drifted")
+    return document
+
+
+def collect_descriptive_model_preflight(
+    authorization, endpoint="http://127.0.0.1:11434", session=None,
+):
+    """Recheck pinned models; only unavailable 2B/9B blocks may be removed."""
+
+    validate_authorization(authorization)
+    client = session or requests.Session()
+    if session is None:
+        client.trust_env = False
+    try:
+        version_response = client.get(endpoint + "/api/version", timeout=(5, 30))
+        tags_response = client.get(endpoint + "/api/tags", timeout=(5, 30))
+        version_response.raise_for_status(); tags_response.raise_for_status()
+        version = version_response.json().get("version")
+        records = tags_response.json().get("models")
+    except (requests.RequestException, ValueError, AttributeError):
+        raise NextStudyLiveError("descriptive model inventory is unavailable")
+    if not isinstance(version, str) or not isinstance(records, list):
+        raise NextStudyLiveError("descriptive model inventory is malformed")
+    expected_version = authorization["runtime_fingerprint"]["details"].get(
+        "ollama_version"
+    )
+    if version != expected_version:
+        raise NextStudyLiveError("descriptive runtime version drifted")
+    availability = {}
+    for role, tag in MODEL_TAGS.items():
+        expected = authorization["model_digests"][role]
+        matches = [
+            item for item in records
+            if item.get("name", item.get("model")) == tag
+            and str(item.get("digest", "")) == expected
+        ]
+        availability[role] = len(matches) == 1
+    document = {
+        "schema_version": DESCRIPTIVE_MODEL_PREFLIGHT_SCHEMA,
+        "status": "passed" if availability["4b"] else "terminate_authorization",
+        "authorization_sha256": authorization["authorization_sha256"],
+        "ollama_version": version,
+        "model_digests": copy.deepcopy(authorization["model_digests"]),
+        "availability": availability,
+        "optional_failed_roles": sorted(
+            role for role in ("2b", "9b") if not availability[role]
+        ),
+        "substitute_models": [],
+        "live_model_calls": 0,
+    }
+    document["descriptive_model_preflight_sha256"] = _digest(document)
+    return validate_descriptive_model_preflight(document, authorization)
+
+
+def validate_descriptive_model_preflight(document, authorization):
+    validate_authorization(authorization)
+    expected = {
+        "schema_version", "status", "authorization_sha256", "ollama_version",
+        "model_digests", "availability", "optional_failed_roles",
+        "substitute_models", "live_model_calls",
+        "descriptive_model_preflight_sha256",
+    }
+    if not isinstance(document, dict) or set(document) != expected:
+        raise NextStudyLiveError("descriptive model preflight has unexpected keys")
+    unsigned = dict(document)
+    supplied = unsigned.pop("descriptive_model_preflight_sha256")
+    if supplied != _digest(unsigned):
+        raise NextStudyLiveError("descriptive model preflight digest drifted")
+    availability = document["availability"]
+    if (
+        document["schema_version"] != DESCRIPTIVE_MODEL_PREFLIGHT_SCHEMA
+        or document["authorization_sha256"]
+        != authorization["authorization_sha256"]
+        or document["model_digests"] != authorization["model_digests"]
+        or document["ollama_version"]
+        != authorization["runtime_fingerprint"]["details"].get("ollama_version")
+        or not isinstance(availability, dict)
+        or set(availability) != {"2b", "4b", "9b"}
+        or any(type(value) is not bool for value in availability.values())
+        or document["optional_failed_roles"] != sorted(
+            role for role in ("2b", "9b") if not availability[role]
+        )
+        or document["substitute_models"] != []
+        or document["live_model_calls"] != 0
+        or document["status"]
+        != ("passed" if availability["4b"] else "terminate_authorization")
+    ):
+        raise NextStudyLiveError("descriptive model preflight semantics drifted")
     return document
 
 
@@ -633,13 +743,15 @@ def build_research_authorization(
     preflight, clean_checkout, linux_ci, schedules, shakeout_authorization,
     shakeout_decision, *, native_preflight_artifact_sha256,
     clean_checkout_artifact_sha256, linux_ci_artifact_sha256,
-    issued_at, issuer, github_session=None,
+    issued_at, issuer, primary_mask_key_commitment_sha256,
+    github_session=None,
 ):
-    """Build the marker-last v0.13.0 authorization after all external gates."""
+    """Build the marker-last v0.13.1 authorization after all external gates."""
 
     validate_native_preflight(preflight)
     validate_clean_checkout_reproduction(clean_checkout, preflight)
     verify_linux_ci_reproduction(linux_ci, preflight, session=github_session)
+    load_reconciliation(ROOT / FABLE_RECONCILIATION_PATH, require_complete=True)
     validate_shakeout_authorization(shakeout_authorization)
     validate_shakeout_decision(shakeout_decision)
     if (
@@ -681,15 +793,16 @@ def build_research_authorization(
     )
     if set(artifact_digests) != REQUIRED_ARTIFACT_DIGESTS:
         raise NextStudyLiveError("authorization artifact inventory drifted")
-    tag_object_sha = _annotated_tag_binding("v0.13.0", preflight["commit_sha"])
+    tag_object_sha = _annotated_tag_binding("v0.13.1", preflight["commit_sha"])
     return build_authorization(
-        tag="v0.13.0", tag_object_sha=tag_object_sha,
+        tag="v0.13.1", tag_object_sha=tag_object_sha,
         commit_sha=preflight["commit_sha"], artifact_digests=artifact_digests,
         host_fingerprint=preflight["host_fingerprint"],
         runtime_fingerprint=preflight["runtime_fingerprint"],
         schedule_digests=schedule_digests,
         model_digests=preflight["model_digests"],
         descriptive_selection_sha256=schedules["descriptives"]["selection_sha256"],
+        primary_mask_key_commitment_sha256=primary_mask_key_commitment_sha256,
         issued_at=issued_at, issuer=issuer,
     )
 
@@ -984,7 +1097,7 @@ def _model_for_cell(cell, model_digests):
 
 def execute_schedule(
     *, schedule, manifest, authorization, preflight, runs_root, run_id,
-    lease_path=None, program_state=None,
+    lease_path=None, program_state=None, eligible_descriptive_schedule=None,
 ):
     validate_native_preflight(preflight)
     is_shakeout = schedule.get("phase") == "development_shakeout"
@@ -1033,6 +1146,20 @@ def execute_schedule(
         if _digest(schedule) != authorization["schedule_digests"][phase_key]:
             raise NextStudyLiveError("loaded schedule differs from authorization binding")
         authorization_sha256 = authorization["authorization_sha256"]
+    execution_schedule = schedule
+    if schedule.get("phase") == "descriptives":
+        if eligible_descriptive_schedule is None:
+            raise NextStudyLiveError(
+                "descriptive execution requires sealed model eligibility"
+            )
+        try:
+            execution_schedule = validate_eligible_schedule(
+                eligible_descriptive_schedule, schedule,
+            )
+        except ValueError as exc:
+            raise NextStudyLiveError(str(exc))
+    elif eligible_descriptive_schedule is not None:
+        raise NextStudyLiveError("eligible descriptive schedule used outside descriptives")
     by_id = {item["content"]["id"]: item for item in manifest["instances"]}
     validated_document = load_canonical_json(VALIDATED_OUTCOMES_PATH)
     all_manifests = load_manifests(ROOT)
@@ -1043,6 +1170,7 @@ def execute_schedule(
         "run_id": run_id, "phase": schedule["phase"],
         "authorization_sha256": authorization_sha256,
         "schedule_sha256": _digest(schedule),
+        "execution_schedule_sha256": _digest(execution_schedule),
         "preflight_sha256": preflight["preflight_sha256"],
         "score_masked_console": True,
         "model_digests": copy.deepcopy(preflight["model_digests"]),
@@ -1052,7 +1180,7 @@ def execute_schedule(
     lease.acquire(authorization_sha256)
     emitted = []
     try:
-        for cell in schedule["records"]:
+        for cell in execution_schedule["records"]:
             instance = by_id.get(cell["instance_id"])
             if instance is None or instance["content_sha256"] != cell["content_sha256"]:
                 raise NextStudyLiveError("scheduled instance binding drifted")
@@ -1166,8 +1294,8 @@ def build_shakeout_decision(store, schedule, authorization, decided_at):
         "condition_scores_read": False,
         "strict_successes_reported": False,
         "next_transition": (
-            "eligible_to_freeze_v0.13.0_candidate" if passed
-            else "terminate_office_generators_2.1.0_candidate"
+            "eligible_to_freeze_v0.13.1_candidate" if passed
+            else "terminate_office_generators_2.1.1_candidate"
         ),
         "decided_at": decided_at,
     }
@@ -1207,8 +1335,8 @@ def validate_shakeout_decision(document):
             and document["missing_cells"] == 0
         )
         or document["next_transition"] != (
-            "eligible_to_freeze_v0.13.0_candidate" if passed
-            else "terminate_office_generators_2.1.0_candidate"
+            "eligible_to_freeze_v0.13.1_candidate" if passed
+            else "terminate_office_generators_2.1.1_candidate"
         )
     ):
         raise NextStudyLiveError("shakeout decision state is inconsistent")
@@ -1242,7 +1370,7 @@ def _sealed_gate(state, phase, artifact, logical_cells, physical_attempts):
 
 def seal_execution_phase(
     *, store, schedule, manifest, authorization, program_state,
-    recovery_attestations=(), sealed_at,
+    recovery_attestations=(), sealed_at, masking_key=None,
 ):
     """Seal calibration, sentinel, or primary without exposing masked scores."""
 
@@ -1292,8 +1420,13 @@ def seal_execution_phase(
         if artifact.get("status") != "sealed_pass":
             return artifact, program_state
     else:
+        if masking_key is None:
+            raise NextStudyLiveError("primary sealing requires the committed mask key")
         artifact = build_masked_grade_ledger(
-            schedule, attempts, manifest, sealed_at,
+            schedule, attempts, manifest, sealed_at, masking_key,
+            expected_mask_key_commitment=authorization[
+                "primary_mask_key_commitment"
+            ],
         )
     gate = _sealed_gate(
         program_state, phase, artifact, schedule["logical_cell_count"], len(attempts),
@@ -1303,7 +1436,7 @@ def seal_execution_phase(
 
 def seal_primary_analysis(
     *, masked_ledger, schedule, retained_manifest, authorization,
-    program_state, sealed_at,
+    program_state, attempts, masking_key, sealed_at,
 ):
     """Unmask once, compute the frozen analysis, and advance to descriptives."""
 
@@ -1313,10 +1446,13 @@ def seal_primary_analysis(
         program_state["authorization_sha256"] != authorization["authorization_sha256"]
         or program_state["current_phase"] != "primary_analysis"
         or _digest(schedule) != authorization["schedule_digests"]["primary"]
+        or primary_mask_key_commitment(masking_key)
+        != authorization["primary_mask_key_commitment"]
     ):
         raise NextStudyLiveError("primary analysis inputs are not authorization-bound")
     grade_ledger = unmask_primary(
-        masked_ledger, schedule, retained_manifest, sealed_at,
+        masked_ledger, schedule, retained_manifest, attempts, masking_key,
+        sealed_at,
     )
     analysis = analyze_primary(grade_ledger, retained_manifest, schedule)
     gate = _sealed_gate(program_state, "primary_analysis", analysis, 0, 0)
@@ -1337,15 +1473,26 @@ def seal_descriptives(
         or _digest(schedule) != authorization["schedule_digests"]["descriptives"]
     ):
         raise NextStudyLiveError("descriptive seal inputs are not authorization-bound")
+    primary_gates = [
+        gate for gate in program_state["sealed_phase_gates"]
+        if gate["phase"] == "primary_analysis"
+    ]
+    if (
+        len(primary_gates) != 1
+        or primary_gates[0]["sealed_artifact_sha256"] != _digest(primary_analysis)
+    ):
+        raise NextStudyLiveError(
+            "descriptives require the exact sealed primary-analysis artifact"
+        )
     retained = load_canonical_json(MANIFEST_DIRECTORY / "retained.json")
     validate_descriptive_schedule(schedule, retained)
     binding = seal_descriptive_eligibility(primary_analysis, grade_ledger, schedule)
     eligible = eligible_schedule(schedule, model_preflight, binding)
     attempts = extract_attempt_records(
-        store, schedule, recovery_attestations,
+        store, eligible, recovery_attestations,
         authorization["authorization_sha256"],
     )
-    if resume_queue(schedule, attempts):
+    if resume_queue(eligible, attempts):
         raise NextStudyLiveError("descriptives cannot seal while cells remain")
     evidence = extract_descriptive_results(eligible, attempts)
     controls = extract_primary_trial_0_controls(grade_ledger, schedule)
@@ -1365,6 +1512,9 @@ def main(argv=None):
     preflight = commands.add_parser("native-preflight")
     preflight.add_argument("--allow-dirty", action="store_true")
     preflight.add_argument("--output", type=Path)
+    descriptive_preflight = commands.add_parser("descriptive-model-preflight")
+    descriptive_preflight.add_argument("--authorization", type=Path, required=True)
+    descriptive_preflight.add_argument("--output", type=Path, required=True)
     qualify = commands.add_parser("qualify-clean-checkout")
     qualify.add_argument("--preflight", type=Path, required=True)
     qualify.add_argument("--output", type=Path, required=True)
@@ -1404,6 +1554,7 @@ def main(argv=None):
     research.add_argument("--shakeout-authorization", type=Path, required=True)
     research.add_argument("--shakeout-decision", type=Path, required=True)
     research.add_argument("--issuer", required=True)
+    research.add_argument("--mask-key-file", type=Path, required=True)
     research.add_argument("--issued-at")
     research.add_argument("--output", type=Path, required=True)
     research.add_argument("--state-output", type=Path, required=True)
@@ -1415,6 +1566,9 @@ def main(argv=None):
     phase.add_argument("--runs-root", type=Path, default=DEFAULT_RUNS_ROOT)
     phase.add_argument("--run-id", required=True)
     phase.add_argument("--lease", type=Path)
+    phase.add_argument("--descriptive-preflight", type=Path)
+    phase.add_argument("--primary-analysis", type=Path)
+    phase.add_argument("--grade-ledger", type=Path)
     seal = commands.add_parser("seal-phase")
     seal.add_argument("--schedule", type=Path, required=True)
     seal.add_argument("--authorization", type=Path, required=True)
@@ -1422,6 +1576,7 @@ def main(argv=None):
     seal.add_argument("--runs-root", type=Path, default=DEFAULT_RUNS_ROOT)
     seal.add_argument("--run-id", required=True)
     seal.add_argument("--sealed-at")
+    seal.add_argument("--mask-key-file", type=Path)
     seal.add_argument("--output", type=Path, required=True)
     seal.add_argument("--state-output", type=Path, required=True)
     analyze = commands.add_parser("analyze-primary")
@@ -1430,11 +1585,15 @@ def main(argv=None):
     analyze.add_argument("--authorization", type=Path, required=True)
     analyze.add_argument("--program-state", type=Path, required=True)
     analyze.add_argument("--sealed-at")
+    analyze.add_argument("--mask-key-file", type=Path, required=True)
+    analyze.add_argument("--runs-root", type=Path, default=DEFAULT_RUNS_ROOT)
+    analyze.add_argument("--run-id", required=True)
     analyze.add_argument("--grade-ledger-output", type=Path, required=True)
     analyze.add_argument("--analysis-output", type=Path, required=True)
     analyze.add_argument("--state-output", type=Path, required=True)
     descriptives = commands.add_parser("seal-descriptives")
     descriptives.add_argument("--preflight", type=Path, required=True)
+    descriptives.add_argument("--descriptive-preflight", type=Path, required=True)
     descriptives.add_argument("--schedule", type=Path, required=True)
     descriptives.add_argument("--authorization", type=Path, required=True)
     descriptives.add_argument("--program-state", type=Path, required=True)
@@ -1444,11 +1603,43 @@ def main(argv=None):
     descriptives.add_argument("--run-id", required=True)
     descriptives.add_argument("--output-dir", type=Path, required=True)
     descriptives.add_argument("--state-output", type=Path, required=True)
+    report = commands.add_parser("build-report")
+    report.add_argument("--authorization", type=Path, required=True)
+    report.add_argument("--program-state", type=Path, required=True)
+    report.add_argument("--primary-analysis", type=Path, required=True)
+    report.add_argument("--grade-ledger", type=Path, required=True)
+    report.add_argument("--descriptive-report", type=Path, required=True)
+    report.add_argument("--burden-audit", type=Path, required=True)
+    report.add_argument("--limitation", action="append", default=[])
+    report.add_argument("--output-dir", type=Path, required=True)
+    archive = commands.add_parser("build-release-archive")
+    archive.add_argument("--authorization", type=Path, required=True)
+    archive.add_argument("--archived-commit", required=True)
+    for name in (
+        "calibration", "sentinel", "masked-primary-ledger",
+        "primary-grade-ledger", "primary-analysis", "descriptives",
+        "resource-report", "failure-taxonomy", "program-bindings",
+        "study-report", "program-state",
+    ):
+        archive.add_argument("--" + name, type=Path, required=True)
+    archive.add_argument("--output", type=Path, required=True)
+    release = commands.add_parser("verify-release")
+    release.add_argument("--authorization", type=Path, required=True)
+    release.add_argument("--program-state", type=Path, required=True)
+    release.add_argument("--archive-manifest", type=Path, required=True)
+    release.add_argument("--tag", default="v0.14.0")
+    release.add_argument("--output", type=Path, required=True)
+    release.add_argument("--state-output", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == "native-preflight":
         document = collect_native_preflight(require_clean=not args.allow_dirty)
         if args.output:
             _publish_marker_last(args.output, document)
+        result = document
+    elif args.command == "descriptive-model-preflight":
+        authorization = validate_authorization(_load_published(args.authorization))
+        document = collect_descriptive_model_preflight(authorization)
+        _publish_marker_last(args.output, document)
         result = document
     elif args.command == "qualify-clean-checkout":
         preflight_document = validate_native_preflight(_load_published(args.preflight))
@@ -1524,6 +1715,9 @@ def main(argv=None):
             native_preflight_artifact_sha256=_file_digest(args.preflight),
             clean_checkout_artifact_sha256=_file_digest(args.clean_checkout),
             linux_ci_artifact_sha256=_file_digest(args.linux_ci),
+            primary_mask_key_commitment_sha256=primary_mask_key_commitment(
+                _load_mask_key(args.mask_key_file)
+            ),
             issued_at=issued, issuer=args.issuer,
         )
         _publish_marker_last(args.output, document)
@@ -1543,10 +1737,44 @@ def main(argv=None):
         if split is None:
             raise NextStudyLiveError("run-phase schedule is not executable")
         manifest = load_canonical_json(MANIFEST_DIRECTORY / (split + ".json"))
+        eligible = None
+        if schedule.get("phase") == "descriptives":
+            if any(
+                value is None for value in (
+                    args.descriptive_preflight, args.primary_analysis,
+                    args.grade_ledger,
+                )
+            ):
+                raise NextStudyLiveError(
+                    "descriptive execution requires preflight and sealed primary inputs"
+                )
+            descriptive_model = validate_descriptive_model_preflight(
+                _load_published(args.descriptive_preflight), authorization,
+            )
+            if descriptive_model["status"] != "passed":
+                raise NextStudyLiveError("mandatory 4B descriptive preflight failed")
+            primary_analysis = _load_published(args.primary_analysis)
+            grade_ledger = _load_published(args.grade_ledger)
+            binding = seal_descriptive_eligibility(
+                primary_analysis, grade_ledger, schedule,
+            )
+            eligible = eligible_schedule(
+                schedule, descriptive_model["availability"], binding,
+            )
+        elif any(
+            value is not None for value in (
+                args.descriptive_preflight, args.primary_analysis,
+                args.grade_ledger,
+            )
+        ):
+            raise NextStudyLiveError(
+                "descriptive-only inputs were supplied to another phase"
+            )
         result = execute_schedule(
             schedule=schedule, manifest=manifest, authorization=authorization,
             preflight=preflight_document, program_state=state,
             runs_root=args.runs_root, run_id=args.run_id, lease_path=args.lease,
+            eligible_descriptive_schedule=eligible,
         )
     elif args.command == "seal-phase":
         schedule = load_canonical_json(args.schedule)
@@ -1566,6 +1794,10 @@ def main(argv=None):
             authorization=authorization, program_state=state,
             recovery_attestations=_recovery_attestations(args.runs_root, args.run_id),
             sealed_at=sealed_at,
+            masking_key=(
+                _load_mask_key(args.mask_key_file)
+                if args.mask_key_file is not None else None
+            ),
         )
         _publish_marker_last(args.output, artifact)
         if updated != state:
@@ -1576,11 +1808,18 @@ def main(argv=None):
         state = validate_program_state(_load_published(args.program_state))
         schedule = load_canonical_json(args.schedule)
         retained = load_canonical_json(MANIFEST_DIRECTORY / "retained.json")
+        store = EvidenceStore.open_run(args.runs_root, args.run_id)
+        attempts = extract_attempt_records(
+            store, schedule,
+            _recovery_attestations(args.runs_root, args.run_id),
+            authorization["authorization_sha256"],
+        )
         sealed_at = args.sealed_at or datetime.datetime.now(datetime.timezone.utc).isoformat()
         grade, analysis_document, updated = seal_primary_analysis(
             masked_ledger=_load_published(args.masked_ledger), schedule=schedule,
             retained_manifest=retained, authorization=authorization,
-            program_state=state, sealed_at=sealed_at,
+            program_state=state, attempts=attempts,
+            masking_key=_load_mask_key(args.mask_key_file), sealed_at=sealed_at,
         )
         _publish_marker_last(args.grade_ledger_output, grade)
         _publish_marker_last(args.analysis_output, analysis_document)
@@ -1589,11 +1828,16 @@ def main(argv=None):
             "status": "sealed", "claim_disposition": analysis_document["claim_disposition"],
             "next_phase": updated["current_phase"],
         }
-    else:
+    elif args.command == "seal-descriptives":
         preflight_document = validate_native_preflight(_load_published(args.preflight))
         authorization = validate_authorization(_load_published(args.authorization))
         state = validate_program_state(_load_published(args.program_state))
         schedule = load_canonical_json(args.schedule)
+        descriptive_model = validate_descriptive_model_preflight(
+            _load_published(args.descriptive_preflight), authorization,
+        )
+        if descriptive_model["status"] != "passed":
+            raise NextStudyLiveError("mandatory 4B descriptive preflight failed")
         store = EvidenceStore.open_run(args.runs_root, args.run_id)
         documents = seal_descriptives(
             store=store, schedule=schedule, authorization=authorization,
@@ -1601,7 +1845,7 @@ def main(argv=None):
             primary_analysis=_load_published(args.primary_analysis),
             grade_ledger=_load_published(args.grade_ledger),
             recovery_attestations=_recovery_attestations(args.runs_root, args.run_id),
-            model_preflight={name: True for name in preflight_document["model_digests"]},
+            model_preflight=descriptive_model["availability"],
         )
         binding, evidence, controls, report, updated = documents
         args.output_dir.mkdir(parents=True, exist_ok=False)
@@ -1612,6 +1856,71 @@ def main(argv=None):
             _publish_marker_last(args.output_dir / (name + ".json"), document)
         _publish_marker_last(args.state_output, updated)
         result = {"status": report["status"], "next_phase": updated["current_phase"]}
+    elif args.command == "build-report":
+        authorization = validate_authorization(_load_published(args.authorization))
+        state = validate_program_state(_load_published(args.program_state))
+        manifest_lock = load_canonical_json(args.burden_audit)
+        study, resource, taxonomy, bindings = build_study_report(
+            _load_published(args.primary_analysis),
+            _load_published(args.descriptive_report),
+            manifest_lock,
+            _load_published(args.grade_ledger),
+            authorization, state, args.limitation,
+        )
+        args.output_dir.mkdir(parents=True, exist_ok=False)
+        for name, document in (
+            ("resource-report", resource),
+            ("failure-taxonomy", taxonomy),
+            ("program-bindings", bindings),
+            ("study-report", study),
+        ):
+            _publish_marker_last(args.output_dir / (name + ".json"), document)
+        result = {
+            "status": "report_built",
+            "claim_disposition": study["claim_disposition"],
+            "study_report_sha256": study["study_report_sha256"],
+        }
+    elif args.command == "build-release-archive":
+        authorization = validate_authorization(_load_published(args.authorization))
+        paths = {
+            "authorization": args.authorization,
+            "calibration": args.calibration,
+            "sentinel": args.sentinel,
+            "masked_primary_ledger": args.masked_primary_ledger,
+            "primary_grade_ledger": args.primary_grade_ledger,
+            "primary_analysis": args.primary_analysis,
+            "descriptives": args.descriptives,
+            "resource_report": args.resource_report,
+            "failure_taxonomy": args.failure_taxonomy,
+            "program_bindings": args.program_bindings,
+            "study_report": args.study_report,
+            "program_state": args.program_state,
+        }
+        document = build_release_archive_manifest(
+            ROOT, authorization, args.archived_commit,
+            {name: path.resolve().relative_to(ROOT.resolve()) for name, path in paths.items()},
+        )
+        _publish_marker_last(args.output, document)
+        result = {"status": "archive_built", "archive_sha256": document["archive_sha256"]}
+    elif args.command == "verify-release":
+        authorization = validate_authorization(_load_published(args.authorization))
+        state = validate_program_state(_load_published(args.program_state))
+        attestation = verify_release(
+            ROOT, authorization, state,
+            _load_published(args.archive_manifest), annotated_tag=args.tag,
+        )
+        updated = advance_program(
+            state, _sealed_gate(state, "release", attestation, 0, 0)
+        )
+        _publish_marker_last(args.output, attestation)
+        _publish_marker_last(args.state_output, updated)
+        result = {
+            "status": attestation["status"],
+            "program_status": updated["status"],
+            "annotated_tag": attestation["annotated_tag"],
+        }
+    else:
+        raise NextStudyLiveError("unsupported command")
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
     return 0
 

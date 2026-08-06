@@ -12,6 +12,7 @@ from bench.next_study_live import (
 from bench.next_study_program import (
     HOST_FINGERPRINT_SCHEMA, REQUIRED_ARTIFACT_DIGESTS,
     RUNTIME_FINGERPRINT_SCHEMA, build_authorization, build_fingerprint,
+    primary_mask_key_commitment,
 )
 from bench.next_study_runtime import extract_attempt_records
 from bench.next_study_schedule import (
@@ -309,7 +310,7 @@ def test_research_executor_requires_authorization_bound_program_state(tmp_path):
     from harness.evidence import canonical_json_bytes
     from harness.instances import sha256_bytes
     authorization = build_authorization(
-        tag="v0.13.0", tag_object_sha="8" * 40, commit_sha="b" * 40,
+        tag="v0.13.1", tag_object_sha="8" * 40, commit_sha="b" * 40,
         artifact_digests={name: "a" * 64 for name in REQUIRED_ARTIFACT_DIGESTS},
         host_fingerprint=_preflight()["host_fingerprint"],
         runtime_fingerprint=_preflight()["runtime_fingerprint"],
@@ -319,6 +320,7 @@ def test_research_executor_requires_authorization_bound_program_state(tmp_path):
         },
         model_digests=model_digests,
         descriptive_selection_sha256=schedules["descriptives"]["selection_sha256"],
+        primary_mask_key_commitment_sha256=primary_mask_key_commitment("7" * 64),
         issued_at="2026-08-05T10:00:00Z", issuer="tester",
     )
     from bench.next_study_live import execute_schedule

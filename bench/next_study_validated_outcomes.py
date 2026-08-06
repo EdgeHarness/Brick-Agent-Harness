@@ -1,4 +1,4 @@
-"""Compile and validate public-packet outcomes for the 2.1.0 instrument.
+"""Compile and validate public-packet outcomes for the 2.1.1 instrument.
 
 The legacy-named ``outcome_oracle_v2`` module is the independent compiler: it
 parses only prompt text, visible initial state, date, and subepisode prompts.

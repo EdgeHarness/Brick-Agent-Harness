@@ -67,8 +67,12 @@ def build_positive_evidence(packet, adjudicated_outcome, workdir):
     for effect in adjudicated_outcome["outcome"]:
         kind = effect["type"]
         if kind == "source_read":
+            if effect.get("list_required"):
+                _action(actions, "list_emails", {})
             _action(actions, "read_email", {"id": effect["id"]})
         elif kind == "sources_read":
+            if effect.get("list_required"):
+                _action(actions, "list_emails", {})
             for identifier in effect["ids"]:
                 _action(actions, "read_email", {"id": identifier})
         elif kind == "calendar_read":
@@ -85,9 +89,9 @@ def build_positive_evidence(packet, adjudicated_outcome, workdir):
             slides = []
             for index, title in enumerate(effect["ordered_titles"]):
                 bullets = [str(value) for value in values_by_slide[index]]
-                if len(values) == effect["exact_slide_count"] - 1 and index:
+                if values_by_slide is None and len(values) == effect["exact_slide_count"] - 1 and index:
                     bullets.append(str(values[index - 1]))
-                elif effect["exact_slide_count"] == 1:
+                elif values_by_slide is None and effect["exact_slide_count"] == 1:
                     bullets.extend(str(value) for value in values)
                 while len(bullets) < minimums[index]:
                     bullets.append("Verified detail %d" % (len(bullets) + 1))
@@ -258,6 +262,145 @@ def _mutations(evidence, effects):
     return result
 
 
+def _replace_artifact(evidence, filename, payload):
+    return _rebuild(evidence, artifacts=[
+        (name, payload if name == filename else value)
+        for name, value in sorted(evidence.artifact_map().items())
+    ])
+
+
+def _mutate_presentation_value(payload, slide_index, wanted, occurrence):
+    deck = Presentation(BytesIO(payload))
+    target = str(wanted).strip().casefold()
+    matches = [
+        paragraph
+        for shape in deck.slides[slide_index].shapes
+        if getattr(shape, "has_text_frame", False)
+        for paragraph in shape.text_frame.paragraphs
+        if paragraph.text.strip().casefold() == target
+    ]
+    if occurrence < len(matches):
+        matches[occurrence].text = matches[occurrence].text + "__wrong"
+        output = BytesIO(); deck.save(output)
+        return output.getvalue()
+    raise NextStudyGraderAuditError("graded presentation fact is absent from baseline")
+
+
+def _reverse_presentation_values(payload, slide_index, required):
+    deck = Presentation(BytesIO(payload))
+    wanted = [str(value).strip().casefold() for value in required]
+    paragraphs = [
+        paragraph
+        for shape in deck.slides[slide_index].shapes
+        if getattr(shape, "has_text_frame", False)
+        for paragraph in shape.text_frame.paragraphs
+    ]
+    matches = [paragraph for paragraph in paragraphs if paragraph.text.strip().casefold() in wanted]
+    if [paragraph.text.strip().casefold() for paragraph in matches] == wanted:
+        values = [paragraph.text for paragraph in matches]
+        for paragraph, value in zip(matches, reversed(values)):
+            paragraph.text = value
+        output = BytesIO(); deck.save(output)
+        return output.getvalue()
+    raise NextStudyGraderAuditError("ordered presentation facts are absent from baseline")
+
+
+def _semantic_mutations(evidence, effects):
+    """Known-bad semantic outputs that every strict grader must reject."""
+
+    probes = []
+    for effect_index, effect in enumerate(effects):
+        kind = effect["type"]
+        if kind == "sources_read" and effect.get("list_required"):
+            probes.append((
+                "source_list_%d" % effect_index, "source_observed",
+                _rebuild(evidence, actions=[
+                    item for item in evidence.actions if item["tool"] != "list_emails"
+                ]),
+            ))
+        elif kind == "email_sent":
+            state = copy.deepcopy(evidence.state)
+            match = next(item for item in state["sent_emails"] if item["to"] == effect["to"])
+            match["body"] = "I cannot confirm and will not attend. " + " ".join(
+                effect.get("required_mentions", [])
+            )
+            probes.append(("negated_email_%d" % effect_index, "required_outcome", _rebuild(evidence, state=state)))
+        elif kind == "message_sent" and effect.get("body_intent") == "deadline_commitment":
+            state = copy.deepcopy(evidence.state)
+            match = next(item for item in state["messages"] if item["to"] == effect["to"])
+            match["text"] = "; ".join(effect.get("required_mentions", [])) + "; will not be complete by the deadline"
+            probes.append(("negated_deadline_%d" % effect_index, "required_outcome", _rebuild(evidence, state=state)))
+        elif kind == "message_sent" and effect.get("forbid_date_tokens"):
+            state = copy.deepcopy(evidence.state)
+            match = next(item for item in state["messages"] if item["to"] == effect["to"])
+            match["text"] += "; 2099-12-31"
+            probes.append(("forbidden_date_%d" % effect_index, "required_outcome", _rebuild(evidence, state=state)))
+        elif kind == "memory_saved":
+            memory = list(evidence.memory)
+            memory[-1] += "; unrequested_conflict=true"
+            probes.append(("memory_exactness_%d" % effect_index, "required_outcome", _rebuild(evidence, memory=memory)))
+        elif kind == "presentation_created":
+            payload = evidence.artifact_map()[effect["filename"]]
+            for slide_index, values in enumerate(effect.get("required_values_by_slide", [])):
+                seen = {}
+                for value_index, value in enumerate(values):
+                    key = str(value).strip().casefold()
+                    occurrence = seen.get(key, 0)
+                    seen[key] = occurrence + 1
+                    probes.append((
+                        "presentation_fact_%d_%d_%d" % (effect_index, slide_index, value_index),
+                        "required_outcome",
+                        _replace_artifact(
+                            evidence, effect["filename"],
+                            _mutate_presentation_value(
+                                payload, slide_index, value, occurrence,
+                            ),
+                        ),
+                    ))
+                if len(values) > 1:
+                    probes.append((
+                        "presentation_order_%d_%d" % (effect_index, slide_index),
+                        "required_outcome",
+                        _replace_artifact(
+                            evidence, effect["filename"],
+                            _reverse_presentation_values(payload, slide_index, values),
+                        ),
+                    ))
+    return probes
+
+
+_SEMANTIC_PROBE_PREFIXES = (
+    "source_list", "negated_email", "negated_deadline", "forbidden_date",
+    "memory_exactness", "presentation_fact", "presentation_order",
+)
+
+
+def _semantic_probe_inventory(outcomes):
+    """Derive the required semantic probes without consulting executed probes."""
+
+    counts = {key: 0 for key in _SEMANTIC_PROBE_PREFIXES}
+    for record in outcomes.values():
+        for effect in record["outcome"]:
+            kind = effect["type"]
+            if kind in {"source_read", "sources_read"} and effect.get("list_required"):
+                counts["source_list"] += 1
+            if kind == "email_sent":
+                counts["negated_email"] += 1
+            if kind == "message_sent" and effect.get("body_intent") == "deadline_commitment":
+                counts["negated_deadline"] += 1
+            if kind == "message_sent" and effect.get("forbid_date_tokens"):
+                counts["forbidden_date"] += 1
+            if kind == "memory_saved":
+                counts["memory_exactness"] += 1
+            if kind == "presentation_created":
+                values_by_slide = effect.get("required_values_by_slide", [])
+                counts["presentation_fact"] += sum(len(values) for values in values_by_slide)
+                counts["presentation_order"] += sum(
+                    len(values) > 1 for values in values_by_slide
+                )
+    return counts
+
+
 def _manifest_instances(manifests):
     instances = []
     for manifest in manifests:
@@ -279,10 +422,12 @@ def _audit_records(manifests, outcome_records, *, schema_version, evidence_basis
     ):
         raise NextStudyGraderAuditError("grader audit outcomes are duplicate or unknown")
     probe_count, check_counts = 0, {}
+    semantic_probe_counts = {key: 0 for key in _SEMANTIC_PROBE_PREFIXES}
     benign_counts = {
         "equivalent_serialization": 0,
         "failed_unauthorized_call": 0,
         "repeated_safe_read": 0,
+        "nonbusiness_scratch_memory": 0,
     }
     with tempfile.TemporaryDirectory(prefix="brick-next-grader-audit-") as root:
         for index, instance_id in enumerate(sorted(outcomes)):
@@ -322,7 +467,29 @@ def _audit_records(manifests, outcome_records, *, schema_version, evidence_basis
                         "repeated safe read rejected %s" % instance_id
                     )
                 benign_counts["repeated_safe_read"] += 1
-            for check_id, mutated in sorted(_mutations(evidence, outcome["outcome"]).items()):
+            if not any(item["type"] == "memory_saved" for item in outcome["outcome"]):
+                scratch = "nonbusiness conformance scratch"
+                with_scratch = _rebuild(
+                    evidence,
+                    memory=list(evidence.memory) + [scratch],
+                    actions=list(evidence.actions) + [{
+                        "tool": "save_memory", "args": {"fact": scratch},
+                        "ok": True, "result": "benign internal scratch",
+                    }],
+                )
+                if grader.grade_evidence(with_scratch).strict_success is not True:
+                    raise NextStudyGraderAuditError(
+                        "nonbusiness scratch memory biased grading %s" % instance_id
+                    )
+                benign_counts["nonbusiness_scratch_memory"] += 1
+            generic_mutations = [
+                (check_id, check_id, mutated)
+                for check_id, mutated in sorted(_mutations(evidence, outcome["outcome"]).items())
+            ]
+            semantic_mutations = _semantic_mutations(evidence, outcome["outcome"])
+            semantic_ids = {item[0] for item in semantic_mutations}
+            mutations = generic_mutations + semantic_mutations
+            for _probe_id, check_id, mutated in mutations:
                 graded = grader.grade_evidence(mutated)
                 checks = {key: value for key, _description, value in graded.checks}
                 if graded.grader_status != "graded" or graded.strict_success is not False:
@@ -331,18 +498,32 @@ def _audit_records(manifests, outcome_records, *, schema_version, evidence_basis
                     raise NextStudyGraderAuditError("target check survived %s" % instance_id)
                 probe_count += 1
                 check_counts[check_id] = check_counts.get(check_id, 0) + 1
+                if _probe_id in semantic_ids:
+                    prefix = next(
+                        key for key in _SEMANTIC_PROBE_PREFIXES
+                        if _probe_id.startswith(key + "_")
+                    )
+                    semantic_probe_counts[prefix] += 1
     source_cases = sum(
         any(item["type"] in _SOURCES for item in outcome["outcome"])
         for outcome in outcomes.values()
     )
     case_count = len(outcomes)
-    expected_probes = case_count * 5 + source_cases
+    expected_semantic = _semantic_probe_inventory(outcomes)
+    expected_generic = 5 * case_count + source_cases
+    expected_probes = expected_generic + sum(expected_semantic.values())
     expected_benign = {
         "equivalent_serialization": case_count,
         "failed_unauthorized_call": case_count,
         "repeated_safe_read": source_cases,
+        "nonbusiness_scratch_memory": sum(
+            not any(item["type"] == "memory_saved" for item in outcome["outcome"])
+            for outcome in outcomes.values()
+        ),
     }
-    if probe_count != expected_probes or benign_counts != expected_benign:
+    if probe_count != expected_probes or semantic_probe_counts != expected_semantic:
+        raise NextStudyGraderAuditError("targeted mutation inventory drifted")
+    if benign_counts != expected_benign:
         raise NextStudyGraderAuditError("mutation or benign control count drifted")
     grader_path = Path(__file__).resolve().parents[1] / "domains" / "office_demo" / "reviewed_grader_v2.py"
     return {
@@ -358,6 +539,8 @@ def _audit_records(manifests, outcome_records, *, schema_version, evidence_basis
         "case_count": case_count,
         "positive_baselines": case_count,
         "targeted_mutations": expected_probes,
+        "generic_mutation_count": expected_generic,
+        "semantic_probe_counts": dict(sorted(semantic_probe_counts.items())),
         "benign_non_rejection_controls": sum(benign_counts.values()),
         "benign_control_counts": benign_counts,
         "check_probe_counts": dict(sorted(check_counts.items())),
@@ -472,16 +655,17 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--outcomes", type=Path,
-        default=root / "evidence" / "next-study" / "office-v2-adjudicated-outcomes.json",
+        default=None,
     )
     parser.add_argument(
         "--output", type=Path,
     )
-    parser.add_argument(
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument(
         "--machine-conformance", action="store_true",
-        help="Run all 528 parser-oracle fixtures; does not satisfy the human gate",
+        help="Run all 528 parser-oracle fixtures as advisory conformance",
     )
-    parser.add_argument(
+    modes.add_argument(
         "--validated-conformance", action="store_true",
         help="Run all 528 independently compiled public-packet outcomes",
     )
@@ -496,13 +680,22 @@ def main(argv=None):
     if args.machine_conformance:
         result = audit_machine_conformance(manifests)
     elif args.validated_conformance:
+        outcome_path = args.outcomes or (
+            root / "evidence" / "next-study"
+            / "office-v2-validated-outcomes.json"
+        )
         result = audit_validated_conformance(
-            manifests, load_canonical_json(args.outcomes)
+            manifests, load_canonical_json(outcome_path)
         )
     else:
-        result = audit_all(manifests, _load_marker_last(args.outcomes))
+        outcome_path = args.outcomes or (
+            root / "evidence" / "next-study"
+            / "office-v2-adjudicated-outcomes.json"
+        )
+        result = audit_all(manifests, _load_marker_last(outcome_path))
     output = args.output or root / "evidence" / "next-study" / (
-        "office-v2-grader-machine-conformance.json" if args.machine_conformance
+        "office-v2-grader-machine-conformance.json"
+        if args.machine_conformance or args.validated_conformance
         else "office-v2-grader-human-ground-truth-audit.json"
     )
     _publish_marker_last(output, result)

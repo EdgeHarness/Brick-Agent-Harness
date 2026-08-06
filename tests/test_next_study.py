@@ -77,11 +77,10 @@ def test_retired_suite_grader_mutation_audit_replays_all_applicable_checks():
 
 def test_next_study_design_is_exact_counted_and_fail_closed():
     design = load_design()
-    assert design["status"] == "offline_qualified_pending_development_shakeout"
-    assert design["version"] == "0.7.0"
-    assert design["fresh_suite"]["generator_version"] == (
-        design["fresh_suite"]["seed_namespace"]
-    )
+    assert design["status"] == "replacement_under_construction"
+    assert design["version"] == "0.8.0"
+    assert design["fresh_suite"]["generator_version"] == "office-generators/2.1.1"
+    assert design["fresh_suite"]["seed_namespace"] == "office-generators/2.1.0"
     assert design["fresh_suite"]["total_cases"] == 528
     assert design["calibration"]["combined_outcomes_per_family"] == 32
     assert design["calibration"]["model_attempts"] == 352

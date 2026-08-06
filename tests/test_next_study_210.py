@@ -12,11 +12,13 @@ from bench.next_study_program import (
     HOST_FINGERPRINT_SCHEMA, REQUIRED_ARTIFACT_DIGESTS,
     RUNTIME_FINGERPRINT_SCHEMA, SEALED_GATE_SCHEMA, advance_program,
     build_authorization, build_fingerprint, initial_program_state,
+    primary_mask_key_commitment,
 )
 from bench.next_study_rehearsal import DEFAULT_OUTPUT
 from bench.next_study_runtime import (
     NextStudyRuntimeError, build_release_archive_manifest, verify_release,
 )
+from harness.evidence import canonical_json_bytes
 from harness.instances import load_canonical_json
 
 
@@ -28,7 +30,7 @@ def test_final_construct_claim_and_rehearsal_contracts_are_exact(tmp_path):
     rendered = load_canonical_json(
         Path("evidence/next-study/semantic-validation-report/artifact.json")
     )
-    assert construct["generator_version"] == "office-generators/2.1.0"
+    assert construct["generator_version"] == "office-generators/2.1.1"
     assert construct["matched_triplets"] == 176
     assert len(construct["policies"]) == 11
     assert claim["threshold_inclusive"] is True
@@ -57,13 +59,14 @@ def test_final_construct_claim_and_rehearsal_contracts_are_exact(tmp_path):
 
 def _authorization():
     return build_authorization(
-        tag="v0.13.0", tag_object_sha="9" * 40, commit_sha="a" * 40,
+        tag="v0.13.1", tag_object_sha="9" * 40, commit_sha="a" * 40,
         artifact_digests={name: "b" * 64 for name in REQUIRED_ARTIFACT_DIGESTS},
         host_fingerprint=build_fingerprint(HOST_FINGERPRINT_SCHEMA, {"host": "test"}),
         runtime_fingerprint=build_fingerprint(RUNTIME_FINGERPRINT_SCHEMA, {"runtime": "test"}),
         schedule_digests={name: "c" * 64 for name in ("calibration", "sentinel", "primary", "descriptives")},
         model_digests={name: "d" * 64 for name in ("2b", "4b", "9b")},
         descriptive_selection_sha256="e" * 64,
+        primary_mask_key_commitment_sha256=primary_mask_key_commitment("7" * 64),
         issued_at="2026-08-05T10:00:00Z", issuer="release test",
     )
 
@@ -89,16 +92,23 @@ def test_release_verifier_recomputes_bytes_and_requires_annotated_tag(tmp_path):
     subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
     subprocess.run(["git", "config", "user.name", "Brick Test"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.email", "brick@example.invalid"], cwd=tmp_path, check=True)
+    authorization = _authorization()
     names = (
-        "calibration", "sentinel", "primary_ledger", "primary_analysis",
-        "descriptives", "resource_report", "study_report", "phase_gates",
+        "authorization",
+        "calibration", "sentinel", "masked_primary_ledger",
+        "primary_grade_ledger", "primary_analysis", "descriptives",
+        "resource_report", "failure_taxonomy", "program_bindings",
+        "study_report", "program_state",
     )
     paths = {}
     for name in names:
         path = Path("archive") / (name + ".json")
         target = tmp_path / path
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(json.dumps({"name": name}) + "\n", encoding="utf-8")
+        target.write_bytes(canonical_json_bytes(
+            authorization if name == "authorization" else {"name": name},
+            newline=True,
+        ))
         paths[name] = path
     subprocess.run(["git", "add", "archive"], cwd=tmp_path, check=True)
     subprocess.run(["git", "commit", "-m", "archive"], cwd=tmp_path, check=True, capture_output=True)
@@ -110,11 +120,13 @@ def test_release_verifier_recomputes_bytes_and_requires_annotated_tag(tmp_path):
         ["git", "tag", "-a", "v0.14.0", "-m", "study release"],
         cwd=tmp_path, check=True,
     )
-    authorization = _authorization()
     state = _release_ready_state(authorization)
     archive = build_release_archive_manifest(tmp_path, authorization, commit, paths)
-    attestation = verify_release(tmp_path, authorization, state, archive)
-    assert attestation["archived_commit"] == commit
+    with pytest.raises(
+        NextStudyRuntimeError,
+        match="archived program state|semantic|sealed phase gate",
+    ):
+        verify_release(tmp_path, authorization, state, archive)
     (tmp_path / paths["study_report"]).write_text("tampered\n", encoding="utf-8")
     with pytest.raises(NextStudyRuntimeError, match="bytes drifted"):
         verify_release(tmp_path, authorization, state, archive)
@@ -122,7 +134,6 @@ def test_release_verifier_recomputes_bytes_and_requires_annotated_tag(tmp_path):
     synthetic["execution_context"]["value"] = "synthetic_rehearsal"
     unsigned = dict(synthetic)
     unsigned.pop("authorization_sha256")
-    from harness.evidence import canonical_json_bytes
     from harness.instances import sha256_bytes
     synthetic["authorization_sha256"] = sha256_bytes(canonical_json_bytes(unsigned, allow_float=False))
     synthetic_state = _release_ready_state(synthetic)

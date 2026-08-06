@@ -12,6 +12,7 @@ from harness.instances import load_canonical_json
 
 from . import generate_next_study
 from .next_study_contract import load_design
+from .next_study_fable_reconciliation import load_reconciliation
 from .next_study_rehearsal import DEFAULT_OUTPUT as REHEARSAL_PATH
 from .next_study_schedule import verify_descriptive_selection
 from .next_study_statistics import load_protocol
@@ -35,6 +36,7 @@ def build_readiness_report():
     protocol = load_protocol()
     selection = verify_descriptive_selection()
     rehearsal = load_canonical_json(REHEARSAL_PATH)
+    fable = load_reconciliation()
     external_gates = {
         "score_masked_22_cell_development_shakeout": False,
         "native_windows_clean_checkout_reproduction": False,
@@ -42,13 +44,16 @@ def build_readiness_report():
         "native_lenovo_preflight": False,
         "pinned_2b_4b_9b_model_digests": False,
         "host_and_runtime_fingerprints": False,
-        "annotated_v0_13_0_candidate_tag": False,
+        "remaining_fable_audits_reconciled": fable[
+            "authorization_gate_passed"
+        ],
+        "annotated_v0_13_1_candidate_tag": False,
         "issued_program_authorization": False,
     }
     return {
         "schema_version": READINESS_SCHEMA,
         "program_identity": "Brick successor controlled comparison",
-        "current_activity": "instrument construction and qualification",
+        "current_activity": "v0.13.0 invalidation and v0.13.1 replacement qualification",
         "benchmark_running_now": False,
         "experiment_running_now": False,
         "live_model_calls": 0,
@@ -65,10 +70,10 @@ def build_readiness_report():
         "model_free_rehearsal_passed": rehearsal.get("status") == "passed",
         "human_review_authorization_gate": False,
         "next_transition": (
-            "commit the authorization-gate repair; obtain exact-commit GitHub Actions Linux evidence and fresh native qualification"
+            "reconcile every remaining Fable finding into a deterministic reproduction, then complete the replacement test and evidence gates"
         ),
         "later_transition": (
-            "rerun the score-masked 22-cell shakeout for that fingerprint, then bind the tag, evidence, host, models, and schedules"
+            "obtain exact-commit Linux and Windows evidence, rerun the 22-cell score-masked shakeout, and authorize v0.13.1"
         ),
     }
 

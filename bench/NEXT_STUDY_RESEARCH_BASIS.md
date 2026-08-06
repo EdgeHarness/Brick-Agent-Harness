@@ -1,10 +1,14 @@
 # Post-S7 next-study research basis
 
-Status date: 2026-08-04. This note records the evidence used to design a
-possible successor to the terminal S7 study. It is not a preregistration,
-execution authorization, benchmark result, or retained-data release. Offline
-artifact gates may close, but live and retained execution remain disabled in
-`next_study_design.json`.
+Status date: 2026-08-04; active supersession recorded 2026-08-05. This note
+records evidence used to design the successor and retains historical proposals.
+It is not a preregistration, execution authorization, benchmark result, or
+retained-data release. Where this note requires human review or names generator
+2.1.0/design 0.5.0, that text is superseded by protocol 1.4.0 and the
+`office-generators/2.1.1` replacement contract. Human and agent packet reviews
+are advisory only; authorization instead binds deterministic public-outcome,
+semantic-runner, mutation, rehearsal, CI, native, and shakeout gates. Live and
+retained execution remain disabled in `next_study_design.json`.
 
 ## Evidence hierarchy
 
@@ -147,9 +151,9 @@ does not close independent-oracle or prompt-validity gates for a new suite.
 
 ## Fail-closed successor architecture
 
-`next_study_design.json` is an offline instrument-build contract, version
-0.5.0. It binds the terminal S7 artifacts and postmortem plus a genuinely fresh
-generator namespace. `office-generators/2.1.0` now implements this allocation
+The historical design below proposed version 0.5.0 and generator 2.1.0. The
+active machine-readable contract is design 0.8.0 with generator 2.1.1 and the
+intentionally preserved 2.1.0 seed namespace. The allocation remains
 across 11 families:
 
 | Split | Cases per family | Total cases |
@@ -178,28 +182,17 @@ cells would have an exact one-sided 95% binomial upper bound of
 distributed Bernoulli model. The protocol labels that bound diagnostic only;
 it is not an efficacy or deployment-reliability claim.
 
-Before any model call, all eight gates in the design must be satisfied through
-reviewed, versioned artifacts:
+Before any model call, the active design requires versioned artifacts for the
+generator, public-packet outcome compiler, construct and semantic simulation,
+grader mutation/conformance matrix, frozen statistics, masking/release
+rehearsal, closed research catalog, exact-commit Linux and native reproduction,
+and an explicit phase-specific authorization. Pending Fable reports must be
+mapped to deterministic reproductions or documented refutations before the
+candidate is frozen. Packet-review utilities remain available for advisory QA
+but cannot set a gate or change a validated outcome.
 
-1. fresh generator complete;
-2. independent oracle complete;
-3. prompt/ground-truth review complete;
-4. grader mutation matrix complete for the fresh suite;
-5. calibration protocol frozen;
-6. repeat-aware power and clustered analysis frozen;
-7. sentinel protocol frozen; and
-8. explicit live-execution authorization.
-
-Six gates are now artifact-backed: fresh generator, independent oracle,
-calibration protocol, repeat-aware power/clustered analysis, and sentinel
-protocol, plus full-suite machine grader conformance. The canonical review
-ledger has 308 claim-relevant entries, 88 frozen double-review cases, and a
-two-event expansion rule, but remains `pending_human_review` with zero completed
-cases. Software does not impersonate reviewers. The human-backed grader
-certificate remains unfinished, and live authorization is false.
-
-The contract therefore still returns `execution_allowed=false`; retained
-execution is separately false. Reproduce the completed offline work with
-`python -m bench.generate_next_study --verify`. The next implementation
-milestone is independent tiered human review plus its grader/mutation certificate,
-not a model run.
+The contract currently returns `execution_allowed=false`; retained execution is
+separately false. Reproduce the offline generator chain with
+`python -m bench.generate_next_study --verify`. The next live step is not
+calibration: it is a new 22-cell score-masked shakeout after all replacement
+offline, CI, native, and Fable-reconciliation evidence has closed.

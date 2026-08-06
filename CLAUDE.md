@@ -24,8 +24,9 @@ per-session protocol. Read it before starting work.
 3. **Live-model work runs only on the native Windows 11 ARM64 Lenovo.** The Mac
    is for source work and offline tests. Never present a Mac run as gate
    evidence.
-4. **One release stage at a time**, then stop for review. Do not start the next
-   stage without an explicit decision.
+4. **Advance only through sealed gates.** A fingerprint-bound authorization may
+   auto-advance through its declared phases; a failed or changed gate terminates
+   that authorization and cannot be patched in place.
 5. **Never convert a runner, store, grader, or analysis failure into a model
    failure.** Keep the status axes separate.
 6. **Never tune from retained outcomes.** Development and sentinel instances are
@@ -115,18 +116,21 @@ completed all 44 pairs/88 attempts as `s7-d0b-20260804T025010Z` from commit
 there is no `v0.12.0`, no S8 handoff, no condition-level result, and retained
 execution remains mechanically disabled.
 
-The active successor is the offline-qualified `office-generators/2.1.0`
-instrument: 528 split-neutral cases, 176 outcome-distinct policy triplets,
-condition-aware 9/12-call maxima, 1,056 legal typed positive traces,
-independently compiled public-packet outcomes, and
-`office-strict-grader/3.0.0`. Its conformance gate passed 528 baselines, 2,976
-targeted mutations, and 1,392 benign controls. Protocol `1.3.0` binds the claim
-contract, 50,000-draw bootstrap, LOFO, reliability metrics, and the 222-cell
-descriptive matrix. The full model-free rehearsal passes. Human-review
-utilities are advisory and cannot authorize the study. A Windows shakeout
-passed on a superseded fingerprint, but current-source execution remains
-disabled pending exact-commit GitHub Actions Linux evidence, fresh native
-qualification, and a fresh 22-cell score-masked development shakeout. Read
+`v0.13.0` and `office-generators/2.1.0` are invalidated before calibration;
+zero live study cells ran. The replacement under construction is
+`office-generators/2.1.1`, intentionally retaining the 2.1.0 seed namespace so
+unchanged packets remain review-comparable while repaired packets receive new
+content hashes. It has 528 split-neutral cases, 176 outcome-distinct policy
+triplets, condition-aware 9/12-request maxima, 1,056 production-runner positive
+traces, independently compiled public-packet outcomes, and
+`office-strict-grader/3.1.0`. Its conformance gate requires 528 baselines, 4,104
+targeted mutations, and 1,872 benign controls. Protocol `1.4.0` binds the claim
+contract, 50,000-draw bootstrap, LOFO, reliability metrics, hardened masking and
+release semantics, and the at-most-222-cell descriptive matrix. Human-review
+utilities are advisory and cannot authorize the study. Execution remains
+disabled until all pending Fable reports are deterministically reconciled,
+offline qualification passes, exact-commit Linux/native evidence exists, and a
+fresh 22-cell score-masked shakeout passes under the replacement fingerprint. Read
 [`bench/NEXT_STUDY_IMPLEMENTATION.md`](bench/NEXT_STUDY_IMPLEMENTATION.md) and
 run both offline verify commands before changing it.
 

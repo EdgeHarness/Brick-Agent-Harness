@@ -1,4 +1,4 @@
-"""Independent prompt-to-outcome oracle for office-generators/2.1.0.
+"""Independent prompt-to-outcome oracle for office-generators/2.1.1.
 
 The public entry point accepts only prompt text, subepisode prompt text,
 initial state, the task family, and the frozen date.  It cannot consume a
@@ -129,7 +129,8 @@ def _pptx_from_email(prompt, state, _today):
     else:
         rows.sort(key=lambda item: item[2])
     return [
-        {"type": "sources_read", "source": "email", "ids": sorted(item[1] for item in rows)},
+        {"type": "sources_read", "source": "email", "ids": sorted(item[1] for item in rows),
+         "list_required": True},
         {
             "type": "presentation_created",
             "filename": filename,
@@ -202,7 +203,7 @@ def _xlsx_from_email(prompt, state, _today):
     return [
         {"type": "sources_read", "source": "email", "ids": sorted(
             source["id"] for source in matches
-        )},
+        ), "list_required": True},
         {
             "type": "spreadsheet_created",
             "filename": filename,
@@ -259,7 +260,7 @@ def _email_reply(prompt, state, _today):
     return [
         {"type": "sources_read", "source": "email", "ids": [
             decisions[0]["id"]
-        ] + sorted(item["email"]["id"] for item in parsed)},
+        ] + sorted(item["email"]["id"] for item in parsed), "list_required": True},
         {
             "type": "email_sent",
             "to": selected["email"]["from"],
@@ -411,13 +412,20 @@ def _cal_brief(prompt, state, _today):
         raise OracleInputError("calendar brief has no priority events")
     if int(declared_count) != len(selected):
         raise OracleInputError("calendar brief priority count disagrees")
+    excluded_titles = sorted(
+        event["title"] for event in _events(state)
+        if event.get("date") == date and event not in selected
+    )
     return [
         {"type": "calendar_read", "date": date},
         {
             "type": "message_sent",
             "to": recipient,
-            "ordered_mentions": [item["title"] for item in selected],
-            "include_start_times": True,
+            "ordered_mentions": [
+                "%s at %s" % (item["title"], item["start"]) for item in selected
+            ],
+            "forbidden_mentions": excluded_titles,
+            "forbid_date_tokens": True,
             "exact_count": 1,
         },
         {
@@ -434,12 +442,12 @@ def _remind_msg(prompt, _state, _today):
         r"Action items: (.*?)\. Order them using policy "
         r"(due_date_ascending|priority_descending|dependency_order)\. Create exactly "
         r"one reminder at (\d{2}:\d{2}) on the first ordered item's due date\. "
-        r"Required checklist mentions in that order: (.*?)\. Then send exactly one "
-        r"chat message to (.*?) repeating",
+        r"Use the resulting full ordered ID list as the reminder checklist\. Then send "
+        r"exactly one chat message to (.*?) repeating",
         prompt,
         "reminder/message contract",
     )
-    record_text, policy, time, mentions, recipient = match.groups()
+    record_text, policy, time, recipient = match.groups()
     records = []
     for value in _pipe(record_text):
         item = _search(
@@ -468,9 +476,7 @@ def _remind_msg(prompt, _state, _today):
             ordered.append(selected)
             remaining.pop(selected["id"])
         records = ordered
-    values = _pipe(mentions)
-    if values != [item["id"] for item in records]:
-        raise OracleInputError("declared checklist does not match policy")
+    values = [item["id"] for item in records]
     date = records[0]["due"]
     return [
         {
@@ -539,7 +545,9 @@ def _preference_learning(_prompt, _state, _today, subepisode_prompts):
     person, date, attendee = use.groups()
     if attendee != subject:
         raise OracleInputError("preference subject and use attendee disagree")
-    prefix = fact_map.get("title_prefix", "Sync:")
+    prefix = fact_map.get("title_prefix")
+    if not prefix:
+        raise OracleInputError("selected preference title prefix is not public")
     title = "%s sync with %s" % (prefix, person)
     start = selected["start"]
     end = _clock(_minutes(start) + selected["duration"])
@@ -607,7 +615,8 @@ def _multi_offsite(prompt, state, _today):
     event, date, start, end, location, fact_text = body.groups()
     facts = _pipe(fact_text)
     return [
-        {"type": "sources_read", "source": "email", "ids": [index_email["id"], source["id"]]},
+        {"type": "sources_read", "source": "email", "ids": [index_email["id"], source["id"]],
+         "list_required": True},
         {
             "type": "event_created",
             "title": event,

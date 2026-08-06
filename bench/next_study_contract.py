@@ -7,13 +7,7 @@ from bench.next_study_schedule import verify_descriptive_selection
 from bench.next_study_statistics import load_protocol
 from bench.next_study_claim import load_claim_contract
 from bench.next_study_construct import load_contract as load_construct_contract
-from bench.next_study_hybrid_validation import (
-    build_protocol as build_hybrid_validation_protocol,
-    validate_challenge_blueprint, validate_pending_result,
-)
-from bench.next_study_reviewer_handoff import (
-    validate_challenges, validate_handoff,
-)
+from bench.next_study_fable_reconciliation import load_reconciliation
 from bench.next_study_validated_outcomes import validate_validated_outcomes
 from bench.s7_contract import load_protocol as load_s7_protocol
 from bench.s7_contract import s7_protocol_sha256
@@ -40,9 +34,12 @@ _PREDECESSOR = {
 
 _ARTIFACT_PATHS = {
     "retired_2_0_1": "evidence/next-study/office-v2.0.1-retirement.json",
+    "invalidated_v0_13_0": "evidence/next-study/v0.13.0-invalidation.json",
     "manifest_lock": "bench/manifests/office-v2/manifest-lock.json",
+    "generator_implementation": "domains/office_demo/generators_v2.py",
     "oracle_audit": "evidence/next-study/office-v2-oracle-audit.json",
     "validated_outcomes": "evidence/next-study/office-v2-validated-outcomes.json",
+    "validated_outcomes_implementation": "bench/next_study_validated_outcomes.py",
     "outcome_compiler": "domains/office_demo/outcome_oracle_v2.py",
     "claim_contract": "bench/next_study_claim_contract.json",
     "claim_implementation": "bench/next_study_claim.py",
@@ -65,15 +62,9 @@ _ARTIFACT_PATHS = {
     "program_implementation": "bench/next_study_program.py",
     "runtime_implementation": "bench/next_study_runtime.py",
     "readiness_implementation": "bench/next_study_readiness.py",
-    "hybrid_validation_implementation": "bench/next_study_hybrid_validation.py",
-    "hybrid_validation_protocol": "bench/next_study_hybrid_validation_protocol.json",
-    "hybrid_challenge_blueprint": "evidence/next-study/office-v2-hybrid-challenge-blueprint.json",
-    "hybrid_validation_result": "evidence/next-study/office-v2-hybrid-validation-result.json",
-    "hybrid_challenge_set": "evidence/next-study/office-v2-hybrid-challenge-set.json",
-    "hybrid_challenge_key": "evidence/next-study/office-v2-hybrid-challenge-key.json",
-    "reviewer_handoff_implementation": "bench/next_study_reviewer_handoff.py",
-    "reviewer_handoff_manifest": "reviewer-handoff/brick-office-v2-reviewer-a/MANIFEST.json",
     "live_implementation": "bench/next_study_live.py",
+    "fable_reconciliation": "evidence/next-study/office-v2-fable-reconciliation.json",
+    "fable_reconciliation_implementation": "bench/next_study_fable_reconciliation.py",
 }
 
 _EXPECTED_GATES = {
@@ -132,11 +123,12 @@ def _artifact_bindings():
 def build_design():
     return {
         "schema_version": "brick.next-study.design/5",
-        "version": "0.7.0",
-        "status": "offline_qualified_pending_development_shakeout",
+        "version": "0.8.0",
+        "status": "replacement_under_construction",
         "release_sequence": {
             "v0.12.0": "permanently_unissued_terminal_s7",
-            "v0.13.0": "authorized_successor_instrument_target",
+            "v0.13.0": "invalidated_successor_candidate",
+            "v0.13.1": "replacement_instrument_target",
             "v0.14.0": "completed_study_target",
             "v0.15.0": "isolated_product_demo_target",
         },
@@ -145,7 +137,7 @@ def build_design():
         "execution_gates": dict(_EXPECTED_GATES),
         "predecessor": dict(_PREDECESSOR),
         "fresh_suite": {
-            "generator_version": "office-generators/2.1.0",
+            "generator_version": "office-generators/2.1.1",
             "seed_namespace": "office-generators/2.1.0",
             "families": 11,
             "development_cases_per_family": 8,
@@ -214,13 +206,8 @@ def build_design():
             "authorization_gate": False,
             "may_change_or_supply_validated_outcomes": False,
             "supports_real_world_performance_claim": False,
-            "reviewer_a_packets_ready": True,
-            "initial_single_review_cases": 44,
-            "initial_human_judgments": 44,
-            "second_reviewer_required_for_agreement_claim": True,
-            "balanced_challenge_cases": 66,
-            "minimum_distinct_agent_model_lineages": 2,
-            "confirmed_defect_routes_into_existing_construct_gate": True,
+            "status": "out_of_scope_not_bound_to_authorization",
+            "legacy_packet_material_may_be_retained": True,
         },
         "successor_artifacts": _artifact_bindings(),
     }
@@ -251,9 +238,23 @@ def _validate_successor_semantics():
         or retired.get("packet_export_enabled") is not False
     ):
         raise NextStudyDesignError("2.0.1 retirement evidence drifted")
+    invalidated = load_canonical_json(
+        ROOT / _ARTIFACT_PATHS["invalidated_v0_13_0"]
+    )
+    if (
+        invalidated.get("tag") != "v0.13.0"
+        or invalidated.get("status") != "invalidated_before_calibration"
+        or invalidated.get("execution_allowed") is not False
+        or invalidated.get("replacement_instrument_tag") != "v0.13.1"
+        or invalidated.get("replacement_candidate")
+        != "office-generators/2.1.1"
+        or invalidated.get("replacement_seed_namespace")
+        != "office-generators/2.1.0"
+    ):
+        raise NextStudyDesignError("v0.13.0 invalidation evidence drifted")
     lock = load_canonical_json(ROOT / _ARTIFACT_PATHS["manifest_lock"])
     if (
-        lock.get("generator_version") != "office-generators/2.1.0"
+        lock.get("generator_version") != "office-generators/2.1.1"
         or sum(item["instances"] for item in lock.get("manifests", [])) != 528
         or lock.get("split_leakage_review", {}).get("finding_count") != 0
         or lock.get("split_leakage_review", {}).get("passed") is not True
@@ -265,7 +266,7 @@ def _validate_successor_semantics():
         raise NextStudyDesignError("successor generator audits are incomplete")
     audit = load_canonical_json(ROOT / _ARTIFACT_PATHS["oracle_audit"])
     if (
-        audit.get("generator_version") != "office-generators/2.1.0"
+        audit.get("generator_version") != "office-generators/2.1.1"
         or audit.get("case_count") != 528 or audit.get("all_exact_matches") is not True
         or audit.get("live_model_calls") != 0
     ):
@@ -327,7 +328,7 @@ def _validate_successor_semantics():
         or findings != []
         or source.get("path")
         != "evidence/next-study/office-v2-semantic-simulation.json"
-        or "office-generators/2.1.0"
+        or "office-generators/2.1.1"
         not in rendered.get("manifest", {}).get("description", "")
     ):
         raise NextStudyDesignError("semantic rendered report drifted")
@@ -352,47 +353,30 @@ def _validate_successor_semantics():
         != "brick.next-study.grader-validated-conformance/1"
         or machine.get("case_count") != 528
         or machine.get("positive_baselines") != 528
-        or machine.get("targeted_mutations") != 2976
-        or machine.get("benign_non_rejection_controls") != 1392
+        or machine.get("targeted_mutations") != 4104
+        or machine.get("benign_non_rejection_controls") != 1872
+        or machine.get("semantic_probe_counts") != {
+            "forbidden_date": 48,
+            "memory_exactness": 48,
+            "negated_deadline": 48,
+            "negated_email": 96,
+            "presentation_fact": 648,
+            "presentation_order": 48,
+            "source_list": 192,
+        }
         or machine.get("passed") is not True
         or machine.get("may_satisfy_human_ground_truth_gate") is not False
         or machine.get("live_model_calls") != 0
     ):
         raise NextStudyDesignError("full-suite machine conformance is incomplete")
     protocol = load_protocol(ROOT / _ARTIFACT_PATHS["protocol"])
-    if protocol["version"] != "1.3.0":
+    if protocol["version"] != "1.4.0":
         raise NextStudyDesignError("successor protocol version drifted")
-    challenge = validate_challenge_blueprint(
-        load_canonical_json(ROOT / _ARTIFACT_PATHS["hybrid_challenge_blueprint"]),
-        manifests,
-    )
-    hybrid = load_canonical_json(
-        ROOT / _ARTIFACT_PATHS["hybrid_validation_protocol"]
-    )
-    selection = load_canonical_json(
-        ROOT / "evidence" / "next-study" / "office-v2-review-selection.json"
-    )
-    if hybrid != build_hybrid_validation_protocol(
-        selection["selection_sha256"], challenge["blueprint_sha256"]
-    ) or hybrid["authorization_gate"] is not False:
-        raise NextStudyDesignError("advisory hybrid validation protocol drifted")
-    validate_challenges(
-        load_canonical_json(ROOT / _ARTIFACT_PATHS["hybrid_challenge_set"]),
-        load_canonical_json(ROOT / _ARTIFACT_PATHS["hybrid_challenge_key"]),
-        manifests,
-        challenge,
-    )
-    handoff = validate_handoff(
-        (ROOT / _ARTIFACT_PATHS["reviewer_handoff_manifest"]).parent
-    )
-    if handoff.get("packet_count") != 44:
-        raise NextStudyDesignError("reviewer-A handoff is incomplete")
-    validate_pending_result(
-        load_canonical_json(ROOT / _ARTIFACT_PATHS["hybrid_validation_result"]),
-        hybrid,
-        challenge,
-    )
     verify_descriptive_selection()
+    load_reconciliation(
+        ROOT / _ARTIFACT_PATHS["fable_reconciliation"],
+        require_complete=False,
+    )
 
 
 def validate_design(design):

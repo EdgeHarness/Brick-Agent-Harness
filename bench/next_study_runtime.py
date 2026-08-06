@@ -6,17 +6,26 @@ these fail-closed transformations around the existing model transport.
 
 import copy
 import datetime
+import hashlib
+import hmac
+import json
 from pathlib import Path
 import re
 import subprocess
 
 from harness.evidence import EvidenceStore, validate_committed
 from harness.evidence import canonical_json_bytes
-from harness.instances import sha256_bytes, validate_manifest
+from harness.instances import load_canonical_json, sha256_bytes, validate_manifest
+
+from .next_study_descriptive import REPORT_SCHEMA as DESCRIPTIVE_REPORT_SCHEMA
+from .next_study_report import (
+    FAILURE_TAXONOMY_SCHEMA, PROGRAM_BINDINGS_SCHEMA, RESOURCE_REPORT_SCHEMA,
+    validate_study_report,
+)
 
 from .next_study_program import (
     BenchmarkLease, MAXIMUM_LOGICAL_CELLS, MAXIMUM_PHYSICAL_ATTEMPTS,
-    execution_allowed,
+    execution_allowed, primary_mask_key_commitment,
     retry_decision, validate_authorization,
     validate_program_state,
 )
@@ -29,7 +38,7 @@ from .next_study_statistics import GRADE_LEDGER_SCHEMA, PROTOCOL_VERSION
 PREFLIGHT_SCHEMA = "brick.next-study.preflight/1"
 EXECUTION_CONTEXT_SCHEMA = "brick.next-study.execution-context/1"
 ATTEMPT_RECORD_SCHEMA = "brick.next-study.attempt-record/2"
-MASKED_LEDGER_SCHEMA = "brick.next-study.masked-grade-ledger/2"
+MASKED_LEDGER_SCHEMA = "brick.next-study.masked-grade-ledger/3"
 RELEASE_ATTESTATION_SCHEMA = "brick.next-study.release-attestation/2"
 RELEASE_ARCHIVE_SCHEMA = "brick.next-study.release-archive/1"
 RECOVERY_ATTESTATION_SCHEMA = "brick.next-study.recovery-attestation/1"
@@ -67,6 +76,15 @@ def _timestamp(value, label):
     if parsed.utcoffset() is None:
         raise NextStudyRuntimeError("%s must include a timezone" % label)
     return parsed
+
+
+def _mask_value(masking_key, label, value):
+    _sha256(masking_key, "primary mask key")
+    return hmac.new(
+        bytes.fromhex(masking_key),
+        (label + "|" + value).encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
 
 
 def _schedule_cells(schedule, phase=None, count=None):
@@ -478,7 +496,8 @@ def resume_queue(schedule, attempts):
 
 
 def build_masked_grade_ledger(
-    schedule, attempts, retained_manifest, sealed_at,
+    schedule, attempts, retained_manifest, sealed_at, masking_key,
+    expected_mask_key_commitment=None,
     execution_context="authorized_research",
 ):
     try:
@@ -489,6 +508,12 @@ def build_masked_grade_ledger(
         raise NextStudyRuntimeError("masked grade ledger requires the primary schedule")
     if resume_queue(schedule, attempts):
         raise NextStudyRuntimeError("primary attempts are incomplete")
+    commitment = primary_mask_key_commitment(masking_key)
+    if (
+        expected_mask_key_commitment is not None
+        and commitment != expected_mask_key_commitment
+    ):
+        raise NextStudyRuntimeError("primary mask key differs from authorization")
     by_cell = {}
     for attempt in attempts:
         by_cell.setdefault(attempt["logical_cell_id"], []).append(attempt)
@@ -499,16 +524,16 @@ def build_masked_grade_ledger(
         if final["failure_origin"] in ("environment", "instrument"):
             raise NextStudyRuntimeError("invalid primary cell cannot be sealed")
         records.append({
-            "logical_cell_id": cell["logical_cell_id"],
-            "instance_id": cell["instance_id"],
-            "content_sha256": cell["content_sha256"],
-            "family": cell["family"],
-            "masked_condition": "condition_%d" % cell["order_position"],
-            "trial_index": cell["trial_index"],
-            "trial_seed": cell["trial_seed"],
+            "masked_cell_id": _mask_value(
+                masking_key, "logical-cell", cell["logical_cell_id"]
+            ),
             "repeat": final["repeat"],
-            "evidence_sha256": final["evidence_sha256"],
-            "grade_record_sha256": final["grade_record_sha256"],
+            "evidence_commitment": _mask_value(
+                masking_key, "evidence", final["evidence_sha256"]
+            ),
+            "grade_record_commitment": _mask_value(
+                masking_key, "grade", final["grade_record_sha256"]
+            ),
             "outcome_origin": (
                 "model_terminal_failure" if final["failure_origin"] == "model"
                 else "completed"
@@ -526,12 +551,15 @@ def build_masked_grade_ledger(
         "status": "sealed_complete_masked",
         "cell_count": 880,
         "schedule_sha256": _digest(schedule),
+        "mask_key_commitment": commitment,
         "sealed_at": sealed_at,
-        "records": records,
+        "records": sorted(records, key=lambda item: item["masked_cell_id"]),
     }
 
 
-def unmask_primary(masked_ledger, schedule, retained_manifest, sealed_at):
+def unmask_primary(
+    masked_ledger, schedule, retained_manifest, attempts, masking_key, sealed_at,
+):
     validate_manifest(retained_manifest)
     if retained_manifest["split"] != "retained":
         raise NextStudyRuntimeError("unmask requires retained manifest")
@@ -541,7 +569,8 @@ def unmask_primary(masked_ledger, schedule, retained_manifest, sealed_at):
         raise NextStudyRuntimeError(str(exc))
     expected_ledger_keys = {
         "schema_version", "protocol_version", "status", "cell_count",
-        "schedule_sha256", "sealed_at", "records", "execution_context",
+        "schedule_sha256", "mask_key_commitment", "sealed_at", "records",
+        "execution_context",
     }
     if not isinstance(masked_ledger, dict) or set(masked_ledger) != expected_ledger_keys:
         raise NextStudyRuntimeError("masked primary ledger has unexpected keys")
@@ -555,6 +584,8 @@ def unmask_primary(masked_ledger, schedule, retained_manifest, sealed_at):
         or len(masked_ledger["records"]) != 880
     ):
         raise NextStudyRuntimeError("primary ledger is not sealed for unmasking")
+    if masked_ledger["mask_key_commitment"] != primary_mask_key_commitment(masking_key):
+        raise NextStudyRuntimeError("primary mask key commitment drifted")
     context = masked_ledger["execution_context"]
     if (
         not isinstance(context, dict)
@@ -567,55 +598,76 @@ def unmask_primary(masked_ledger, schedule, retained_manifest, sealed_at):
     _timestamp(sealed_at, "unmasked grade-ledger seal time")
     scheduled = _schedule_cells(schedule, "primary", 880)
     masked_record_keys = {
-        "logical_cell_id", "instance_id", "content_sha256", "family",
-        "masked_condition", "trial_index", "trial_seed", "repeat",
-        "evidence_sha256", "grade_record_sha256", "outcome_origin",
-        "strict_success",
+        "masked_cell_id", "repeat", "evidence_commitment",
+        "grade_record_commitment", "outcome_origin", "strict_success",
     }
+    if resume_queue(schedule, attempts):
+        raise NextStudyRuntimeError("unmask requires complete primary attempts")
+    by_cell = {}
+    for attempt in attempts:
+        by_cell.setdefault(attempt["logical_cell_id"], []).append(attempt)
+    final_attempts = {
+        logical_id: max(values, key=lambda item: item["repeat"])
+        for logical_id, values in by_cell.items()
+    }
+    masked_to_cell = {
+        _mask_value(masking_key, "logical-cell", logical_id): cell
+        for logical_id, cell in scheduled.items()
+    }
+    if len(masked_to_cell) != 880:
+        raise NextStudyRuntimeError("primary mask produced duplicate cell identifiers")
     records = []
     seen = set()
     for masked in masked_ledger["records"]:
         if not isinstance(masked, dict) or set(masked) != masked_record_keys:
             raise NextStudyRuntimeError("masked primary record drifted")
-        cell = scheduled.get(masked["logical_cell_id"])
-        if cell is None or masked["logical_cell_id"] in seen:
+        cell = masked_to_cell.get(masked["masked_cell_id"])
+        logical_id = cell["logical_cell_id"] if cell is not None else None
+        if cell is None or logical_id in seen:
             raise NextStudyRuntimeError("masked record is duplicate or unscheduled")
-        expected_identity = {
-            "instance_id": cell["instance_id"],
-            "content_sha256": cell["content_sha256"],
-            "family": cell["family"],
-            "masked_condition": "condition_%d" % cell["order_position"],
-            "trial_index": cell["trial_index"],
-            "trial_seed": cell["trial_seed"],
-        }
-        if any(masked[key] != value for key, value in expected_identity.items()):
-            raise NextStudyRuntimeError("masked record identity drifted")
+        final = final_attempts.get(logical_id)
+        if final is None:
+            raise NextStudyRuntimeError("masked record lacks sealed attempt evidence")
         if type(masked["repeat"]) is not int or masked["repeat"] not in (0, 1):
             raise NextStudyRuntimeError("masked recovery repeat is invalid")
-        _sha256(masked["evidence_sha256"], "masked evidence digest")
-        _sha256(masked["grade_record_sha256"], "masked grade digest")
+        for field in ("masked_cell_id", "evidence_commitment", "grade_record_commitment"):
+            _sha256(masked[field], "masked record commitment")
         if masked["outcome_origin"] not in ("completed", "model_terminal_failure"):
             raise NextStudyRuntimeError("masked outcome origin is invalid")
         if type(masked["strict_success"]) is not bool:
             raise NextStudyRuntimeError("masked strict success must be boolean")
         if masked["outcome_origin"] == "model_terminal_failure" and masked["strict_success"]:
             raise NextStudyRuntimeError("model terminal failure cannot succeed")
-        seen.add(masked["logical_cell_id"])
+        expected_origin = (
+            "model_terminal_failure" if final["failure_origin"] == "model"
+            else "completed"
+        )
+        if (
+            masked["repeat"] != final["repeat"]
+            or masked["strict_success"] is not final["strict_success"]
+            or masked["outcome_origin"] != expected_origin
+            or masked["evidence_commitment"]
+            != _mask_value(masking_key, "evidence", final["evidence_sha256"])
+            or masked["grade_record_commitment"]
+            != _mask_value(masking_key, "grade", final["grade_record_sha256"])
+        ):
+            raise NextStudyRuntimeError("masked record differs from sealed attempt evidence")
+        seen.add(logical_id)
         records.append({
-            "instance_id": masked["instance_id"],
-            "content_sha256": masked["content_sha256"],
-            "family": masked["family"],
+            "instance_id": cell["instance_id"],
+            "content_sha256": cell["content_sha256"],
+            "family": cell["family"],
             "condition": cell["condition"],
-            "trial_index": masked["trial_index"],
-            "trial_seed": masked["trial_seed"],
+            "trial_index": cell["trial_index"],
+            "trial_seed": cell["trial_seed"],
             "attempt_key": {
-                "instance_id": masked["instance_id"],
+                "instance_id": cell["instance_id"],
                 "condition": cell["condition"],
-                "trial_index": masked["trial_index"],
+                "trial_index": cell["trial_index"],
                 "repeat": masked["repeat"],
             },
-            "evidence_sha256": masked["evidence_sha256"],
-            "grade_record_sha256": masked["grade_record_sha256"],
+            "evidence_sha256": final["evidence_sha256"],
+            "grade_record_sha256": final["grade_record_sha256"],
             "outcome_origin": masked["outcome_origin"],
             "strict_success": masked["strict_success"],
         })
@@ -641,8 +693,11 @@ def build_release_archive_manifest(
     root = Path(project_root).resolve()
     validate_authorization(authorization)
     required = {
-        "calibration", "sentinel", "primary_ledger", "primary_analysis",
-        "descriptives", "resource_report", "study_report", "phase_gates",
+        "authorization",
+        "calibration", "sentinel", "masked_primary_ledger",
+        "primary_grade_ledger", "primary_analysis", "descriptives",
+        "resource_report", "failure_taxonomy", "program_bindings",
+        "study_report", "program_state",
     }
     if set(artifact_paths) != required:
         raise NextStudyRuntimeError("release archive paths have unexpected keys")
@@ -657,7 +712,21 @@ def build_release_archive_manifest(
             raise NextStudyRuntimeError("release archive path escapes project root")
         if not path.is_file():
             raise NextStudyRuntimeError("release archive artifact is missing")
-        digest = sha256_bytes(path.read_bytes())
+        payload = path.read_bytes()
+        try:
+            committed = subprocess.run(
+                ["git", "show", archived_commit + ":" + str(relative).replace("\\", "/")],
+                cwd=str(root), check=True, capture_output=True,
+            ).stdout
+        except (OSError, subprocess.CalledProcessError):
+            raise NextStudyRuntimeError(
+                "release archive artifact is not present in archived commit"
+            )
+        if committed != payload:
+            raise NextStudyRuntimeError(
+                "release archive artifact differs from archived commit"
+            )
+        digest = sha256_bytes(payload)
         bindings[name] = digest
         artifacts.append({"name": name, "path": str(relative).replace("\\", "/"), "sha256": digest})
     document = {
@@ -669,6 +738,19 @@ def build_release_archive_manifest(
         "bindings": bindings,
         "study_report_sha256": bindings["study_report"],
     }
+    try:
+        archived_authorization = load_canonical_json(
+            root / next(
+                item["path"] for item in artifacts
+                if item["name"] == "authorization"
+            )
+        )
+    except (OSError, ValueError, json.JSONDecodeError, StopIteration):
+        raise NextStudyRuntimeError("release archive authorization is invalid")
+    if archived_authorization != authorization:
+        raise NextStudyRuntimeError(
+            "release archive authorization differs from supplied authorization"
+        )
     document["archive_sha256"] = _digest(document)
     return document
 
@@ -724,8 +806,11 @@ def verify_release(
     ):
         raise NextStudyRuntimeError("release archive authorization binding drifted")
     required_bindings = {
-        "calibration", "sentinel", "primary_ledger", "primary_analysis",
-        "descriptives", "resource_report", "study_report", "phase_gates",
+        "authorization",
+        "calibration", "sentinel", "masked_primary_ledger",
+        "primary_grade_ledger", "primary_analysis", "descriptives",
+        "resource_report", "failure_taxonomy", "program_bindings",
+        "study_report", "program_state",
     }
     if not isinstance(archive_manifest["bindings"], dict) or set(archive_manifest["bindings"]) != required_bindings:
         raise NextStudyRuntimeError("release archive cross-bindings drifted")
@@ -733,6 +818,7 @@ def verify_release(
     if not isinstance(artifacts, list) or not artifacts:
         raise NextStudyRuntimeError("release archive artifact list is empty")
     actual = {}
+    documents = {}
     for item in artifacts:
         if not isinstance(item, dict) or set(item) != {"name", "path", "sha256"}:
             raise NextStudyRuntimeError("release archive artifact entry drifted")
@@ -749,11 +835,128 @@ def verify_release(
         if digest != item["sha256"] or archive_manifest["bindings"][item["name"]] != digest:
             raise NextStudyRuntimeError("release archive artifact bytes drifted")
         actual[item["name"]] = digest
+        try:
+            committed = subprocess.run(
+                [
+                    "git", "show",
+                    archive_manifest["archived_commit"] + ":" + item["path"],
+                ],
+                cwd=str(root), check=True, capture_output=True,
+            ).stdout
+        except (OSError, subprocess.CalledProcessError):
+            raise NextStudyRuntimeError(
+                "release archive artifact is not present in archived commit"
+            )
+        if committed != path.read_bytes():
+            raise NextStudyRuntimeError(
+                "release archive artifact differs from archived commit"
+            )
+        try:
+            documents[item["name"]] = load_canonical_json(path)
+        except (OSError, ValueError, json.JSONDecodeError):
+            raise NextStudyRuntimeError("release archive artifact is not canonical JSON")
     if set(actual) != required_bindings:
         raise NextStudyRuntimeError("release archive artifact set is incomplete")
+    if documents["authorization"] != authorization:
+        raise NextStudyRuntimeError("archived authorization differs from release input")
     if archive_manifest["study_report_sha256"] != actual["study_report"]:
         raise NextStudyRuntimeError("study report release binding drifted")
+    if documents["program_state"] != program_state:
+        raise NextStudyRuntimeError("archived program state differs from release state")
+    gates = {gate["phase"]: gate for gate in program_state["sealed_phase_gates"]}
+    phase_artifacts = {
+        "calibration": "calibration",
+        "sentinel": "sentinel",
+        "primary": "masked_primary_ledger",
+        "primary_analysis": "primary_analysis",
+        "descriptives": "descriptives",
+    }
+    if any(
+        gates[phase]["sealed_artifact_sha256"] != _digest(documents[name])
+        for phase, name in phase_artifacts.items()
+    ):
+        raise NextStudyRuntimeError("archived artifact differs from sealed phase gate")
+    masked = documents["masked_primary_ledger"]
+    grade = documents["primary_grade_ledger"]
+    analysis = documents["primary_analysis"]
+    descriptives = documents["descriptives"]
+    if (
+        masked.get("schema_version") != MASKED_LEDGER_SCHEMA
+        or masked.get("status") != "sealed_complete_masked"
+        or masked.get("schedule_sha256")
+        != authorization["schedule_digests"]["primary"]
+        or grade.get("schema_version") != GRADE_LEDGER_SCHEMA
+        or grade.get("status") != "sealed_complete"
+        or grade.get("schedule_sha256")
+        != authorization["schedule_digests"]["primary"]
+        or analysis.get("schema_version") != "brick.next-study.primary-analysis/3"
+        or analysis.get("primary_grade_ledger_sha256") != _digest(grade)
+        or analysis.get("primary_schedule_sha256")
+        != authorization["schedule_digests"]["primary"]
+        or descriptives.get("schema_version") != DESCRIPTIVE_REPORT_SCHEMA
+        or descriptives.get("status") != "complete"
+        or descriptives.get("primary_grade_ledger_sha256") != _digest(grade)
+        or descriptives.get("selection_sha256")
+        != authorization["descriptive_selection_sha256"]
+    ):
+        raise NextStudyRuntimeError("release archive semantic bindings drifted")
+    descriptive_unsigned = dict(descriptives)
+    descriptive_digest = descriptive_unsigned.pop("descriptive_report_sha256", None)
+    if descriptive_digest != _digest(descriptive_unsigned):
+        raise NextStudyRuntimeError("archived descriptive report digest drifted")
+    resource = documents["resource_report"]
+    resource_unsigned = dict(resource)
+    resource_digest = resource_unsigned.pop("resource_report_sha256", None)
+    taxonomy = documents["failure_taxonomy"]
+    taxonomy_unsigned = dict(taxonomy)
+    taxonomy_digest = taxonomy_unsigned.pop("failure_taxonomy_sha256", None)
+    bindings = documents["program_bindings"]
+    bindings_unsigned = dict(bindings)
+    bindings_digest = bindings_unsigned.pop("program_bindings_sha256", None)
+    if (
+        resource.get("schema_version") != RESOURCE_REPORT_SCHEMA
+        or resource_digest != _digest(resource_unsigned)
+        or resource.get("descriptive_report_sha256") != descriptive_digest
+        or taxonomy.get("schema_version") != FAILURE_TAXONOMY_SCHEMA
+        or taxonomy_digest != _digest(taxonomy_unsigned)
+        or taxonomy.get("primary_grade_ledger_sha256") != _digest(grade)
+        or bindings.get("schema_version") != PROGRAM_BINDINGS_SCHEMA
+        or bindings_digest != _digest(bindings_unsigned)
+        or bindings.get("authorization_sha256")
+        != authorization["authorization_sha256"]
+        or bindings.get("phase_gate_history_sha256")
+        != _digest(program_state["sealed_phase_gates"])
+    ):
+        raise NextStudyRuntimeError("release report support artifacts drifted")
     try:
+        study = validate_study_report(documents["study_report"])
+    except ValueError as exc:
+        raise NextStudyRuntimeError(str(exc))
+    if (
+        study.get("primary_analysis_sha256") != _digest(analysis)
+        or study.get("descriptive_report_sha256") != _digest(descriptives)
+        or study.get("manifest_lock_sha256")
+        != authorization["artifact_digests"]["manifest_lock"]
+        or study.get("resource_report_sha256") != resource_digest
+        or study.get("failure_taxonomy", {}).get("failure_taxonomy_sha256")
+        != taxonomy_digest
+        or study.get("program_bindings", {}).get("program_bindings_sha256")
+        != bindings_digest
+    ):
+        raise NextStudyRuntimeError("study report cross-bindings drifted")
+    try:
+        instrument_tag_type = subprocess.run(
+            ["git", "cat-file", "-t", "refs/tags/" + authorization["tag"]],
+            cwd=str(root), check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        instrument_tag_object = subprocess.run(
+            ["git", "rev-parse", "refs/tags/" + authorization["tag"]],
+            cwd=str(root), check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        instrument_peeled = subprocess.run(
+            ["git", "rev-parse", authorization["tag"] + "^{}"],
+            cwd=str(root), check=True, capture_output=True, text=True,
+        ).stdout.strip()
         tag_type = subprocess.run(
             ["git", "cat-file", "-t", "refs/tags/" + annotated_tag],
             cwd=str(root), check=True, capture_output=True, text=True,
@@ -764,6 +967,14 @@ def verify_release(
         ).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         raise NextStudyRuntimeError("annotated release tag is missing or invalid")
+    if (
+        instrument_tag_type != "tag"
+        or instrument_tag_object != authorization["tag_object_sha"]
+        or instrument_peeled != authorization["commit_sha"]
+    ):
+        raise NextStudyRuntimeError(
+            "instrument tag does not match the archived authorization"
+        )
     if tag_type != "tag" or peeled != archive_manifest["archived_commit"]:
         raise NextStudyRuntimeError("release tag does not peel to archived commit")
     return {

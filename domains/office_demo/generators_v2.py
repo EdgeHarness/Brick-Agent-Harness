@@ -1,6 +1,8 @@
 """Final successor generators for the eleven synthetic office families.
 
-Version 2.1.0 uses a new seed/entity namespace, a six-way split allocation,
+Version 2.1.1 is a semantic repair of 2.1.0. It deliberately retains the
+2.1.0 seed/entity namespace so unaffected public packets remain byte-stable,
+while every repaired packet receives a new content hash.
 48 genuine semantic shapes per family, explicit difficulty/action axes, and an
 independent prompt-to-outcome oracle check on every generated instance.  Every
 agent-visible surface is split-neutral; split membership exists only in the
@@ -23,9 +25,9 @@ from .outcome_oracle_v2 import derive_outcome
 
 
 SUITE = "office-synthetic-v2"
-GENERATOR_VERSION = "office-generators/2.1.0"
+GENERATOR_VERSION = "office-generators/2.1.1"
 SEED_NAMESPACE = "office-generators/2.1.0"
-FAMILY_VERSION = "2.1.0"
+FAMILY_VERSION = "2.1.1"
 NEXT_SPLITS = (
     "development",
     "calibration",
@@ -325,7 +327,8 @@ def _pptx_from_email(ctx):
         % (prefix, filename, title, policy)
     )
     effects = [
-        {"type": "sources_read", "source": "email", "ids": source_ids},
+        {"type": "sources_read", "source": "email", "ids": source_ids,
+         "list_required": True},
         {
             "type": "presentation_created",
             "filename": filename,
@@ -424,7 +427,8 @@ def _xlsx_from_email(ctx):
         % (prefix, filename, rule)
     )
     effects = [
-        {"type": "sources_read", "source": "email", "ids": source_ids},
+        {"type": "sources_read", "source": "email", "ids": source_ids,
+         "list_required": True},
         {
             "type": "spreadsheet_created",
             "filename": filename,
@@ -498,6 +502,7 @@ def _email_reply(ctx):
             "type": "sources_read",
             "source": "email",
             "ids": ["required-decision"] + [item["id"] for item in request_records],
+            "list_required": True,
         },
         {
             "type": "email_sent",
@@ -702,6 +707,10 @@ def _cal_brief(ctx):
     else:
         selected.sort(key=lambda item: (item["owner"], item["start"]))
     ordered = [item["title"] for item in selected]
+    excluded_titles = sorted(
+        item["title"] for item in state["events"]
+        if item.get("date") == date and item not in selected
+    )
     prompt = (
         "Inspect calendar date %s. Send exactly one chat message to %s. Include, in "
         "policy %s order, only event titles beginning 'Priority:' and each start "
@@ -714,8 +723,11 @@ def _cal_brief(ctx):
         {
             "type": "message_sent",
             "to": recipient["name"],
-            "ordered_mentions": ordered,
-            "include_start_times": True,
+            "ordered_mentions": [
+                "%s at %s" % (item["title"], item["start"]) for item in selected
+            ],
+            "forbidden_mentions": excluded_titles,
+            "forbid_date_tokens": True,
             "exact_count": 1,
         },
         {
@@ -767,8 +779,9 @@ def _remind_msg(ctx):
     time = "14:00"
     prompt = (
         "Action items: %s. Order them using policy %s. Create exactly one reminder at "
-        "14:00 on the first ordered item's due date. Required checklist mentions in "
-        "that order: %s. Then send exactly one chat message to %s repeating those mentions "
+        "14:00 on the first ordered item's due date. Use the resulting full ordered ID "
+        "list as the reminder checklist. Then send exactly one chat message to %s repeating "
+        "the same full ordered ID list "
         "in order and committing that the full checklist will be complete by the "
         "deadline. Preserve all reminders."
         % (
@@ -777,7 +790,7 @@ def _remind_msg(ctx):
                 % (item["id"], item["due"], item["priority"], item["depends_on"])
                 for item in records
             ),
-            policy, " | ".join(checklist), recipient["name"],
+            policy, recipient["name"],
         )
     )
     effects = [
@@ -820,7 +833,6 @@ def _preference_learning(ctx):
         selected = max(bundles, key=lambda item: item["scope"])
     optional = [
         "weekday=Tuesday",
-        "title_prefix=%s" % selected["prefix"],
         "sole_attendee=%s" % colleague["email"],
     ]
     facts = [
@@ -828,7 +840,8 @@ def _preference_learning(ctx):
         "duration_minutes=%d" % selected["duration"],
         "earliest_start=%s" % selected["start"],
         "location=%s" % selected["location"],
-    ] + optional[:max(0, ctx.axes["workload"] - 3)]
+        "title_prefix=%s" % selected["prefix"],
+    ] + optional[:max(0, ctx.axes["workload"] - 4)]
     state = _base_state()
     state["memory"] = [
         "subject=%s status=expired distractor=%d ignore=true"
@@ -837,10 +850,7 @@ def _preference_learning(ctx):
     ]
     date = ctx.date(1)
     start = selected["start"]
-    title = "%s sync with %s" % (
-        selected["prefix"] if ctx.axes["workload"] >= 5 else "Sync:",
-        colleague["name"],
-    )
+    title = "%s sync with %s" % (selected["prefix"], colleague["name"])
     store_effect = {
         "type": "memory_saved",
         "required_facts": facts,
@@ -928,7 +938,7 @@ def _multi_offsite(ctx):
     ))
     for item in candidates:
         state["emails"].append(_email(
-            item["id"], item["sender"]["email"], ctx.date(-item["issued_rank"]),
+            item["id"], item["sender"]["email"], ctx.date(-6 + item["issued_rank"]),
             "FINAL OFFSITE DETAIL %s" % item["id"],
             "FINAL OFFSITE: event=%s; date=%s; start=%s; end=%s; location=%s; facts=%s."
             % (item["event"], item["date"], item["start"], item["end"],
@@ -959,7 +969,8 @@ def _multi_offsite(ctx):
         % (index_subject, policy, filename)
     )
     effects = [
-        {"type": "sources_read", "source": "email", "ids": ["offsite-index", selected["id"]]},
+        {"type": "sources_read", "source": "email", "ids": ["offsite-index", selected["id"]],
+         "list_required": True},
         {
             "type": "event_created",
             "title": selected["event"],
@@ -1010,7 +1021,7 @@ def validate_office_instance_v2(instance):
     validate_office_instance(instance)
     content = instance["content"]
     if content["generator_version"] != GENERATOR_VERSION:
-        raise ValueError("instance is not from office-generators/2.1.0")
+        raise ValueError("instance is not from office-generators/2.1.1")
     if content["family_version"] != FAMILY_VERSION:
         raise ValueError("unexpected v2 family version")
     if content["split"] not in NEXT_SPLITS:

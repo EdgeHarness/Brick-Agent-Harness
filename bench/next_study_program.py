@@ -21,7 +21,7 @@ from domains.office_demo.generators_v2 import FAMILIES
 from .next_study_statistics import PROTOCOL_VERSION
 
 
-AUTHORIZATION_SCHEMA = "brick.next-study.program-authorization/2"
+AUTHORIZATION_SCHEMA = "brick.next-study.program-authorization/3"
 EXECUTION_CONTEXT_SCHEMA = "brick.next-study.execution-context/1"
 PROGRAM_STATE_SCHEMA = "brick.next-study.program-state/2"
 LEASE_SCHEMA = "brick.next-study.machine-lease/1"
@@ -47,7 +47,7 @@ REQUIRED_ARTIFACT_DIGESTS = frozenset((
     "grader_machine_conformance", "native_preflight",
     "clean_checkout_reproduction", "linux_ci_reproduction",
     "runtime_implementation", "schedule_implementation",
-    "descriptive_selection",
+    "descriptive_selection", "fable_reconciliation",
 ))
 PHASE_LOGICAL_CELLS = {
     "calibration": 352, "sentinel": 88, "primary": 880,
@@ -80,6 +80,13 @@ def research_catalog():
 def _sha256(value, label):
     if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
         raise NextStudyProgramError("%s must be lowercase SHA-256 hex" % label)
+
+
+def primary_mask_key_commitment(masking_key):
+    """Commit the 32-byte secret used to pseudonymize primary records."""
+
+    _sha256(masking_key, "primary mask key")
+    return sha256_bytes(bytes.fromhex(masking_key))
 
 
 def _timestamp(value, label):
@@ -125,7 +132,8 @@ def validate_authorization(document):
         "schedule_digests", "model_digests", "descriptive_selection_sha256",
         "maximum_logical_cells", "maximum_physical_attempts",
         "same_seed_retry_limit", "auto_advance_on_sealed_pass", "issued_at",
-        "issuer", "execution_context", "authorization_sha256",
+        "issuer", "execution_context", "primary_mask_key_commitment",
+        "authorization_sha256",
     }
     if not isinstance(document, dict) or set(document) != expected:
         raise NextStudyProgramError("program authorization has unexpected keys")
@@ -140,8 +148,8 @@ def validate_authorization(document):
     validate_execution_context(document["execution_context"])
     if document["protocol_version"] != PROTOCOL_VERSION:
         raise NextStudyProgramError("program authorization protocol drifted")
-    if document["tag"] != "v0.13.0":
-        raise NextStudyProgramError("successor instrument authorization must bind v0.13.0")
+    if document["tag"] != "v0.13.1":
+        raise NextStudyProgramError("replacement instrument authorization must bind v0.13.1")
     if (
         not isinstance(document["tag_object_sha"], str)
         or re.fullmatch(r"[0-9a-f]{40}", document["tag_object_sha"]) is None
@@ -174,6 +182,7 @@ def validate_authorization(document):
     if set(document["artifact_digests"]) != REQUIRED_ARTIFACT_DIGESTS:
         raise NextStudyProgramError("authorization artifact bindings drifted")
     _sha256(document["descriptive_selection_sha256"], "descriptive selection")
+    _sha256(document["primary_mask_key_commitment"], "primary mask-key commitment")
     _validate_fingerprint(
         document["host_fingerprint"], HOST_FINGERPRINT_SCHEMA, "host fingerprint"
     )
@@ -191,6 +200,7 @@ def build_authorization(
     *, tag, tag_object_sha, commit_sha, artifact_digests, host_fingerprint,
     runtime_fingerprint, schedule_digests, model_digests,
     descriptive_selection_sha256, issued_at, issuer,
+    primary_mask_key_commitment_sha256,
     execution_context="authorized_research",
 ):
     document = {
@@ -206,6 +216,7 @@ def build_authorization(
         "schedule_digests": copy.deepcopy(schedule_digests),
         "model_digests": copy.deepcopy(model_digests),
         "descriptive_selection_sha256": descriptive_selection_sha256,
+        "primary_mask_key_commitment": primary_mask_key_commitment_sha256,
         "maximum_logical_cells": MAXIMUM_LOGICAL_CELLS,
         "maximum_physical_attempts": MAXIMUM_PHYSICAL_ATTEMPTS,
         "same_seed_retry_limit": 1,
@@ -609,7 +620,7 @@ __all__ = [
     "MAXIMUM_PHYSICAL_ATTEMPTS", "REQUIRED_ARTIFACT_DIGESTS",
     "NextStudyProgramError", "advance_program",
     "build_authorization", "build_execution_context", "build_fingerprint", "calibration_decision",
-    "execution_allowed", "initial_program_state",
+    "execution_allowed", "initial_program_state", "primary_mask_key_commitment",
     "research_catalog", "retry_decision", "sentinel_decision",
     "validate_authorization", "validate_execution_context", "validate_lease", "validate_program_state",
 ]

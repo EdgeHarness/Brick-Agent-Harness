@@ -15,8 +15,8 @@ from harness.instances import sha256_bytes
 from .strict_graders import _number, _rows, _slides, _text
 
 
-GRADER_VERSION = "3.0.0"
-GRADER_IDENTITY = "office-strict-grader/3.0.0"
+GRADER_VERSION = "3.1.0"
+GRADER_IDENTITY = "office-strict-grader/3.1.0"
 PACKET_SCHEMA = "brick.next-study.blind-review-packet/2"
 OUTCOMES_SCHEMA = "brick.next-study.adjudicated-outcomes/2"
 CHECKS = (
@@ -110,22 +110,41 @@ def _contains_in_order(text, values):
     haystack, position = _text(text), 0
     for value in values:
         needle = _text(value)
-        found = haystack.find(needle, position)
-        if found < 0:
+        match = re.search(
+            r"(?<![a-z0-9])%s(?![a-z0-9])" % re.escape(needle),
+            haystack[position:],
+        )
+        if match is None:
             return False
-        position = found + len(needle)
+        position += match.end()
     return True
 
 
 def _intent(text, name):
     value = _text(text)
     if name == "confirm_attendance":
-        return any(item in value for item in (
-            "confirm", "will attend", "i'll attend", "i will be there", "count me in",
+        if re.search(
+            r"\b(?:cannot|can't|do not|don't|will not|won't|unable to|decline)\b"
+            r"[^.!;]{0,40}\b(?:confirm|attend|attendance|be there)\b",
+            value,
+        ):
+            return False
+        return any(re.search(pattern, value) for pattern in (
+            r"\bi confirm(?: that)? i will attend\b",
+            r"\bi will attend\b", r"\bi'll attend\b",
+            r"\bi will be there\b", r"\bcount me in\b",
         ))
     if name == "deadline_commitment":
-        return any(item in value for item in (
-            "complete by", "done by", "finish by", "deadline",
+        if re.search(
+            r"\b(?:cannot|can't|do not|don't|will not|won't|unable to)\b"
+            r"[^.!;]{0,60}\b(?:complete|done|finish|deadline)\b",
+            value,
+        ):
+            return False
+        return any(re.search(pattern, value) for pattern in (
+            r"\bi will complete\b[^.!;]{0,80}\bby\b",
+            r"\bwill be complete by\b", r"\bi will finish\b[^.!;]{0,80}\bby\b",
+            r"\bi commit\b[^.!;]{0,80}\bdeadline\b",
         ))
     raise GradingError("unknown adjudicated body intent %r" % name)
 
@@ -146,13 +165,13 @@ def _presentation_matches(payload, effect):
         if len(required_by_slide) != len(slides):
             return False
         for (_title, bullets), required in zip(slides, required_by_slide):
-            normalized_slide = re.sub(
-                r"[,\s$]", "", " ".join(bullets).casefold()
-            )
-            if not all(
-                re.sub(r"[,\s$]", "", str(value).casefold()) in normalized_slide
-                for value in required
-            ):
+            normalized_bullets = [
+                re.sub(r"[,\s$]", "", str(value).casefold()) for value in bullets
+            ]
+            normalized_required = [
+                re.sub(r"[,\s$]", "", str(value).casefold()) for value in required
+            ]
+            if normalized_bullets != normalized_required:
                 return False
     blob = " ".join(title + " " + " ".join(bullets) for title, bullets in slides)
     normalized = re.sub(r"[,\s$]", "", blob.casefold())
@@ -227,6 +246,15 @@ def _effect_passes(effect, state, memory, artifacts):
             mentions = effect.get("ordered_mentions", effect.get("required_mentions", []))
             if not _contains_in_order(item.get("text", ""), mentions):
                 continue
+            if any(
+                _contains_in_order(item.get("text", ""), [value])
+                for value in effect.get("forbidden_mentions", [])
+            ):
+                continue
+            if effect.get("forbid_date_tokens") and re.search(
+                r"(?<!\d)\d{4}-\d{2}-\d{2}(?!\d)", item.get("text", "")
+            ):
+                continue
             if effect.get("include_start_times"):
                 by_title = {event["title"]: event["start"] for event in state["events"]}
                 times = [by_title[title] for title in mentions]
@@ -243,13 +271,21 @@ def _effect_passes(effect, state, memory, artifacts):
         return len(matches) == effect["exact_count"]
     if kind == "memory_saved":
         added = memory[effect["_initial_memory_count"]:]
-        return len(added) == 1 and _contains_in_order(added[0], effect["required_facts"])
+        if len(added) != 1:
+            return False
+        observed = [_text(value) for value in added[0].split(";")]
+        required = [_text(value) for value in effect["required_facts"]]
+        return observed == required
     raise GradingError("unknown adjudicated effect %r" % kind)
 
 
 def _sources_observed(effects, actions):
     successful = [item for item in actions if item["ok"]]
     for effect in effects:
+        if effect.get("list_required") is True and not any(
+            item["tool"] == "list_emails" for item in successful
+        ):
+            return False
         if effect["type"] == "source_read" and not any(
             item["tool"] == "read_email" and item["args"].get("id") == effect["id"]
             for item in successful
@@ -281,9 +317,11 @@ def _state_preserved(initial, state, memory, effects):
         before, after = initial[field], state[field]
         if after[:len(before)] != before or len(after) - len(before) != additions[tool]:
             return False
+    if memory[:len(initial["memory"])] != initial["memory"]:
+        return False
     return (
-        memory[:len(initial["memory"])] == initial["memory"]
-        and len(memory) - len(initial["memory"]) == additions["save_memory"]
+        additions["save_memory"] == 0
+        or len(memory) - len(initial["memory"]) == additions["save_memory"]
     )
 
 
@@ -303,8 +341,11 @@ def build_grader(review_packet, adjudicated_outcome):
     def evaluate(evidence):
         state, actions, memory, artifacts = _inputs(evidence)
         successful = [item for item in actions if item["ok"]]
+        business_tools = set(_BUSINESS.values())
+        if expected_business["save_memory"] == 0:
+            business_tools.remove("save_memory")
         actual_business = Counter(
-            item["tool"] for item in successful if item["tool"] in set(_BUSINESS.values())
+            item["tool"] for item in successful if item["tool"] in business_tools
         )
         return {
             "required_outcome": all(

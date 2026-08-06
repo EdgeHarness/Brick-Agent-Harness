@@ -7,7 +7,8 @@ from bench.next_study_program import (
     AUTHORIZATION_SCHEMA, BenchmarkLease, HOST_FINGERPRINT_SCHEMA, PHASES,
     REQUIRED_ARTIFACT_DIGESTS, RUNTIME_FINGERPRINT_SCHEMA,
     SEALED_GATE_SCHEMA, advance_program, build_authorization,
-    build_fingerprint, initial_program_state, validate_authorization,
+    build_fingerprint, initial_program_state, primary_mask_key_commitment,
+    validate_authorization,
     validate_program_state,
 )
 from bench.next_study_readiness import build_readiness_report
@@ -126,7 +127,7 @@ def test_authorization_and_program_state_are_exact_and_history_derived():
     host = build_fingerprint(HOST_FINGERPRINT_SCHEMA, {"host": "lenovo-test"})
     runtime = build_fingerprint(RUNTIME_FINGERPRINT_SCHEMA, {"ollama": "pinned"})
     authorization = build_authorization(
-        tag="v0.13.0", tag_object_sha="9" * 40, commit_sha="a" * 40,
+        tag="v0.13.1", tag_object_sha="9" * 40, commit_sha="a" * 40,
         artifact_digests={name: "b" * 64 for name in REQUIRED_ARTIFACT_DIGESTS},
         host_fingerprint=host, runtime_fingerprint=runtime,
         schedule_digests={name: "c" * 64 for name in (
@@ -134,6 +135,7 @@ def test_authorization_and_program_state_are_exact_and_history_derived():
         )},
         model_digests={name: "d" * 64 for name in ("2b", "4b", "9b")},
         descriptive_selection_sha256="e" * 64,
+        primary_mask_key_commitment_sha256=primary_mask_key_commitment("7" * 64),
         issued_at="2026-08-05T10:00:00Z", issuer="test issuer",
     )
     assert authorization["schema_version"] == AUTHORIZATION_SCHEMA
@@ -213,12 +215,16 @@ def test_orphan_retry_and_masked_identity_tampering_fail_closed():
         "marker_last_verified": True,
         **_resource_fields(),
     } for item in schedule["records"]]
+    key = "7" * 64
     masked = build_masked_grade_ledger(
-        schedule, attempts, retained, "2026-08-05T10:00:00Z"
+        schedule, attempts, retained, "2026-08-05T10:00:00Z", key
     )
-    masked["records"][0]["family"] = "forged"
-    with pytest.raises(ValueError, match="identity drifted"):
-        unmask_primary(masked, schedule, retained, "2026-08-05T10:01:00Z")
+    masked["records"][0]["masked_cell_id"] = "forged"
+    with pytest.raises(ValueError, match="duplicate or unscheduled"):
+        unmask_primary(
+            masked, schedule, retained, attempts, key,
+            "2026-08-05T10:01:00Z",
+        )
 
 
 def test_attempt_extractor_reads_committed_marker_last_evidence(tmp_path):
@@ -317,16 +323,17 @@ def test_preflight_requires_the_actually_held_machine_lease(tmp_path):
     runtime = build_fingerprint(RUNTIME_FINGERPRINT_SCHEMA, {"ollama": "pinned"})
     artifacts = {name: "a" * 64 for name in REQUIRED_ARTIFACT_DIGESTS}
     authorization = build_authorization(
-        tag="v0.13.0", tag_object_sha="9" * 40, commit_sha="b" * 40,
+        tag="v0.13.1", tag_object_sha="9" * 40, commit_sha="b" * 40,
         artifact_digests=artifacts, host_fingerprint=host,
         runtime_fingerprint=runtime, schedule_digests=schedule_digests,
         model_digests=model_digests,
         descriptive_selection_sha256=schedules["descriptives"]["selection_sha256"],
+        primary_mask_key_commitment_sha256=primary_mask_key_commitment("7" * 64),
         issued_at="2026-08-05T10:00:00Z", issuer="test issuer",
     )
     current = {
         "host_fingerprint": host, "runtime_fingerprint": runtime,
-        "commit_sha": "b" * 40, "tag": "v0.13.0", "tag_object_sha": "9" * 40,
+        "commit_sha": "b" * 40, "tag": "v0.13.1", "tag_object_sha": "9" * 40,
         "artifact_digests": artifacts, "model_digests": model_digests,
         "descriptive_selection_sha256": schedules["descriptives"]["selection_sha256"],
     }
@@ -353,7 +360,9 @@ def test_preflight_requires_the_actually_held_machine_lease(tmp_path):
 
 def test_readiness_report_names_the_real_next_gate_without_overclaiming():
     report = build_readiness_report()
-    assert report["current_activity"] == "instrument construction and qualification"
+    assert report["current_activity"] == (
+        "v0.13.0 invalidation and v0.13.1 replacement qualification"
+    )
     assert report["benchmark_running_now"] is False
     assert report["experiment_running_now"] is False
     assert report["live_model_calls"] == 0
@@ -365,4 +374,6 @@ def test_readiness_report_names_the_real_next_gate_without_overclaiming():
     assert report["external_or_evidence_dependent_gates"][
         "github_actions_linux_python_3_9_through_3_13"
     ] is False
-    assert report["next_transition"].startswith("commit the authorization-gate repair")
+    assert report["next_transition"].startswith(
+        "reconcile every remaining Fable finding"
+    )

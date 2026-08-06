@@ -10,7 +10,7 @@ from harness.instances import sha256_bytes
 from .next_study_statistics import GRADE_LEDGER_SCHEMA, PRIMARY_ANALYSIS_SCHEMA
 
 
-REPORT_SCHEMA = "brick.next-study.descriptive-report/2"
+REPORT_SCHEMA = "brick.next-study.descriptive-report/3"
 EVIDENCE_SCHEMA = "brick.next-study.descriptive-evidence/1"
 ELIGIBILITY_SCHEMA = "brick.next-study.descriptive-eligibility/1"
 CONTROLS_SCHEMA = "brick.next-study.descriptive-controls/1"
@@ -44,6 +44,12 @@ def seal_descriptive_eligibility(primary_analysis, grade_ledger, schedule):
         raise NextStudyDescriptiveError("descriptive eligibility requires sealed primary inputs")
     if primary_analysis.get("protocol_version") != grade_ledger.get("protocol_version"):
         raise NextStudyDescriptiveError("primary analysis protocol binding drifted")
+    if primary_analysis.get("primary_grade_ledger_sha256") != _digest(grade_ledger):
+        raise NextStudyDescriptiveError("primary analysis grade-ledger binding drifted")
+    if primary_analysis.get("primary_schedule_sha256") != grade_ledger.get("schedule_sha256"):
+        raise NextStudyDescriptiveError("primary analysis schedule binding drifted")
+    if primary_analysis.get("execution_context") != grade_ledger.get("execution_context"):
+        raise NextStudyDescriptiveError("primary execution context binding drifted")
     document = {
         "schema_version": ELIGIBILITY_SCHEMA,
         "execution_context": copy.deepcopy(primary_analysis["execution_context"]),
@@ -156,19 +162,97 @@ def eligible_schedule(schedule, model_preflight, primary_analysis_binding):
             removed.append(record["block"])
             continue
         records.append(copy.deepcopy(record))
-    return {
+    document = {
         "status": "eligible_after_sealed_primary_analysis",
+        "phase": "descriptives",
         "execution_context": copy.deepcopy(
             primary_analysis_binding["execution_context"]
         ),
         "eligibility_sha256": primary_analysis_binding["eligibility_sha256"],
+        "authorized_schedule_sha256": _digest(schedule),
         "selection_sha256": schedule["selection_sha256"],
         "planned_cells": schedule["logical_cell_count"],
         "eligible_cells": len(records),
+        "logical_cell_count": len(records),
+        "maximum_physical_attempts": len(records) * 2,
         "removed_blocks": sorted(set(removed)),
         "substitute_models": [],
         "records": records,
     }
+    return validate_eligible_schedule(document, schedule)
+
+
+def validate_eligible_schedule(document, authorized_schedule):
+    expected_keys = {
+        "status", "phase", "execution_context", "eligibility_sha256",
+        "authorized_schedule_sha256", "selection_sha256", "planned_cells",
+        "eligible_cells", "logical_cell_count", "maximum_physical_attempts",
+        "removed_blocks", "substitute_models", "records",
+    }
+    if (
+        not isinstance(document, dict)
+        or set(document) != expected_keys
+        or document.get("status") != "eligible_after_sealed_primary_analysis"
+        or document.get("phase") != "descriptives"
+        or document.get("authorized_schedule_sha256") != _digest(authorized_schedule)
+        or document.get("selection_sha256")
+        != authorized_schedule.get("selection_sha256")
+        or document.get("planned_cells") != 222
+        or document.get("eligible_cells")
+        not in (134, 178, 222)
+        or document.get("logical_cell_count") != document.get("eligible_cells")
+        or document.get("maximum_physical_attempts")
+        != document.get("eligible_cells") * 2
+        or not isinstance(document.get("records"), list)
+        or len(document["records"]) != document["eligible_cells"]
+        or document.get("substitute_models") != []
+        or not isinstance(document.get("eligibility_sha256"), str)
+        or re.fullmatch(r"[0-9a-f]{64}", document["eligibility_sha256"]) is None
+        or document.get("execution_context", {}).get("schema_version")
+        != "brick.next-study.execution-context/1"
+        or document.get("execution_context", {}).get("value")
+        not in ("authorized_research", "synthetic_rehearsal")
+    ):
+        raise NextStudyDescriptiveError("eligible descriptive schedule drifted")
+    authorized = {
+        record["logical_cell_id"]: record
+        for record in authorized_schedule.get("records", [])
+    }
+    selected = {record.get("logical_cell_id"): record for record in document["records"]}
+    if (
+        len(authorized) != 222 or len(selected) != document["eligible_cells"]
+        or any(authorized.get(key) != value for key, value in selected.items())
+    ):
+        raise NextStudyDescriptiveError("eligible cells are not an authorized subset")
+    removed_roles = {
+        authorized[key]["model_role"] for key in set(authorized) - set(selected)
+    }
+    if removed_roles - {"2b", "9b"}:
+        raise NextStudyDescriptiveError("mandatory 4B descriptive cell was removed")
+    for role in ("2b", "9b"):
+        authorized_role_ids = {
+            key for key, value in authorized.items() if value["model_role"] == role
+        }
+        selected_role_ids = authorized_role_ids & set(selected)
+        if selected_role_ids not in (set(), authorized_role_ids):
+            raise NextStudyDescriptiveError(
+                "optional descriptive model block was only partially removed"
+            )
+    expected_blocks = sorted({
+        authorized[key]["block"] for key in set(authorized) - set(selected)
+    })
+    if document.get("removed_blocks") != expected_blocks:
+        raise NextStudyDescriptiveError("removed descriptive blocks drifted")
+    expected_count = 222 - sum(
+        len({
+            key for key, value in authorized.items()
+            if value["model_role"] == role
+        })
+        for role in removed_roles
+    )
+    if document["eligible_cells"] != expected_count:
+        raise NextStudyDescriptiveError("eligible descriptive block count drifted")
+    return document
 
 
 def extract_primary_trial_0_controls(grade_ledger, descriptive_schedule):
@@ -419,7 +503,7 @@ def build_report(eligible, descriptive_evidence, primary_trial_0_controls):
         })
 
     complete = len(results) == len(scheduled)
-    return {
+    document = {
         "schema_version": REPORT_SCHEMA,
         "execution_context": copy.deepcopy(eligible["execution_context"]),
         "status": "complete" if complete else "partial_descriptive",
@@ -427,6 +511,12 @@ def build_report(eligible, descriptive_evidence, primary_trial_0_controls):
         "eligible_cells": len(scheduled),
         "completed_cells": len(results),
         "removed_blocks": eligible["removed_blocks"],
+        "eligibility_sha256": eligible["eligibility_sha256"],
+        "descriptive_evidence_sha256": descriptive_evidence["evidence_sha256"],
+        "primary_grade_ledger_sha256": primary_trial_0_controls[
+            "primary_grade_ledger_sha256"
+        ],
+        "selection_sha256": eligible["selection_sha256"],
         "condition_summaries": summaries,
         "paired_descriptive_differences": paired,
         "primary_trial_0_controls_sha256": primary_trial_0_controls["controls_sha256"],
@@ -442,11 +532,13 @@ def build_report(eligible, descriptive_evidence, primary_trial_0_controls):
             "answer-key-backed grader/conformance evidence; not a resource competitor"
         ),
     }
+    document["descriptive_report_sha256"] = _digest(document)
+    return document
 
 
 __all__ = [
     "CONTROLS_SCHEMA", "ELIGIBILITY_SCHEMA", "EVIDENCE_SCHEMA", "REPORT_SCHEMA",
     "NextStudyDescriptiveError", "build_report", "eligible_schedule",
     "extract_descriptive_results", "extract_primary_trial_0_controls",
-    "seal_descriptive_eligibility",
+    "seal_descriptive_eligibility", "validate_eligible_schedule",
 ]

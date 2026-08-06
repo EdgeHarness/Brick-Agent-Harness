@@ -37,13 +37,18 @@ def test_semantic_simulation_covers_every_case_and_real_tool_contract():
         "initial_record_order_invariance_passes": 528,
         "irrelevant_state_invariance_passes": 528,
         "live_model_calls": 0,
+        "maximum_harness_requests": 12,
+        "maximum_native_requests": 9,
         "memory_use_dependency_failures": 0,
+        "production_runner_request_bounds_by_family": report["simulation"][
+            "production_runner_request_bounds_by_family"
+        ],
         "public_prompt_outcome_exact_matches": 528,
         "relevant_input_dependency_passes": 528,
         "relevant_input_dependency_probes": 528,
         "typed_positive_workflows_executed": 1056,
         "typed_positive_workflows_strict_successes": 1056,
-        "typed_tool_actions_executed": 3312,
+        "typed_tool_actions_executed": 6576,
     }
 
 
