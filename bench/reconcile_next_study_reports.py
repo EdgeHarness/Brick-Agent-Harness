@@ -8,6 +8,7 @@ from .next_study_fable_reconciliation import DEFAULT_PATH, build_pending, write_
 SUNNY = "sunnycho100-consolidated-20260806"
 MODEL_A = "model-a-kimi-k3-max-20260807"
 MODEL_B = "model-b-gpt-5.6-sol-medium-20260807"
+MODEL_C = "model-c-claude-fable-5-thinking-high-20260807"
 BLOCKER_TEST = "tests/test_next_study_220_regressions.py::test_reported_prompt_grader_blockers_reproduce"
 LIVE_GRADER_TEST = "tests/test_next_study_220_regressions.py::test_successor_live_path_uses_only_reviewed_grader"
 FEASIBILITY_TEST = "tests/test_next_study_220_regressions.py::test_cal_add_feasibility_is_currently_vacuous"
@@ -58,6 +59,15 @@ def build_terminal_reconciliation(previous_path=DEFAULT_PATH):
             "reviewed_generator_version": "office-generators/2.1.2",
             "reviewed_case_count": 308,
             "findings_reported": 1,
+        },
+        {
+            "report_id": MODEL_C,
+            "model": "Claude Fable 5 thinking high",
+            "source_path": "evidence/next-study/advisory-audits/model-c-report.md",
+            "source_content_sha256": "907209a2205f017edae9cf57a6d1033d3f35358e00cf587c35ef89c1059b1805",
+            "reviewed_generator_version": "office-generators/2.1.2",
+            "reviewed_case_count": 308,
+            "findings_reported": 16,
         },
     ]
     repaired = []
@@ -143,9 +153,124 @@ def build_terminal_reconciliation(previous_path=DEFAULT_PATH):
             "Refuted as a correct-agent-fails case; the prompt already excludes this output.",
             disposition="refuted_with_reproduction",
         ),
+        _finding(
+            "model-c-001-email-confirmation-duplicate", [MODEL_C],
+            ["email_reply"], "high", False,
+            "Natural confirmation language fails the hidden reviewed-grader phrase grammar.",
+            BLOCKER_TEST,
+            "Independent corroboration of model-a-fnd-02; blocker counted once by defect class.",
+        ),
+        _finding(
+            "model-c-002-offsite-confirmation-duplicate", [MODEL_C],
+            ["multi_offsite"], "high", False,
+            "Natural confirmation language fails the same hidden phrase grammar in multi_offsite.",
+            BLOCKER_TEST,
+            "Independent corroboration of model-a-fnd-02; blocker counted once by defect class.",
+        ),
+        _finding(
+            "model-c-003-revenue-bullet-duplicate", [MODEL_C],
+            ["pptx_from_email"], "high", False,
+            "A labelled revenue bullet contains the exact value but fails exact-list grading.",
+            BLOCKER_TEST,
+            "Corroborates model-a-fnd-03; blocker counted once by defect class.",
+        ),
+        _finding(
+            "model-c-004-offsite-bullets-duplicate", [MODEL_C],
+            ["multi_offsite"], "high", False,
+            "Labelled offsite facts satisfy containing language but fail exact-list grading.",
+            BLOCKER_TEST,
+            "Corroborates model-a-fnd-03; blocker counted once by defect class.",
+        ),
+        _finding(
+            "model-c-005-basic-bullets-duplicate", [MODEL_C],
+            ["pptx_basic"], "medium", False,
+            "An additional faithful bullet fails although the prompt only requires inclusion.",
+            BLOCKER_TEST,
+            "Corroborates model-a-fnd-03; blocker counted once by defect class.",
+        ),
+        _finding(
+            "model-c-006-memory-separator-duplicate", [MODEL_C],
+            ["preference_learning"], "high", False,
+            "The prompt-visible pipe separator fails the hidden semicolon-only matcher.",
+            BLOCKER_TEST,
+            "Corroborates model-a-fnd-04; blocker counted once by defect class.",
+        ),
+        _finding(
+            "model-c-007-preference-title-duplicate", [MODEL_C],
+            ["preference_learning"], "high", False,
+            "A natural title-cased composition fails the unstated exact title grammar.",
+            BLOCKER_TEST,
+            "Corroborates preference-title-grammar; blocker counted once by defect class.",
+        ),
+        _finding(
+            "model-c-008-calendar-date-header", [MODEL_C],
+            ["cal_brief"], "medium", False,
+            "A dated header adds content outside the exact title/time entry form and conflicts with the instruction to include only those entries.",
+            None,
+            "Refuted consistently with model-a-fnd-10.",
+            disposition="refuted_with_reproduction",
+        ),
+        _finding(
+            "model-c-009-email-mention-order-duplicate", [MODEL_C],
+            ["email_reply"], "medium", False,
+            "Reordered required fields fail the unstated in-order matcher.",
+            BLOCKER_TEST,
+            "Corroborates model-a-fnd-09; blocker counted once by defect class.",
+        ),
+        _finding(
+            "model-c-010-brief-mention-order-duplicate", [MODEL_C],
+            ["cal_brief"], "medium", False,
+            "Reversing the auditor date/count tokens fails the unstated in-order matcher.",
+            BLOCKER_TEST,
+            "Corroborates model-a-fnd-09; blocker counted once by defect class.",
+        ),
+        _finding(
+            "model-c-011-cal-add-priority-direction", [MODEL_C],
+            ["cal_add"], "medium", True,
+            "highest_priority_feasible is not defined as the largest numeric value, so the common P1-is-highest reading selects another event and fails.",
+            BLOCKER_TEST,
+            "New deterministic public-policy ambiguity.",
+        ),
+        _finding(
+            "model-c-012-earliest-start", [MODEL_C],
+            ["preference_learning"], "low", False,
+            "The use prompt calls the stored value the singular winning start and requires applying it; treating it as a free lower bound does not follow that instruction.",
+            None,
+            "Refuted as a prompt-correct alternative; no new blocker.",
+            disposition="refuted_with_reproduction",
+        ),
+        _finding(
+            "model-c-013-offsite-slide-title", [MODEL_C],
+            ["multi_offsite"], "low", True,
+            "A slide title that clearly identifies the event but decorates its exact name fails exact-title grading.",
+            BLOCKER_TEST,
+            "New correct-agent-fails alternative under the current wording.",
+        ),
+        _finding(
+            "model-c-014-offsite-attendees", [MODEL_C],
+            ["multi_offsite"], "low", False,
+            "The prompt says to use only the selected detail exactly; adding an attendee absent from that detail is an unrequested fact.",
+            None,
+            "Refuted as a prompt-correct alternative; explicit wording is still useful hardening.",
+            disposition="refuted_with_reproduction",
+        ),
+        _finding(
+            "model-c-015-deadline-commitment-language", [MODEL_C],
+            ["remind_msg"], "low", True,
+            "A clear deadline commitment containing every required identifier and date can fail the hidden phrase grammar.",
+            BLOCKER_TEST,
+            "New public-language/live-grader mismatch; low severity does not remove all-or-nothing bias.",
+        ),
+        _finding(
+            "model-c-016-accepted-alternatives", [MODEL_C],
+            ["all"], "medium", False,
+            "The frozen successor intentionally requires a single unambiguous canonical outcome and rejects non-empty accepted alternatives.",
+            LIVE_GRADER_TEST,
+            "Confirmed systemic constraint, but not an independent blocker once every prompt must meet the single-outcome construct gate.",
+        ),
     ]
     document["unresolved_report_count"] = 0
-    document["confirmed_authorization_blocker_count"] = 7
+    document["confirmed_authorization_blocker_count"] = 10
     document["status"] = "construct_gate_failed"
     document["authorization_gate_passed"] = False
     return document

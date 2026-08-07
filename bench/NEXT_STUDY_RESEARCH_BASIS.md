@@ -187,9 +187,9 @@ Before any model call, the design requires versioned artifacts for the
 generator, public-packet outcome compiler, construct and semantic simulation,
 grader mutation/conformance matrix, frozen statistics, masking/release
 rehearsal, closed research catalog, exact-commit Linux and native reproduction,
-and an explicit phase-specific authorization. The three promised advisory
+and an explicit phase-specific authorization. The four advisory
 reports are fully mapped to deterministic reproductions or documented
-refutations. Seven blocker classes survive that process, so the candidate is
+refutations. Ten blocker classes survive that process, so the candidate is
 not frozen and packet-review utilities have not supplied outcomes or set the
 gate by themselves.
 

@@ -128,8 +128,8 @@ traces, independently compiled public-packet outcomes, and
 targeted mutations, and 1,872 benign controls. Protocol `1.4.0` binds the claim
 contract, 50,000-draw bootstrap, LOFO, reliability metrics, hardened masking and
 release semantics, and the at-most-222-cell descriptive matrix. Human-review
-utilities are advisory and cannot authorize the study. Three promised reports
-are now reconciled, but seven concern classes reproduce as public-prompt/live-
+utilities are advisory and cannot authorize the study. Four completed reports
+are now reconciled, but ten concern classes reproduce as public-prompt/live-
 grader contradictions. The frozen 2.1.2 candidate is therefore
 `construct_gate_failed`; no `v0.13.1`, shakeout, or calibration is allowed.
 The protocol forbids automatic 2.1.3 and family removal. Any remediation needs

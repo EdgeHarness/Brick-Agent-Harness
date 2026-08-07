@@ -25,13 +25,13 @@ def test_three_reports_are_complete_but_terminally_block_authorization():
     document = load_reconciliation()
     assert document["status"] == "construct_gate_failed"
     assert document["generator_version"] == "office-generators/2.1.2"
-    assert len(document["reports_received"]) == 3
+    assert len(document["reports_received"]) == 4
     assert {item["findings_reported"] for item in document["reports_received"]} == {
-        1, 10, 11
+        1, 10, 11, 16
     }
-    assert len(document["findings"]) == 21
+    assert len(document["findings"]) == 37
     assert document["unresolved_report_count"] == 0
-    assert document["confirmed_authorization_blocker_count"] == 7
+    assert document["confirmed_authorization_blocker_count"] == 10
     assert document["authorization_gate_passed"] is False
     with pytest.raises(FableReconciliationError, match="construct gate failed"):
         validate_reconciliation(document, require_complete=True)
@@ -80,7 +80,7 @@ def test_terminal_failure_binds_reconciliation_and_forbids_live_transitions():
     failure = load_failure()
     reconciliation = load_reconciliation()
     assert failure["reconciliation_sha256"] == reconciliation["reconciliation_sha256"]
-    assert failure["confirmed_authorization_blocker_count"] == 7
+    assert failure["confirmed_authorization_blocker_count"] == 10
     assert failure["development_shakeout_allowed"] is False
     assert failure["calibration_allowed"] is False
     assert failure["instrument_tag_allowed"] is False

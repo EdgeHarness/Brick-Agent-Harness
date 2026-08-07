@@ -30,8 +30,8 @@ authorize a model call or report a model result.
   alternate-policy outcomes fail.
 
 Human and agent packet-review utilities remain advisory and outside
-authorization. The three promised reports are now complete and byte-bound.
-Seven reported defect classes reproduce deterministically against the public
+authorization. Four reports are now complete and byte-bound.
+Ten reported defect classes reproduce deterministically against the public
 prompt and live grader: formula grammar, confirmation language, presentation
 bullet exactness, memory separators, `brief_sequence`, preference title
 construction, and unannounced mention order. Therefore generator 2.1.2 is

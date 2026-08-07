@@ -623,8 +623,8 @@ version `0.8.2`. Six canonical manifests hold 528 split-neutral
 Protocol `1.4.0` freezes calibration (352),
 sentinel (88), retained primary (880), and at most 222 descriptive cells, with
 exact-uniform bootstrap sampling and descriptive-only LOFO sensitivity. The
-earlier semantic and grader-conformance gates pass, but three completed
-advisory audits exposed seven deterministic public prompt/live-grader
+earlier semantic and grader-conformance gates pass, but four completed
+advisory audits exposed ten deterministic public prompt/live-grader
 contradictions. Generator 2.1.2 is therefore `construct_gate_failed`; live
 authorization, the shakeout, calibration, and `v0.13.1` are forbidden under
 protocol 1.4.0.

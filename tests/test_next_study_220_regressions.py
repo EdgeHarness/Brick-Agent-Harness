@@ -285,7 +285,7 @@ def test_scratch_memory_is_neutral_but_requested_memory_is_exact(tmp_path):
 
 
 def test_reported_prompt_grader_blockers_reproduce(tmp_path):
-    """Pin the seven defects that terminally block office-generators/2.1.2."""
+    """Pin the ten defect classes that terminally block office-generators/2.1.2."""
 
     # The prompt permits a formula, but the evaluator accepts only SUM(range).
     _instance, packet, outcome, evidence = _baseline(tmp_path, "xlsx_basic")
@@ -313,6 +313,37 @@ def test_reported_prompt_grader_blockers_reproduce(tmp_path):
     state = copy.deepcopy(evidence.state)
     state["sent_emails"][-1]["body"] = "I confirm my attendance. " + "; ".join(
         effect["required_mentions"]
+    )
+    assert not build_grader(packet, outcome).grade_evidence(
+        _rebuild(evidence, state=state)
+    ).strict_success
+
+    # highest_priority_feasible never defines whether larger numbers rank higher.
+    priority_cases = [
+        generate_instance("development", "cal_add", index)
+        for index in range(8)
+    ]
+    priority = next(
+        item for item in priority_cases
+        if item["content"]["structure"]["decision_policy"]
+        == "highest_priority_feasible"
+    )
+    assert "largest priority value" not in priority["content"]["prompt"]
+
+    # "titled for" permits decoration, but the live grader requires exact equality.
+    _instance, packet, outcome, evidence = _baseline(tmp_path, "multi_offsite")
+    state = copy.deepcopy(evidence.state)
+    state["events"][-1]["title"] = "Offsite: " + state["events"][-1]["title"]
+    assert not build_grader(packet, outcome).grade_evidence(
+        _rebuild(evidence, state=state)
+    ).strict_success
+
+    # A natural deadline commitment outside the hidden allowlist also fails.
+    _instance, packet, outcome, evidence = _baseline(tmp_path, "remind_msg")
+    effect = next(item for item in outcome["outcome"] if item["type"] == "message_sent")
+    state = copy.deepcopy(evidence.state)
+    state["messages"][-1]["text"] = "%s; I'll have everything done by %s." % (
+        "; ".join(effect["required_mentions"]), effect["deadline"]
     )
     assert not build_grader(packet, outcome).grade_evidence(
         _rebuild(evidence, state=state)

@@ -45,8 +45,8 @@ identities are regenerated and rebound. The
 current machine gates use independently compiled public outcomes, 1,056
 production-runner positive traces, 4,332 targeted grader mutations, and 1,872
 benign controls. Human and agent packet review is advisory and cannot itself
-satisfy an authorization gate. Three completed reports are now reconciled into
-deterministic checks. Seven public-prompt/live-grader contradictions survive,
+satisfy an authorization gate. Four completed reports are now reconciled into
+deterministic checks. Ten public-prompt/live-grader contradictions survive,
 so 2.1.2 is `construct_gate_failed` and live execution is terminally disabled
 under protocol 1.4.0. No 2.1.3 or family removal is permitted automatically.
 

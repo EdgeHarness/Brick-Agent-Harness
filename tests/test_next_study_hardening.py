@@ -375,7 +375,7 @@ def test_readiness_report_names_the_real_next_gate_without_overclaiming():
         "github_actions_linux_python_3_9_through_3_13"
     ] is False
     assert report["construct_gate_status"] == "construct_gate_failed"
-    assert report["confirmed_authorization_blocker_count"] == 7
+    assert report["confirmed_authorization_blocker_count"] == 10
     assert report["external_or_evidence_dependent_gates"][
         "advisory_audits_complete"
     ] is True
