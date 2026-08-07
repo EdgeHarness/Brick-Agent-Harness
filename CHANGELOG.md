@@ -4,6 +4,16 @@
 
 ### Strengthened successor program
 
+- Preserved the tagged `v0.13.2` / `office-generators/2.2.0` candidate as a
+  pre-calibration construct-gate failure after the final audit proved that all
+  `cal_add` candidates were feasible and that `preference_learning` printed
+  the policy-selected values. No calibration or effectiveness cell was run.
+  Added the explicitly authorized final successor `office-generators/2.3.0`,
+  protocol 1.6.0, construct contract 1.4.0, design 0.10.0, and target tag
+  `v0.13.3`. Calendar feasibility and preference-policy derivation are now
+  causal in all 48 cases of their respective families, while the estimand,
+  11-family scope, 220 retained clusters, claim rule, and seed namespace remain
+  unchanged.
 - Preserved generator 2.1.2 and `v0.13.1` as terminal, unissued construct-gate
   history after four advisory audits produced ten deterministic prompt/grader
   blocker classes. Added an explicit pre-outcome successor authorization for
@@ -71,9 +81,10 @@
   lease, and require exact equality with the authorization-bound preflight.
   A stale document can no longer authorize calls after checkout, package,
   runtime, model, host, or implementation drift.
-- `v0.12.0`, `v0.13.0`, and `v0.13.1` remain permanently unissued. The current
-  instrument target is `v0.13.2`, followed by `v0.14.0` for a completed study
-  and `v0.15.0` for the separately developed Brix demo.
+- `v0.12.0`, `v0.13.0`, and `v0.13.1` remain permanently unissued; `v0.13.2`
+  remains an immutable failed instrument. The final instrument target is
+  `v0.13.3`, followed by `v0.14.0` for a completed study and `v0.15.0` for the
+  separately developed Brix demo.
 
 All notable changes to this repository are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions use

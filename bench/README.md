@@ -618,18 +618,19 @@ python -m pytest tests/test_next_study.py tests/test_next_study_v2.py -q
 ```
 
 `bench/next_study_design.json` records the offline-qualified candidate at
-version `0.9.0`. Six canonical manifests hold 528 split-neutral
-`office-generators/2.2.0` cases with the preserved 2.1.0 seed namespace.
-Protocol `1.5.0` freezes calibration (352),
+version `0.10.0`. Six canonical manifests hold 528 split-neutral
+`office-generators/2.3.0` cases with the preserved 2.1.0 seed namespace.
+Protocol `1.6.0` freezes calibration (352),
 sentinel (88), retained primary (880), and at most 222 descriptive cells, with
 exact-uniform bootstrap sampling and descriptive-only LOFO sensitivity. The
 earlier semantic and grader-conformance gates pass, but four completed
 advisory audits exposed ten deterministic public prompt/live-grader
-contradictions in terminal generator 2.1.2. The explicitly authorized 2.2.0
-successor closes those contracts and passes its bound offline remediation
+contradictions in terminal generator 2.1.2. Generator 2.2.0 closed those
+contracts but failed the final construct audit before calibration. The explicitly
+authorized 2.3.0 successor repairs both causal-dependency gaps and passes its bound offline remediation
 closure. Live execution remains disabled until exact-commit Linux and native
 reproduction plus the score-masked 22-cell shakeout pass; the target tag is
-`v0.13.2`.
+`v0.13.3`.
 `execution_allowed()` still returns false. See
 `NEXT_STUDY_IMPLEMENTATION.md` for the implemented controls and remaining gates.
 

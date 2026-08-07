@@ -3,6 +3,7 @@ from bench.next_study_semantic_simulation import (
     audit_all,
     validate_report,
 )
+from domains.office_demo.generators_v2 import FAMILIES
 from harness.instances import load_canonical_json
 
 
@@ -35,6 +36,9 @@ def test_semantic_simulation_covers_every_case_and_real_tool_contract():
     assert report["scope"]["unique_structure_hashes"] == 528
     assert report["simulation"] == {
         "initial_record_order_invariance_passes": 528,
+        "causal_dependency_passes_by_family": {
+            family: 48 for family in sorted(FAMILIES)
+        },
         "irrelevant_state_invariance_passes": 528,
         "live_model_calls": 0,
         "maximum_harness_requests": 12,

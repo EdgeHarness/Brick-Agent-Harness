@@ -4,8 +4,8 @@ Status date: 2026-08-04; active supersession recorded 2026-08-05. This note
 records evidence used to design the successor and retains historical proposals.
 It is not a preregistration, execution authorization, benchmark result, or
 retained-data release. Where this note requires human review or names generator
-2.1.0/design 0.5.0, that text is superseded by protocol 1.5.0 and the
-`office-generators/2.2.0` successor contract and its explicit pre-outcome
+2.1.0/design 0.5.0, that text is superseded by protocol 1.6.0 and the
+`office-generators/2.3.0` successor contract and its explicit pre-outcome
 authorization. Human and agent packet reviews
 are advisory only; authorization instead binds deterministic public-outcome,
 semantic-runner, mutation, rehearsal, CI, native, and shakeout gates. Live and
@@ -190,14 +190,15 @@ grader mutation/conformance matrix, frozen statistics, masking/release
 rehearsal, closed research catalog, exact-commit Linux and native reproduction,
 and an explicit phase-specific authorization. The four advisory reports are
 fully mapped to deterministic reproductions or documented refutations. Ten
-blocker classes terminated 2.1.2. The 2.2.0 successor exposes the corresponding
-contracts in its public prompts, and its bound semantic and grader evidence
-closes them without letting packet-review utilities supply outcomes or set the
-gate by themselves.
+blocker classes terminated 2.1.2. Generator 2.2.0 exposed the corresponding
+prompt contracts, then failed a final construct audit before calibration
+because calendar feasibility was inert and a policy-selected answer was
+printed. The 2.3.0 successor makes both dependencies causal without letting
+packet-review utilities supply outcomes or set the gate by themselves.
 
 The contract returns `execution_allowed=false`; retained execution is
 separately false. Reproduce the offline generator chain with
-`python -m bench.generate_next_study --verify`. Under protocol 1.5.0, the next
+`python -m bench.generate_next_study --verify`. Under protocol 1.6.0, the next
 step is exact-commit Linux/native qualification and then a separately
 authorized score-masked 22-cell shakeout. Calibration remains blocked until the
-shakeout passes and `v0.13.2` authorization is issued.
+shakeout passes and `v0.13.3` authorization is issued.

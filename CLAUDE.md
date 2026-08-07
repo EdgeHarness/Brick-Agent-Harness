@@ -120,9 +120,13 @@ execution remains mechanically disabled.
 2.1.2 candidate terminated with ten deterministic public-prompt/live-grader
 contradictions. Both histories remain immutable; `v0.13.1` is permanently
 unissued. The user's explicit pre-outcome directive authorizes the independent
-`office-generators/2.2.0` successor under protocol `1.5.0` and target tag
-`v0.13.2`, retaining only the 2.1.0 seed namespace and the unchanged 11-family,
-220-cluster estimand. The ten prompt contracts are now explicit. All 528 public
+`office-generators/2.2.0` successor under protocol `1.5.0` and tag `v0.13.2`.
+The final audit found two construct blockers before calibration: every
+`cal_add` request was feasible, and every `preference_learning` store prompt
+printed its policy-selected answer. The tag remains immutable and is retired.
+The user's explicit pre-outcome directive authorizes `office-generators/2.3.0`
+under protocol `1.6.0` and target tag `v0.13.3`, retaining only the 2.1.0 seed
+namespace and the unchanged 11-family, 220-cluster estimand. All 528 public
 outcomes reconstruct independently, all 1,056 typed positive workflows pass,
 and grader conformance passes 528 baselines, 4,332 targeted mutations, and
 1,872 benign controls. The machine-readable remediation closure passes with
@@ -130,7 +134,7 @@ zero live model calls or inspected effectiveness data. Human-review utilities
 remain advisory and cannot authorize the study. The current candidate is
 offline-qualified but still cannot make a model call: it needs an exact clean
 commit, Linux and native Windows reproduction, and a separately authorized
-score-masked 22-cell shakeout before `v0.13.2` can be issued. Read
+score-masked 22-cell shakeout before `v0.13.3` can be issued. Read
 [`bench/NEXT_STUDY_IMPLEMENTATION.md`](bench/NEXT_STUDY_IMPLEMENTATION.md) and
 run both offline verify commands before changing it.
 

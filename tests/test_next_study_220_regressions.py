@@ -57,12 +57,13 @@ def test_offsite_issued_rank_agrees_with_visible_date_order():
         assert by_date == by_rank
 
 
-def test_preference_title_prefix_is_in_saved_public_facts():
+def test_preference_title_prefix_is_public_in_each_candidate_bundle():
     for index in range(4):
         instance = generate_instance("adversarial", "preference_learning", index)
         store = instance["content"]["ordered_subepisodes"][0]["prompt"]
-        facts = store.split("separated only by semicolons:", 1)[1]
-        assert "title_prefix=" in facts
+        bundles = store.split(". Select by policy", 1)[0]
+        assert bundles.count("title_prefix=") == 3
+        assert "title_prefix" in store.split("separated only by semicolons:", 1)[1]
 
 
 def test_reminder_prompt_does_not_print_the_derived_order():
@@ -434,7 +435,7 @@ def test_successor_live_path_uses_only_reviewed_grader():
     assert "domains.office_demo.generated_grader" not in source
 
 
-def test_cal_add_feasibility_is_currently_vacuous():
+def test_cal_add_calendar_is_causal_and_infeasible_decoy_is_never_selected():
     for split, count in (
         ("development", 8), ("calibration", 8), ("validation", 4),
         ("sentinel", 4), ("adversarial", 4),
@@ -444,13 +445,41 @@ def test_cal_add_feasibility_is_currently_vacuous():
             candidates = re.findall(
                 r"start=(\d\d:\d\d),duration=(\d+)", content["prompt"]
             )
-            assert len(candidates) == 3
+            assert len(candidates) == 4
             occupied = [
                 (event["start"], event["end"])
                 for event in content["initial_state"]["events"]
             ]
+            feasibility = []
             for start, duration in candidates:
                 hour, minute = map(int, start.split(":"))
                 end_minutes = hour * 60 + minute + int(duration)
                 end = "%02d:%02d" % divmod(end_minutes, 60)
-                assert all(end <= old_start or start >= old_end for old_start, old_end in occupied)
+                feasibility.append(all(
+                    end <= old_start or start >= old_end
+                    for old_start, old_end in occupied
+                ))
+            assert feasibility == [True, True, True, False]
+            selected = next(
+                effect for effect in content["required_effects"]
+                if effect["type"] == "event_created"
+            )
+            assert "candidate-D" not in selected["title"]
+
+
+def test_preference_policy_must_be_derived_and_selected_answer_is_not_printed():
+    for split, count in (
+        ("development", 8), ("calibration", 8), ("validation", 4),
+        ("sentinel", 4), ("retained", 20), ("adversarial", 4),
+    ):
+        for index in range(count):
+            content = generate_instance(split, "preference_learning", index)["content"]
+            store = content["ordered_subepisodes"][0]["prompt"]
+            assert "Policy definitions:" in store
+            assert "Copy subject from the subject above" in store
+            assert "separated only by semicolons: subject=" not in store
+            selected = next(
+                effect for effect in content["required_effects"]
+                if effect["type"] == "memory_saved"
+            )
+            assert "; ".join(selected["required_facts"]) not in store

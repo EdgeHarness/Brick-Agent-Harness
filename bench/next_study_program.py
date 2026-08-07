@@ -149,8 +149,8 @@ def validate_authorization(document):
     validate_execution_context(document["execution_context"])
     if document["protocol_version"] != PROTOCOL_VERSION:
         raise NextStudyProgramError("program authorization protocol drifted")
-    if document["tag"] != "v0.13.2":
-        raise NextStudyProgramError("replacement instrument authorization must bind v0.13.2")
+    if document["tag"] != "v0.13.3":
+        raise NextStudyProgramError("replacement instrument authorization must bind v0.13.3")
     if (
         not isinstance(document["tag_object_sha"], str)
         or re.fullmatch(r"[0-9a-f]{40}", document["tag_object_sha"]) is None

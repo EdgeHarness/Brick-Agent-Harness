@@ -1,4 +1,4 @@
-"""Independent prompt-to-outcome oracle for office-generators/2.2.0.
+"""Independent prompt-to-outcome oracle for office-generators/2.3.0.
 
 The public entry point accepts only prompt text, subepisode prompt text,
 initial state, the task family, and the frozen date.  It cannot consume a
@@ -13,7 +13,7 @@ import datetime
 import re
 
 
-ORACLE_VERSION = "office-prompt-oracle/2.2.0"
+ORACLE_VERSION = "office-prompt-oracle/2.3.0"
 
 
 class OracleInputError(ValueError):
@@ -508,8 +508,8 @@ def _preference_learning(_prompt, _state, _today, subepisode_prompts):
         raise OracleInputError("preference task requires two prompt subepisodes")
     store = _search(
         r"^For subject ([^,]+), evaluate these preference bundles: (.*?)\. Select by "
-        r"policy (most_recent|highest_priority|most_specific_scope) and save exactly "
-        r"one memory\.[\s\S]*?separated only by semicolons: (.*?)\.$",
+        r"policy (most_recent|highest_priority|most_specific_scope)\. Policy definitions: "
+        r"[\s\S]*?Save exactly one memory\.[\s\S]*?Do not include its id or ranks\.$",
         subepisode_prompts[0],
         "stored preferences",
     )
@@ -519,7 +519,7 @@ def _preference_learning(_prompt, _state, _today, subepisode_prompts):
         subepisode_prompts[1],
         "preference-use event",
     )
-    subject, bundle_text, policy, fact_text = store.groups()
+    subject, bundle_text, policy = store.groups()
     bundles = []
     for value in _pipe(bundle_text):
         item = _search(
@@ -540,21 +540,17 @@ def _preference_learning(_prompt, _state, _today, subepisode_prompts):
         selected = max(bundles, key=lambda item: item["priority"])
     else:
         selected = max(bundles, key=lambda item: item["scope"])
-    facts = [value.strip() for value in fact_text.split(";") if value.strip()]
-    fact_map = dict(value.split("=", 1) for value in facts)
-    if (
-        fact_map.get("subject") != subject
-        or int(fact_map.get("duration_minutes", -1)) != selected["duration"]
-        or fact_map.get("earliest_start") != selected["start"]
-        or fact_map.get("location") != selected["location"]
-    ):
-        raise OracleInputError("selected preference facts disagree with policy")
+    facts = [
+        "subject=%s" % subject,
+        "duration_minutes=%d" % selected["duration"],
+        "earliest_start=%s" % selected["start"],
+        "location=%s" % selected["location"],
+        "title_prefix=%s" % selected["prefix"],
+    ]
     person, date, attendee = use.groups()
     if attendee != subject:
         raise OracleInputError("preference subject and use attendee disagree")
-    prefix = fact_map.get("title_prefix")
-    if not prefix:
-        raise OracleInputError("selected preference title prefix is not public")
+    prefix = selected["prefix"]
     title = "%s sync with %s" % (prefix, person)
     start = selected["start"]
     end = _clock(_minutes(start) + selected["duration"])

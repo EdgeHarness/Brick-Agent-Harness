@@ -42,9 +42,13 @@ necessary controls without reopening S7. The `v0.13.0` candidate and generator
 replacement then failed its construct gate on ten independently reproduced
 public-prompt/live-grader contradictions; it remains immutable and `v0.13.1`
 is unissued. The user's explicit pre-outcome directive authorizes the separate
-`office-generators/2.2.0` successor under protocol 1.5.0 and target tag
-`v0.13.2`. It preserves the 2.1.0 seed namespace and unchanged 11-family,
-220-cluster estimand while making all ten strict output contracts public. Its
+`office-generators/2.2.0` successor under protocol 1.5.0 and tag `v0.13.2`.
+A final audit found two construct blockers before calibration: `cal_add`
+feasibility never filtered a candidate, and `preference_learning` printed the
+policy-selected facts. That tag remains immutable and retired. The explicit
+replacement is `office-generators/2.3.0` under protocol 1.6.0 and target tag
+`v0.13.3`. It preserves the 2.1.0 seed namespace and unchanged 11-family,
+220-cluster estimand. Its
 regenerated 528 cases and outcomes, 176 policy triplets, 1,056 typed workflows,
 4,332 grader mutations, 1,872 benign controls, semantic report, rehearsal, and
 remediation closure pass offline. Human-review utilities remain advisory. Live
@@ -116,8 +120,9 @@ with Snapdragon X Elite, 32 GB RAM, and native Windows 11 ARM64.
 | D0/S7 | not released | Terminal score-masked development calibration under protocol 1.0.2. | The direction-blind floor/ceiling audit failed, so no freeze or efficacy contrast exists. |
 | Invalidated successor | `v0.13.0` | Generator 2.1.0 candidate. | Invalidated before calibration; no live study cells ran. |
 | Failed replacement instrument | `v0.13.1` unissued | Generator 2.1.2, grader 3.2.0, protocol 1.4.0. | Four advisory reports are fully reconciled; ten deterministic public-prompt/live-grader blockers terminate the candidate before the shakeout or calibration. |
-| Qualified successor instrument | `v0.13.2` target | Generator 2.2.0, grader 3.2.0, protocol 1.5.0. | Offline closure passes; exact-commit Linux/native reproduction and a zero-invalid 22-cell shakeout remain mandatory before tagging and research authorization. |
-| Completed successor study | `v0.14.0` target | Calibration, sentinel, sealed primary analysis, bounded descriptives, evidence-bound report, and commit-bound release archive. | Requires an authorized `v0.13.2` fingerprint and every sealed live phase to pass. |
+| Failed successor instrument | `v0.13.2` | Generator 2.2.0, grader 3.2.0, protocol 1.5.0. | Retired before calibration after the final audit found two deterministic construct blockers. |
+| Qualified successor instrument | `v0.13.3` target | Generator 2.3.0, grader 3.2.0, protocol 1.6.0. | Offline closure passes; exact-commit Linux/native reproduction and a zero-invalid 22-cell shakeout remain mandatory before tagging and research authorization. |
+| Completed successor study | `v0.14.0` target | Calibration, sentinel, sealed primary analysis, bounded descriptives, evidence-bound report, and commit-bound release archive. | Requires an authorized `v0.13.3` fingerprint and every sealed live phase to pass. |
 
 ## F0/Q0 — feasibility and quarantine
 

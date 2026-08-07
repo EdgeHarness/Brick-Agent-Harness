@@ -416,13 +416,10 @@ def _dependency_packet(packet):
         )
         return changed, "outcome_changes"
     if family == "cal_add":
-        selected = next(
-            item for item in _business_outcome(_derive(packet))
-            if item["type"] == "event_created"
-        )
-        changed["prompt"] = changed["prompt"].replace(
-            selected["title"], selected["title"] + " changed", 1
-        )
+        changed["initial_state"]["events"] = [
+            event for event in changed["initial_state"]["events"]
+            if not (event["start"] <= "08:30" < event["end"])
+        ]
         return changed, "outcome_changes"
     if family == "cal_freeslot":
         selected = next(
@@ -470,18 +467,18 @@ def _dependency_packet(packet):
         return changed, "outcome_changes"
     if family == "preference_learning":
         store = changed["subepisode_prompts"][0]
-        selected = next(
-            item for item in _derive(packet) if item["type"] == "memory_saved"
-        )
-        fact = next(
-            value for value in selected["required_facts"]
-            if value.startswith("earliest_start=")
-        )
-        replacement = "earliest_start=07:00"
+        current = re.search(
+            r"policy (most_recent|highest_priority|most_specific_scope)\.", store
+        ).group(1)
+        replacement = {
+            "most_recent": "highest_priority",
+            "highest_priority": "most_specific_scope",
+            "most_specific_scope": "most_recent",
+        }[current]
         changed["subepisode_prompts"][0] = store.replace(
-            fact, replacement
+            "policy %s." % current, "policy %s." % replacement, 1
         )
-        return changed, "use_effect_should_change"
+        return changed, "outcome_changes"
     return None, "not_applicable"
 
 
@@ -530,6 +527,38 @@ def _construct_findings(instances, profile_sensitivity, memory_failures):
         for result in profile_sensitivity.values()
     ):
         raise SemanticSimulationError("a decision policy is semantically inert")
+    cal_add = [item["content"] for item in instances if item["content"]["family"] == "cal_add"]
+    if len(cal_add) != 48 or any(
+        "candidate-D" not in content["prompt"]
+        or "does not overlap any existing event" not in content["prompt"]
+        or not any(
+            event["date"] == next(
+                effect["date"] for effect in content["required_effects"]
+                if effect["type"] == "event_created"
+            )
+            and event["start"] <= "08:30" < event["end"]
+            for event in content["initial_state"]["events"]
+        )
+        or any(
+            effect["type"] == "event_created" and "candidate-D" in effect["title"]
+            for effect in content["required_effects"]
+        )
+        for content in cal_add
+    ):
+        raise SemanticSimulationError("cal_add calendar feasibility is not causal")
+    preference = [
+        item["content"] for item in instances
+        if item["content"]["family"] == "preference_learning"
+    ]
+    if len(preference) != 48 or any(
+        "Policy definitions:" not in content["ordered_subepisodes"][0]["prompt"]
+        or "; ".join(next(
+            effect["required_facts"] for effect in content["required_effects"]
+            if effect["type"] == "memory_saved"
+        )) in content["ordered_subepisodes"][0]["prompt"]
+        for content in preference
+    ):
+        raise SemanticSimulationError("preference policy selection is bypassable")
     return []
 
 
@@ -568,6 +597,7 @@ def audit_all(directory=MANIFEST_DIRECTORY, *, manifests=None):
     structure_hashes, prompt_surfaces = set(), set()
     oracle_matches = reordered_passes = irrelevant_passes = 0
     dependency_passes = dependency_probes = memory_failures = 0
+    causal_dependency_passes_by_family = Counter()
     typed_executions = typed_actions = 0
     request_counts = {
         condition: defaultdict(list)
@@ -614,6 +644,7 @@ def audit_all(directory=MANIFEST_DIRECTORY, *, manifests=None):
                             "relevant input is inert for %s" % content["id"]
                         )
                     dependency_passes += 1
+                    causal_dependency_passes_by_family[content["family"]] += 1
                 else:
                     before = [
                         item for item in outcome if item["type"] == "event_created"
@@ -626,6 +657,7 @@ def audit_all(directory=MANIFEST_DIRECTORY, *, manifests=None):
                         memory_failures += 1
                     else:
                         dependency_passes += 1
+                        causal_dependency_passes_by_family[content["family"]] += 1
             for condition in ("native_tools", "harness_full"):
                 calls = _execute_through_typed_tools(
                     instance, packet, outcome,
@@ -702,6 +734,9 @@ def audit_all(directory=MANIFEST_DIRECTORY, *, manifests=None):
             "irrelevant_state_invariance_passes": irrelevant_passes,
             "relevant_input_dependency_probes": dependency_probes,
             "relevant_input_dependency_passes": dependency_passes,
+            "causal_dependency_passes_by_family": dict(
+                sorted(causal_dependency_passes_by_family.items())
+            ),
             "memory_use_dependency_failures": memory_failures,
             "typed_positive_workflows_executed": typed_executions,
             "typed_tool_actions_executed": typed_actions,
@@ -751,9 +786,14 @@ def validate_report(report):
 
 def _rewrite_rendered_strings(value):
     if isinstance(value, str):
-        return value.replace("office-generators/2.1.2", GENERATOR_VERSION).replace(
-            "generator `2.1.2`", "generator `2.2.0`"
-        ).replace("`v0.13.1`", "`v0.13.2`")
+        return (
+            value.replace("office-generators/2.1.2", GENERATOR_VERSION)
+            .replace("office-generators/2.2.0", GENERATOR_VERSION)
+            .replace("generator `2.1.2`", "generator `2.3.0`")
+            .replace("generator `2.2.0`", "generator `2.3.0`")
+            .replace("`v0.13.1`", "`v0.13.3`")
+            .replace("`v0.13.2`", "`v0.13.3`")
+        )
     if isinstance(value, list):
         return [_rewrite_rendered_strings(item) for item in value]
     if isinstance(value, dict):

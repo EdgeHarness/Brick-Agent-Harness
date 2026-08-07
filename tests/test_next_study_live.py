@@ -386,7 +386,7 @@ def test_research_executor_requires_authorization_bound_program_state(tmp_path, 
     from harness.evidence import canonical_json_bytes
     from harness.instances import sha256_bytes
     authorization = build_authorization(
-        tag="v0.13.2", tag_object_sha="8" * 40, commit_sha="b" * 40,
+        tag="v0.13.3", tag_object_sha="8" * 40, commit_sha="b" * 40,
         artifact_digests={name: "a" * 64 for name in REQUIRED_ARTIFACT_DIGESTS},
         host_fingerprint=_preflight()["host_fingerprint"],
         runtime_fingerprint=_preflight()["runtime_fingerprint"],

@@ -165,10 +165,10 @@ def _evidence_store_smoke(directory, schedule):
     key = AttemptKey(
         domain_name="office_demo", domain_version="0.1.0",
         domain_content_sha256="a" * 64, task_family=cell["family"],
-        task_version="2.2.0", generator_version="office-generators/2.2.0",
+        task_version="2.3.0", generator_version="office-generators/2.3.0",
         grader_version="3.2.0", model_tag="mock:4b",
         model_digest="sha256:" + schedule["model_sha256"],
-        condition_name=cell["condition"], condition_version="1.5.0",
+        condition_name=cell["condition"], condition_version="1.6.0",
         mechanism_sha256="b" * 64, instance_id=cell["instance_id"],
         instance_content_sha256=cell["content_sha256"], ordered_subepisodes=(),
         repeat=0, sampling={"seed": cell["trial_seed"], "temperature": "0"},
@@ -226,7 +226,7 @@ def _program_to_release(
         canonical_json_bytes(manifest_lock, allow_float=False, newline=True)
     )
     authorization = build_authorization(
-        tag="v0.13.2", tag_object_sha="9" * 40, commit_sha="a" * 40,
+        tag="v0.13.3", tag_object_sha="9" * 40, commit_sha="a" * 40,
         artifact_digests=artifact_digests,
         host_fingerprint=build_fingerprint(HOST_FINGERPRINT_SCHEMA, {"host": "mock"}),
         runtime_fingerprint=build_fingerprint(RUNTIME_FINGERPRINT_SCHEMA, {"runtime": "mock"}),

@@ -1,15 +1,14 @@
-"""Authorization and deterministic closure for the post-2.1.2 successor.
+"""Authorization and deterministic closure for the post-2.2.0 successor.
 
-The terminal 2.1.2 reconciliation remains immutable.  This module records the
-explicitly authorized 2.2.0 remediation and permits closure only after the new
+The tagged 2.2.0 failure remains immutable. This module records the explicitly
+authorized 2.3.0 remediation and permits closure only after the new
 manifest, semantic simulation, and full grader conformance evidence all pass.
 """
 
 import hashlib
 from pathlib import Path
 
-from bench.next_study_fable_reconciliation import load_reconciliation
-from bench.next_study_construct_failure import load_failure
+from bench.next_study_220_failure import load_failure
 from domains.office_demo.generators_v2 import GENERATOR_VERSION
 from domains.office_demo.outcome_oracle_v2 import ORACLE_VERSION
 from domains.office_demo.reviewed_grader_v2 import GRADER_VERSION
@@ -18,16 +17,13 @@ from harness.instances import load_canonical_json, replace_canonical_json
 
 ROOT = Path(__file__).resolve().parents[1]
 AUTHORIZATION_PATH = (
-    ROOT / "evidence" / "next-study" / "office-v2.2.0-successor-authorization.json"
+    ROOT / "evidence" / "next-study" / "office-v2.3.0-successor-authorization.json"
 )
 CLOSURE_PATH = (
-    ROOT / "evidence" / "next-study" / "office-v2.2.0-remediation-closure.json"
-)
-RECONCILIATION_PATH = (
-    ROOT / "evidence" / "next-study" / "office-v2-fable-reconciliation.json"
+    ROOT / "evidence" / "next-study" / "office-v2.3.0-remediation-closure.json"
 )
 FAILURE_PATH = (
-    ROOT / "evidence" / "next-study" / "office-v2.1.2-construct-gate-failure.json"
+    ROOT / "evidence" / "next-study" / "office-v2.2.0-construct-gate-failure.json"
 )
 MANIFEST_LOCK_PATH = ROOT / "bench" / "manifests" / "office-v2" / "manifest-lock.json"
 SEMANTIC_PATH = (
@@ -39,21 +35,17 @@ CONFORMANCE_PATH = (
 
 AUTHORIZATION_SCHEMA = "brick.next-study.successor-authorization/1"
 CLOSURE_SCHEMA = "brick.next-study.remediation-closure/1"
-PROTOCOL_VERSION = "1.5.0"
-CONSTRUCT_VERSION = "office-construct/1.3.0"
-TARGET_TAG = "v0.13.2"
+PROTOCOL_VERSION = "1.6.0"
+CONSTRUCT_VERSION = "office-construct/1.4.0"
+TARGET_TAG = "v0.13.3"
 
 BLOCKER_CLOSURES = {
-    "model-a-fnd-01-formula-grammar": "spreadsheet prompts pin the exact Total formula",
-    "model-a-fnd-02-confirmation-language": "reply prompts pin the exact opening attendance sentence",
-    "model-a-fnd-03-presentation-bullet-exactness": "presentation prompts pin exact titles, bullets, and empty title slides",
-    "model-a-fnd-04-memory-separator": "prompt pins the complete semicolon-separated memory content",
-    "model-a-fnd-06-brief-sequence-undefined": "prompt defines every presentation ordering policy",
-    "model-a-fnd-09-required-mention-order": "prompt pins the exact confirmation field order",
-    "model-c-011-cal-add-priority-direction": "prompt defines highest priority as the largest numeric value",
-    "model-c-013-offsite-slide-title": "prompt pins the exact event title",
-    "model-c-015-deadline-commitment-language": "prompt pins the exact deadline commitment sentence",
-    "preference-title-grammar": "prompt gives the complete title construction rule",
+    "cal-add-calendar-feasibility-inert": (
+        "an infeasible superlative decoy makes the visible calendar causal"
+    ),
+    "preference-policy-answer-printed": (
+        "the selected memory values must be derived from bundles and policy"
+    ),
 }
 
 
@@ -71,16 +63,11 @@ def _canonical_text_sha256(path):
 
 
 def build_authorization():
-    reconciliation = load_reconciliation(RECONCILIATION_PATH, require_complete=False)
     failure = load_failure(FAILURE_PATH)
-    if (
-        reconciliation["status"] != "construct_gate_failed"
-        or failure["status"] != "construct_gate_failed"
-    ):
-        raise SuccessorAuthorizationError("2.1.2 must remain terminal before succession")
+    if failure["status"] != "construct_gate_failed":
+        raise SuccessorAuthorizationError("2.2.0 must remain terminal before succession")
     blocker_ids = sorted(
-        finding["finding_id"] for finding in reconciliation["findings"]
-        if finding["blocks_authorization"]
+        finding["blocker_id"] for finding in failure["confirmed_authorization_blockers"]
     )
     if blocker_ids != sorted(BLOCKER_CLOSURES):
         raise SuccessorAuthorizationError("authorized blocker set differs from terminal evidence")
@@ -89,10 +76,10 @@ def build_authorization():
         "status": "authorized_pre_outcome_successor_remediation",
         "authorized_on": "2026-08-07",
         "authorization_basis": (
-            "User explicitly instructed Codex to take in Model C, implement and fix "
-            "all validated issues, and move on when an issue was already fixed."
+            "User explicitly instructed Codex to perform a final deep architecture "
+            "audit, revise every change, fix validated gaps, and finalize the instrument."
         ),
-        "from_generator_version": "office-generators/2.1.2",
+        "from_generator_version": "office-generators/2.2.0",
         "to_generator_version": GENERATOR_VERSION,
         "seed_namespace": "office-generators/2.1.0",
         "protocol_version": PROTOCOL_VERSION,
@@ -107,8 +94,6 @@ def build_authorization():
         "estimand_or_claim_rule_changed": False,
         "automatic_family_removal_allowed": False,
         "automatic_followup_generator_allowed": False,
-        "terminal_reconciliation_path": str(RECONCILIATION_PATH.relative_to(ROOT)).replace("\\", "/"),
-        "terminal_reconciliation_sha256": _canonical_text_sha256(RECONCILIATION_PATH),
         "terminal_failure_path": str(FAILURE_PATH.relative_to(ROOT)).replace("\\", "/"),
         "terminal_failure_sha256": _canonical_text_sha256(FAILURE_PATH),
         "authorized_blocker_ids": blocker_ids,
@@ -117,7 +102,7 @@ def build_authorization():
 
 def validate_authorization(document):
     if document != build_authorization():
-        raise SuccessorAuthorizationError("2.2.0 successor authorization drifted")
+        raise SuccessorAuthorizationError("2.3.0 successor authorization drifted")
     return document
 
 
@@ -147,6 +132,12 @@ def build_closure():
         "typed_positive_workflows_exact": semantic.get("simulation", {}).get(
             "typed_positive_workflows_strict_successes"
         ) == 1056,
+        "cal_add_calendar_dependency_exact": semantic.get("simulation", {}).get(
+            "causal_dependency_passes_by_family", {}
+        ).get("cal_add") == 48,
+        "preference_policy_dependency_exact": semantic.get("simulation", {}).get(
+            "causal_dependency_passes_by_family", {}
+        ).get("preference_learning") == 48,
         "no_material_semantic_findings": all(
             semantic.get("finding_severity_counts", {}).get(level, 0) == 0
             for level in ("critical", "high", "medium")
@@ -158,7 +149,7 @@ def build_closure():
     if not all(checks.values()):
         failed = sorted(name for name, passed in checks.items() if not passed)
         raise SuccessorAuthorizationError(
-            "2.2.0 remediation evidence is incomplete: %s" % ", ".join(failed)
+            "2.3.0 remediation evidence is incomplete: %s" % ", ".join(failed)
         )
     return {
         "schema_version": CLOSURE_SCHEMA,
@@ -183,7 +174,7 @@ def build_closure():
 
 def validate_closure(document):
     if document != build_closure():
-        raise SuccessorAuthorizationError("2.2.0 remediation closure drifted")
+        raise SuccessorAuthorizationError("2.3.0 remediation closure drifted")
     return document
 
 

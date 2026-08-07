@@ -1,6 +1,6 @@
 """Final successor generators for the eleven synthetic office families.
 
-Version 2.2.0 is the protocol-1.5.0 successor to terminal 2.1.2. It retains the
+Version 2.3.0 is the protocol-1.6.0 successor to construct-failed 2.2.0. It retains the
 2.1.0 seed/entity namespace so unaffected public packets remain byte-stable,
 while repaired single-outcome prompt contracts receive new content hashes.
 48 genuine semantic shapes per family, explicit difficulty/action axes, and an
@@ -25,9 +25,9 @@ from .outcome_oracle_v2 import derive_outcome
 
 
 SUITE = "office-synthetic-v2"
-GENERATOR_VERSION = "office-generators/2.2.0"
+GENERATOR_VERSION = "office-generators/2.3.0"
 SEED_NAMESPACE = "office-generators/2.1.0"
-FAMILY_VERSION = "2.2.0"
+FAMILY_VERSION = "2.3.0"
 NEXT_SPLITS = (
     "development",
     "calibration",
@@ -539,11 +539,18 @@ def _cal_add(ctx):
     attendees = [
         ctx.entity("attendee", index) for index in range(ctx.axes["workload"])
     ]
-    locations = [ctx.entity("location", index, "location")["name"] for index in range(3)]
+    locations = [ctx.entity("location", index, "location")["name"] for index in range(4)]
     state = _base_state()
     date = ctx.date(4)
+    state["events"].append(_event(
+        "candidate-feasibility-blocker",
+        "Protected focus block",
+        date,
+        "08:30",
+        "09:00",
+    ))
     for index in range(ctx.axes["distractor_count"]):
-        before = 8 * 60 + index * 30
+        before = 6 * 60 + index * 30
         state["events"].append(_event(
             "adjacent-%d" % index,
             "Existing block %d" % (index + 1),
@@ -555,6 +562,8 @@ def _cal_add(ctx):
         {"id": "candidate-A", "start": 10 * 60, "duration": 45, "priority": 5},
         {"id": "candidate-B", "start": 11 * 60, "duration": 60, "priority": 9},
         {"id": "candidate-C", "start": 12 * 60 + 30, "duration": 30, "priority": 4},
+        # Best on every policy key, but deliberately blocked by the 08:30 event.
+        {"id": "candidate-D", "start": 8 * 60 + 30, "duration": 15, "priority": 99},
     ]
     for index, candidate in enumerate(candidates):
         candidate.update({
@@ -583,8 +592,10 @@ def _cal_add(ctx):
     end = _clock(selected["start"] + selected["duration"])
     attendee_text = " | ".join(item["email"] for item in attendees)
     prompt = (
-        "Inspect calendar date %s. Candidate requests: %s. Select one feasible request "
-        "using policy %s. Policy definitions: earliest_feasible selects the feasible "
+        "Inspect calendar date %s. Candidate requests: %s. A candidate is feasible "
+        "only when its complete interval does not overlap any existing event on that "
+        "date. Select one feasible request using policy %s. Policy definitions: "
+        "earliest_feasible selects the feasible "
         "request with the earliest start; highest_priority_feasible selects the "
         "feasible request with the largest numeric priority value; "
         "shortest_duration_feasible selects the feasible request with the shortest "
@@ -616,7 +627,7 @@ def _cal_add(ctx):
         },
     ]
     return prompt, [], state, effects, _difficulty(
-        1, 0, 1, 0, len(state["events"]) + 3, ctx.branch_count,
+        1, 0, 1, 0, len(state["events"]) + 4, ctx.branch_count,
     )
 
 
@@ -869,17 +880,13 @@ def _preference_learning(ctx):
         selected = max(bundles, key=lambda item: item["priority"])
     else:
         selected = max(bundles, key=lambda item: item["scope"])
-    optional = [
-        "weekday=Tuesday",
-        "sole_attendee=%s" % colleague["email"],
-    ]
     facts = [
         "subject=%s" % colleague["email"],
         "duration_minutes=%d" % selected["duration"],
         "earliest_start=%s" % selected["start"],
         "location=%s" % selected["location"],
         "title_prefix=%s" % selected["prefix"],
-    ] + optional[:max(0, ctx.axes["workload"] - 4)]
+    ]
     state = _base_state()
     state["memory"] = [
         "subject=%s status=expired distractor=%d ignore=true"
@@ -909,9 +916,14 @@ def _preference_learning(ctx):
             "id": "store",
             "prompt": (
                 "For subject %s, evaluate these preference bundles: %s. Select by "
-                "policy %s and save exactly one memory. Its complete content must be "
-                "the selected bundle's applicable facts in the displayed order, "
-                "separated only by semicolons: %s."
+                "policy %s. Policy definitions: most_recent selects the largest "
+                "timestamp_rank; highest_priority selects the largest priority; "
+                "most_specific_scope selects the largest scope_specificity. Apply only "
+                "the named policy. Save exactly one memory. Its complete content must "
+                "contain these fields in this exact order, separated only by "
+                "semicolons: subject, duration_minutes, earliest_start, location, "
+                "title_prefix. Copy subject from the subject above and copy the other "
+                "four values from the selected bundle. Do not include its id or ranks."
                 % (
                     colleague["email"],
                     " | ".join(
@@ -921,7 +933,7 @@ def _preference_learning(ctx):
                            item["duration"], item["start"], item["location"], item["prefix"])
                         for item in bundles
                     ),
-                    policy, "; ".join(facts),
+                    policy,
                 )
             ),
             "required_effects": [store_effect],
@@ -1069,7 +1081,7 @@ def validate_office_instance_v2(instance):
     validate_office_instance(instance)
     content = instance["content"]
     if content["generator_version"] != GENERATOR_VERSION:
-        raise ValueError("instance is not from office-generators/2.2.0")
+        raise ValueError("instance is not from office-generators/2.3.0")
     if content["family_version"] != FAMILY_VERSION:
         raise ValueError("unexpected v2 family version")
     if content["split"] not in NEXT_SPLITS:

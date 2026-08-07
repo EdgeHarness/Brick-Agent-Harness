@@ -1,4 +1,4 @@
-# Brick successor study: offline-qualified 2.2.0 candidate
+# Brick successor study: offline-qualified 2.3.0 candidate
 
 This document records the repaired offline instrument and its remaining gates.
 It does not authorize a model call or report a model result.
@@ -6,13 +6,19 @@ It does not authorize a model call or report a model result.
 ## Candidate and audit result
 
 - `office-generators/2.1.2` remains terminal with ten confirmed prompt/grader
-  blockers and `v0.13.1` permanently unissued. An explicit pre-outcome
-  authorization creates `office-generators/2.2.0` under protocol 1.5.0 and
-  target tag `v0.13.2`. It preserves the 2.1.0 seed namespace, 11 families,
-  220 retained clusters, and the claim rule. Full content hashes are rebound.
+  blockers and `v0.13.1` permanently unissued. Generator 2.2.0 closed those
+  wording defects and was tagged `v0.13.2`, but the final pre-calibration audit
+  found two construct blockers: calendar feasibility was inert in `cal_add`,
+  and `preference_learning` printed the policy-selected fact string. The tag is
+  immutable and retired. Explicit pre-outcome authorization creates
+  `office-generators/2.3.0` under protocol 1.6.0 and target tag `v0.13.3`. It
+  preserves the 2.1.0 seed namespace, 11 families, 220 retained clusters, and
+  the claim rule. Full content hashes are rebound.
 - The construct contract freezes three genuine decision policies per family.
   All 176 workload/distractor-matched triplets produce three distinct outcomes
-  with equal non-policy burden.
+  with equal non-policy burden. Every `cal_add` case contains an infeasible
+  policy-superlative decoy, and every preference case requires deriving the
+  selected bundle rather than copying a printed answer.
 - The leakage scanner passes. Executable lower bounds peak at 9 native and 12
   harness requests under the shared 18-call/6,144-token cap. The memory family
   requires 5 native versus 10 harness requests; this asymmetry is a mandatory
@@ -25,23 +31,25 @@ It does not authorize a model call or report a model result.
   record-order/distractor invariance, and reports no critical, high, or medium
   internal-validity finding. All ten previously reproduced prompt/grader
   contradictions now have explicit public wording and deterministic regression
-  coverage.
+  coverage. The two 2.2.0 construct failures also have complete 48-case
+  counterfactual coverage.
 - Grader conformance passes 528 positive baselines, exactly 4,332 targeted
   mutations, and 1,872 benign controls. Placeholder presentations and
   alternate-policy outcomes fail.
 
 Human and agent packet-review utilities remain advisory and outside
 authorization. Four reports and the terminal 2.1.2 failure remain byte-bound.
-The 2.2.0 remediation closure maps all ten blocker IDs to public wording and
-requires the regenerated manifest, semantic simulation, and grader conformance
-to pass. It records zero live model calls and no inspected effectiveness data.
+The immutable 2.2.0 failure records both final-audit blockers. The 2.3.0
+remediation closure binds their deterministic repairs and requires the
+regenerated manifest, semantic simulation, and grader conformance to pass. It
+records zero live model calls and no inspected effectiveness data.
 
 ## Statistics and evidence
 
-Protocol `1.5.0`, design `0.9.0`, construct contract
-`office-construct/1.3.0`, and grader `office-strict-grader/3.2.0` are active.
+Protocol `1.6.0`, design `0.10.0`, construct contract
+`office-construct/1.4.0`, and grader `office-strict-grader/3.2.0` are active.
 The successor authorization is bound before any live study cell or
-effectiveness result and permits no automatic 2.2.1 successor.
+effectiveness result and permits no automatic 2.3.1 successor.
 The machine-readable claim contract is authoritative: a directional claim
 requires an inclusive `abs(Delta) >= 0.12` and a two-sided 95% stratified
 cluster-bootstrap interval excluding zero in that direction. The exact
@@ -79,7 +87,7 @@ Do not start calibration yet. First commit the exact candidate, pass the
 required Linux Python matrix and native Windows clean-checkout reproduction,
 then issue and run the separately authorized score-masked 22-cell development
 shakeout. It must contain zero instrument-invalid cells. Only that pass permits
-the annotated `v0.13.2` tag and host-bound research authorization.
+the annotated `v0.13.3` tag and host-bound research authorization.
 
 ## Historical live gates
 
@@ -110,7 +118,7 @@ exact equality with its bound preflight before creating an evidence store or
 acquiring the machine lease. This closes stale-preflight reuse after any
 checkout, implementation, package, Ollama, model, or host drift.
 
-That former qualification evidence cannot authorize 2.2.0. The current
+That former qualification evidence cannot authorize 2.3.0. The current
 execution surface requires the successor remediation closure and a fresh exact-
 commit Linux/native/shakeout chain; it never treats the terminal reconciliation
 as a pass.
@@ -118,7 +126,7 @@ as a pass.
 Release verification recomputes an exact-key archive from canonical artifact
 bytes, proves every artifact equals its Git blob at the archived commit,
 cross-binds every phase and the archived authorization, requires
-`authorized_research` context, rechecks the annotated `v0.13.2` instrument tag,
+`authorized_research` context, rechecks the annotated `v0.13.3` instrument tag,
 and checks that annotated `v0.14.0` peels to the archived commit. Caller-supplied
 state, uncommitted files, or arbitrary digest maps cannot satisfy it.
 

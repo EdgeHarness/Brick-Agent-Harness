@@ -79,8 +79,8 @@ def test_successor_generation_is_deterministic_and_semantically_disjoint():
         "splits": list(NEXT_SPLITS),
         "instances": 528,
         "structures": 528,
-        "entity_keys": 1800,
-        "entity_surfaces": 3120,
+        "entity_keys": 1848,
+        "entity_surfaces": 3168,
     }
 
 

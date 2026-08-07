@@ -50,13 +50,13 @@ def build_readiness_report():
         "host_and_runtime_fingerprints": False,
         "advisory_audits_complete": fable["unresolved_report_count"] == 0,
         "successor_remediation_closure_passed": closure["status"] == "passed",
-        "annotated_v0_13_2_candidate_tag": False,
+        "annotated_v0_13_3_candidate_tag": False,
         "issued_program_authorization": False,
     }
     return {
         "schema_version": READINESS_SCHEMA,
         "program_identity": "Brick successor controlled comparison",
-        "current_activity": "office-generators/2.2.0 offline qualification",
+        "current_activity": "office-generators/2.3.0 offline qualification",
         "benchmark_running_now": False,
         "experiment_running_now": False,
         "live_model_calls": 0,
@@ -78,10 +78,10 @@ def build_readiness_report():
             "confirmed_authorization_blocker_count"
         ],
         "next_transition": (
-            "commit the exact 2.2.0 candidate, pass Linux and native clean-checkout reproduction, then run the separately authorized 22-cell score-masked shakeout"
+            "commit the exact 2.3.0 candidate, pass Linux and native clean-checkout reproduction, then run the separately authorized 22-cell score-masked shakeout"
         ),
         "later_transition": (
-            "only after the shakeout passes may the annotated v0.13.2 tag and host-bound research authorization be issued"
+            "only after the shakeout passes may the annotated v0.13.3 tag and host-bound research authorization be issued"
         ),
     }
 

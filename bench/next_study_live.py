@@ -2,7 +2,7 @@
 
 This module does not weaken authorization.  Development calls require a
 clean-commit, host-bound shakeout authorization.  Research phases require the
-replacement v0.13.2 program authorization. Console output never contains task
+replacement v0.13.3 program authorization. Console output never contains task
 scores; all evidence is marker-last and resumable.
 """
 
@@ -119,7 +119,7 @@ _LIVE_IMPLEMENTATION_PATHS = (
     "bench/next_study_live.py", "bench/next_study_runtime.py",
     "bench/next_study_program.py", "bench/next_study_schedule.py",
     "bench/next_study_fable_reconciliation.py",
-    "bench/next_study_successor.py",
+    "bench/next_study_successor.py", "bench/next_study_220_failure.py",
     "bench/next_study_protocol.json",
 )
 _AUTHORIZATION_ARTIFACT_PATHS = {
@@ -808,7 +808,7 @@ def build_research_authorization(
     issued_at, issuer, primary_mask_key_commitment_sha256,
     github_session=None,
 ):
-    """Build the marker-last v0.13.2 authorization after all external gates."""
+    """Build the marker-last v0.13.3 authorization after all external gates."""
 
     validate_native_preflight(preflight)
     validate_clean_checkout_reproduction(clean_checkout, preflight)
@@ -855,9 +855,9 @@ def build_research_authorization(
     )
     if set(artifact_digests) != REQUIRED_ARTIFACT_DIGESTS:
         raise NextStudyLiveError("authorization artifact inventory drifted")
-    tag_object_sha = _annotated_tag_binding("v0.13.2", preflight["commit_sha"])
+    tag_object_sha = _annotated_tag_binding("v0.13.3", preflight["commit_sha"])
     return build_authorization(
-        tag="v0.13.2", tag_object_sha=tag_object_sha,
+        tag="v0.13.3", tag_object_sha=tag_object_sha,
         commit_sha=preflight["commit_sha"], artifact_digests=artifact_digests,
         host_fingerprint=preflight["host_fingerprint"],
         runtime_fingerprint=preflight["runtime_fingerprint"],
@@ -1357,8 +1357,8 @@ def build_shakeout_decision(store, schedule, authorization, decided_at):
         "condition_scores_read": False,
         "strict_successes_reported": False,
         "next_transition": (
-            "eligible_to_freeze_v0.13.2_candidate" if passed
-            else "terminate_office_generators_2.2.0_candidate"
+            "eligible_to_freeze_v0.13.3_candidate" if passed
+            else "terminate_office_generators_2.3.0_candidate"
         ),
         "decided_at": decided_at,
     }
@@ -1398,8 +1398,8 @@ def validate_shakeout_decision(document):
             and document["missing_cells"] == 0
         )
         or document["next_transition"] != (
-            "eligible_to_freeze_v0.13.2_candidate" if passed
-            else "terminate_office_generators_2.2.0_candidate"
+            "eligible_to_freeze_v0.13.3_candidate" if passed
+            else "terminate_office_generators_2.3.0_candidate"
         )
     ):
         raise NextStudyLiveError("shakeout decision state is inconsistent")

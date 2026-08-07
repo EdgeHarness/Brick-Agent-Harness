@@ -1,4 +1,4 @@
-"""Write or verify the offline office-generators/2.2.0 artifacts.
+"""Write or verify the offline office-generators/2.3.0 artifacts.
 
 This command performs no model calls.  It regenerates 528 cases, validates the
 independent prompt oracle, checks all old/new identity-reuse channels, and
@@ -509,7 +509,7 @@ def verify(directory=DEFAULT_DIRECTORY, evidence_directory=EVIDENCE_DIRECTORY):
         actual = load_canonical_json(path)
         validate_manifest(actual)
         if canonical_file_bytes(actual) != canonical_file_bytes(expected):
-            raise ValueError("%s does not replay from office-generators/2.2.0" % path)
+            raise ValueError("%s does not replay from office-generators/2.3.0" % path)
         actual_manifests.append(actual)
     actual_lock = load_canonical_json(directory / LOCK_NAME)
     if canonical_file_bytes(actual_lock) != canonical_file_bytes(expected_lock):
