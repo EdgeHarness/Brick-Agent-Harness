@@ -1,4 +1,4 @@
-"""Independent prompt-to-outcome oracle for office-generators/2.1.2.
+"""Independent prompt-to-outcome oracle for office-generators/2.2.0.
 
 The public entry point accepts only prompt text, subepisode prompt text,
 initial state, the task family, and the frozen date.  It cannot consume a
@@ -13,7 +13,7 @@ import datetime
 import re
 
 
-ORACLE_VERSION = "office-prompt-oracle/2.1.0"
+ORACLE_VERSION = "office-prompt-oracle/2.2.0"
 
 
 class OracleInputError(ValueError):
@@ -58,7 +58,8 @@ def _pptx_basic(prompt, _state, _today):
     match = _search(
         r"Create presentation ([a-z0-9_.-]+\.pptx) from these approved section "
         r"records: (.*?)\. Order section slides by policy "
-        r"(brief_sequence|risk_descending|owner_alphabetical)\. Use exactly (\d+) "
+        r"(brief_sequence|risk_descending|owner_alphabetical)\.[\s\S]*?Use "
+        r"exactly (\d+) "
         r"slides: one title slide named '([^']+)'",
         prompt,
         "presentation contract",
@@ -278,8 +279,8 @@ def _cal_add(prompt, state, _today):
     match = _search(
         r"Inspect calendar date (\d{4}-\d{2}-\d{2})\. Candidate requests: (.*?)\. "
         r"Select one feasible request using policy "
-        r"(earliest_feasible|highest_priority_feasible|shortest_duration_feasible) "
-        r"and add exactly one event[\s\S]*?attendees: (.*?)\. Preserve every existing event\.",
+        r"(earliest_feasible|highest_priority_feasible|shortest_duration_feasible)\."
+        r"[\s\S]*?Add exactly one event[\s\S]*?attendees: (.*?)\. Preserve every existing event\.",
         prompt,
         "calendar-add contract",
     )
@@ -389,7 +390,7 @@ def _cal_brief(prompt, state, _today):
         r"message to (.*?)\. Include, in policy "
         r"(chronological|severity_descending|owner_alphabetical) order, only event titles "
         r"beginning 'Priority:' and each start time,[\s\S]*?Then send exactly "
-        r"one separate chat message to (.*?) containing '(\d{4}-\d{2}-\d{2})' "
+        r"one separate chat message to (.*?) containing,[\s\S]*?'(\d{4}-\d{2}-\d{2})' "
         r"and 'priority-count=(\d+)'\.",
         prompt,
         "calendar-brief contract",
@@ -508,7 +509,7 @@ def _preference_learning(_prompt, _state, _today, subepisode_prompts):
     store = _search(
         r"^For subject ([^,]+), evaluate these preference bundles: (.*?)\. Select by "
         r"policy (most_recent|highest_priority|most_specific_scope) and save exactly "
-        r"one memory containing only the selected bundle's applicable facts: (.*?)\.$",
+        r"one memory\.[\s\S]*?separated only by semicolons: (.*?)\.$",
         subepisode_prompts[0],
         "stored preferences",
     )
@@ -539,7 +540,7 @@ def _preference_learning(_prompt, _state, _today, subepisode_prompts):
         selected = max(bundles, key=lambda item: item["priority"])
     else:
         selected = max(bundles, key=lambda item: item["scope"])
-    facts = _pipe(fact_text)
+    facts = [value.strip() for value in fact_text.split(";") if value.strip()]
     fact_map = dict(value.split("=", 1) for value in facts)
     if (
         fact_map.get("subject") != subject

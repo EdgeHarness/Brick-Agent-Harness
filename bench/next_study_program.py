@@ -48,6 +48,7 @@ REQUIRED_ARTIFACT_DIGESTS = frozenset((
     "clean_checkout_reproduction", "linux_ci_reproduction",
     "runtime_implementation", "schedule_implementation",
     "descriptive_selection", "fable_reconciliation",
+    "successor_authorization", "successor_closure",
 ))
 PHASE_LOGICAL_CELLS = {
     "calibration": 352, "sentinel": 88, "primary": 880,
@@ -148,8 +149,8 @@ def validate_authorization(document):
     validate_execution_context(document["execution_context"])
     if document["protocol_version"] != PROTOCOL_VERSION:
         raise NextStudyProgramError("program authorization protocol drifted")
-    if document["tag"] != "v0.13.1":
-        raise NextStudyProgramError("replacement instrument authorization must bind v0.13.1")
+    if document["tag"] != "v0.13.2":
+        raise NextStudyProgramError("replacement instrument authorization must bind v0.13.2")
     if (
         not isinstance(document["tag_object_sha"], str)
         or re.fullmatch(r"[0-9a-f]{40}", document["tag_object_sha"]) is None

@@ -62,11 +62,11 @@ def test_release_archive_is_semantic_commit_bound_and_tag_verified(tmp_path):
     (tmp_path / "instrument.txt").write_text("qualified\n", encoding="ascii")
     instrument_commit = _commit(tmp_path, "instrument")
     subprocess.run(
-        ["git", "tag", "-a", "v0.13.1", "-m", "instrument"],
+        ["git", "tag", "-a", "v0.13.2", "-m", "instrument"],
         cwd=tmp_path, check=True,
     )
     instrument_tag = subprocess.run(
-        ["git", "rev-parse", "refs/tags/v0.13.1"], cwd=tmp_path,
+        ["git", "rev-parse", "refs/tags/v0.13.2"], cwd=tmp_path,
         check=True, capture_output=True, text=True,
     ).stdout.strip()
 
@@ -114,7 +114,7 @@ def test_release_archive_is_semantic_commit_bound_and_tag_verified(tmp_path):
         canonical_json_bytes(manifest_lock, allow_float=False, newline=True)
     )
     authorization = build_authorization(
-        tag="v0.13.1", tag_object_sha=instrument_tag,
+        tag="v0.13.2", tag_object_sha=instrument_tag,
         commit_sha=instrument_commit, artifact_digests=artifact_digests,
         host_fingerprint=build_fingerprint(
             HOST_FINGERPRINT_SCHEMA, {"host": "test"}

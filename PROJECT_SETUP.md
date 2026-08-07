@@ -38,22 +38,19 @@ no condition-level or confirmatory effect estimate exists.
 
 A separate offline successor-design contract records the verified causes and
 necessary controls without reopening S7. The `v0.13.0` candidate and generator
-2.1.0 are invalidated before calibration; zero live study cells ran. The
-replacement implements 528 `office-generators/2.1.2` cases under a bound
-pre-outcome amendment while deliberately retaining the 2.1.0 seed namespace.
-Relative to 2.1.1, 240 visible semantic surfaces remain unchanged and 288 cases
-in six repaired families change; all full content hashes are regenerated. It binds 176
-outcome-distinct decision-policy triplets, independent public outcomes,
-`office-strict-grader/3.2.0`, protocol `1.4.0`, LOFO/exact-uniform bootstrap
-statistics, hardened masking/release checks, and an at-most-222-cell descriptive
-matrix. Human-review utilities are advisory only. Four advisory reports are
-complete. Ten defect classes were independently reproduced as
-public-prompt/live-grader contradictions, so 2.1.2 is
-`construct_gate_failed`. Current-source execution, the 22-cell shakeout,
-calibration, and target tag `v0.13.1` are forbidden under protocol 1.4.0. The
-bound amendment permits neither automatic 2.1.3 nor family removal; future
-repair requires an explicitly authorized new protocol and independently
-versioned generator.
+2.1.0 are invalidated before calibration; zero live study cells ran. The 2.1.2
+replacement then failed its construct gate on ten independently reproduced
+public-prompt/live-grader contradictions; it remains immutable and `v0.13.1`
+is unissued. The user's explicit pre-outcome directive authorizes the separate
+`office-generators/2.2.0` successor under protocol 1.5.0 and target tag
+`v0.13.2`. It preserves the 2.1.0 seed namespace and unchanged 11-family,
+220-cluster estimand while making all ten strict output contracts public. Its
+regenerated 528 cases and outcomes, 176 policy triplets, 1,056 typed workflows,
+4,332 grader mutations, 1,872 benign controls, semantic report, rehearsal, and
+remediation closure pass offline. Human-review utilities remain advisory. Live
+execution stays disabled until the exact committed tree passes Linux and native
+Windows clean-checkout reproduction and a separately authorized score-masked
+22-cell development shakeout.
 The operational specification is `bench/NEXT_STUDY_IMPLEMENTATION.md`.
 
 Release identity is authoritative in annotated Git tags and their bound
@@ -119,7 +116,8 @@ with Snapdragon X Elite, 32 GB RAM, and native Windows 11 ARM64.
 | D0/S7 | not released | Terminal score-masked development calibration under protocol 1.0.2. | The direction-blind floor/ceiling audit failed, so no freeze or efficacy contrast exists. |
 | Invalidated successor | `v0.13.0` | Generator 2.1.0 candidate. | Invalidated before calibration; no live study cells ran. |
 | Failed replacement instrument | `v0.13.1` unissued | Generator 2.1.2, grader 3.2.0, protocol 1.4.0. | Four advisory reports are fully reconciled; ten deterministic public-prompt/live-grader blockers terminate the candidate before the shakeout or calibration. |
-| Completed successor study | `v0.14.0` unreachable under 1.4.0 | Calibration, sentinel, sealed primary analysis, bounded descriptives, evidence-bound report, and commit-bound release archive. | Requires a future explicitly authorized protocol and independently versioned instrument. |
+| Qualified successor instrument | `v0.13.2` target | Generator 2.2.0, grader 3.2.0, protocol 1.5.0. | Offline closure passes; exact-commit Linux/native reproduction and a zero-invalid 22-cell shakeout remain mandatory before tagging and research authorization. |
+| Completed successor study | `v0.14.0` target | Calibration, sentinel, sealed primary analysis, bounded descriptives, evidence-bound report, and commit-bound release archive. | Requires an authorized `v0.13.2` fingerprint and every sealed live phase to pass. |
 
 ## F0/Q0 — feasibility and quarantine
 

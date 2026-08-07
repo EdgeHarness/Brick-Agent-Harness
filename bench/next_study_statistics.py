@@ -26,7 +26,7 @@ from .next_study_claim import load_claim_contract
 ROOT = Path(__file__).resolve().parents[1]
 PROTOCOL_PATH = ROOT / "bench" / "next_study_protocol.json"
 PROTOCOL_SCHEMA = "brick.next-study.protocol/2"
-PROTOCOL_VERSION = "1.4.0"
+PROTOCOL_VERSION = "1.5.0"
 CONDITIONS = ("native_tools", "harness_full")
 GRADE_LEDGER_SCHEMA = "brick.next-study.grade-ledger/2"
 PRIMARY_ANALYSIS_SCHEMA = "brick.next-study.primary-analysis/3"
@@ -288,7 +288,7 @@ def build_protocol():
 
 def validate_protocol(protocol):
     if protocol != build_protocol():
-        raise NextStudyStatisticsError("next-study protocol differs from frozen 1.4.0")
+        raise NextStudyStatisticsError("next-study protocol differs from frozen 1.5.0")
     power = protocol["power"]
     variance_bound = 0.375
     standard_error = math.sqrt(variance_bound / 220)

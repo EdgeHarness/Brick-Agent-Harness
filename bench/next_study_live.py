@@ -2,7 +2,7 @@
 
 This module does not weaken authorization.  Development calls require a
 clean-commit, host-bound shakeout authorization.  Research phases require the
-replacement v0.13.1 program authorization. Console output never contains task
+replacement v0.13.2 program authorization. Console output never contains task
 scores; all evidence is marker-last and resumable.
 """
 
@@ -34,7 +34,11 @@ from bench.next_study_program import (
 )
 from bench.next_study_fable_reconciliation import (
     DEFAULT_PATH as FABLE_RECONCILIATION_PATH,
-    load_reconciliation,
+)
+from bench.next_study_successor import (
+    AUTHORIZATION_PATH as SUCCESSOR_AUTHORIZATION_PATH,
+    CLOSURE_PATH as SUCCESSOR_CLOSURE_PATH,
+    load_closure,
 )
 from bench.next_study_review import review_packet
 from bench.next_study_report import build_study_report
@@ -111,6 +115,7 @@ _LIVE_IMPLEMENTATION_PATHS = (
     "bench/next_study_live.py", "bench/next_study_runtime.py",
     "bench/next_study_program.py", "bench/next_study_schedule.py",
     "bench/next_study_fable_reconciliation.py",
+    "bench/next_study_successor.py",
     "bench/next_study_protocol.json",
 )
 _AUTHORIZATION_ARTIFACT_PATHS = {
@@ -128,6 +133,8 @@ _AUTHORIZATION_ARTIFACT_PATHS = {
     "schedule_implementation": "bench/next_study_schedule.py",
     "descriptive_selection": "bench/next_study_descriptive_selection.json",
     "fable_reconciliation": FABLE_RECONCILIATION_PATH,
+    "successor_authorization": SUCCESSOR_AUTHORIZATION_PATH,
+    "successor_closure": SUCCESSOR_CLOSURE_PATH,
 }
 
 
@@ -746,12 +753,12 @@ def build_research_authorization(
     issued_at, issuer, primary_mask_key_commitment_sha256,
     github_session=None,
 ):
-    """Build the marker-last v0.13.1 authorization after all external gates."""
+    """Build the marker-last v0.13.2 authorization after all external gates."""
 
     validate_native_preflight(preflight)
     validate_clean_checkout_reproduction(clean_checkout, preflight)
     verify_linux_ci_reproduction(linux_ci, preflight, session=github_session)
-    load_reconciliation(ROOT / FABLE_RECONCILIATION_PATH, require_complete=True)
+    load_closure(ROOT / SUCCESSOR_CLOSURE_PATH)
     validate_shakeout_authorization(shakeout_authorization)
     validate_shakeout_decision(shakeout_decision)
     if (
@@ -793,9 +800,9 @@ def build_research_authorization(
     )
     if set(artifact_digests) != REQUIRED_ARTIFACT_DIGESTS:
         raise NextStudyLiveError("authorization artifact inventory drifted")
-    tag_object_sha = _annotated_tag_binding("v0.13.1", preflight["commit_sha"])
+    tag_object_sha = _annotated_tag_binding("v0.13.2", preflight["commit_sha"])
     return build_authorization(
-        tag="v0.13.1", tag_object_sha=tag_object_sha,
+        tag="v0.13.2", tag_object_sha=tag_object_sha,
         commit_sha=preflight["commit_sha"], artifact_digests=artifact_digests,
         host_fingerprint=preflight["host_fingerprint"],
         runtime_fingerprint=preflight["runtime_fingerprint"],
@@ -1294,8 +1301,8 @@ def build_shakeout_decision(store, schedule, authorization, decided_at):
         "condition_scores_read": False,
         "strict_successes_reported": False,
         "next_transition": (
-            "eligible_to_freeze_v0.13.1_candidate" if passed
-            else "terminate_office_generators_2.1.1_candidate"
+            "eligible_to_freeze_v0.13.2_candidate" if passed
+            else "terminate_office_generators_2.2.0_candidate"
         ),
         "decided_at": decided_at,
     }
@@ -1335,8 +1342,8 @@ def validate_shakeout_decision(document):
             and document["missing_cells"] == 0
         )
         or document["next_transition"] != (
-            "eligible_to_freeze_v0.13.1_candidate" if passed
-            else "terminate_office_generators_2.1.1_candidate"
+            "eligible_to_freeze_v0.13.2_candidate" if passed
+            else "terminate_office_generators_2.2.0_candidate"
         )
     ):
         raise NextStudyLiveError("shakeout decision state is inconsistent")

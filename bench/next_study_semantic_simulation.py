@@ -45,6 +45,9 @@ MANIFEST_DIRECTORY = ROOT / "bench" / "manifests" / "office-v2"
 DEFAULT_OUTPUT = (
     ROOT / "evidence" / "next-study" / "office-v2-semantic-simulation.json"
 )
+RENDERED_OUTPUT = (
+    ROOT / "evidence" / "next-study" / "semantic-validation-report" / "artifact.json"
+)
 SCHEMA_VERSION = "brick.next-study.semantic-simulation/1"
 _SPLITS = (
     "development",
@@ -746,6 +749,55 @@ def validate_report(report):
     return report
 
 
+def _rewrite_rendered_strings(value):
+    if isinstance(value, str):
+        return value.replace("office-generators/2.1.2", GENERATOR_VERSION).replace(
+            "generator `2.1.2`", "generator `2.2.0`"
+        ).replace("`v0.13.1`", "`v0.13.2`")
+    if isinstance(value, list):
+        return [_rewrite_rendered_strings(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _rewrite_rendered_strings(item) for key, item in value.items()
+        }
+    return value
+
+
+def write_rendered_report(report, path=RENDERED_OUTPUT):
+    """Rebind the human-readable semantic report to the current frozen suite."""
+
+    rendered = _rewrite_rendered_strings(load_canonical_json(path))
+    profiles = [
+        {
+            "family": family,
+            "decision_sensitive_cells": values["distinct_policy_outcomes"],
+            "matched_cells": values["matched_workload_distractor_cells"],
+            "classification": (
+                "decision-rule sensitive"
+                if values["all_three_policies_change_outcome"]
+                else "not decision-rule sensitive"
+            ),
+        }
+        for family, values in sorted(report["constraint_profile_sensitivity"].items())
+    ]
+    summary = rendered["snapshot"]["datasets"]["summary"][0]
+    summary.update({
+        "typed_workflows": report["simulation"][
+            "typed_positive_workflows_strict_successes"
+        ],
+        "high_findings": report["finding_severity_counts"].get("high", 0),
+        "memory_failures": report["simulation"]["memory_use_dependency_failures"],
+        "nominal_families": sum(
+            item["classification"] != "decision-rule sensitive"
+            for item in profiles
+        ),
+        "families_total": len(profiles),
+    })
+    rendered["snapshot"]["datasets"]["profile_sensitivity"] = profiles
+    replace_canonical_json(path, rendered)
+    return rendered
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Run the model-free successor semantic-validity simulation."
@@ -762,6 +814,7 @@ def main(argv=None):
         report = audit_all()
         if args.write:
             replace_canonical_json(args.output, report)
+            write_rendered_report(report)
     print(json.dumps({
         "status": report["status"],
         "case_count": report["scope"]["case_count"],
@@ -783,4 +836,5 @@ __all__ = [
     "SemanticSimulationError",
     "audit_all",
     "validate_report",
+    "write_rendered_report",
 ]

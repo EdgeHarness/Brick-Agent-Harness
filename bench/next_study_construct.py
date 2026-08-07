@@ -1,15 +1,15 @@
-"""Frozen construct contract for office-generators/2.1.2."""
+"""Frozen construct contract for office-generators/2.2.0."""
 
 from pathlib import Path
 
 from domains.office_demo.generators_v2 import FAMILIES, GENERATOR_VERSION
-from harness.instances import load_canonical_json
+from harness.instances import load_canonical_json, replace_canonical_json
 
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = ROOT / "bench" / "next_study_construct_contract.json"
 SCHEMA_VERSION = "brick.next-study.construct-contract/1"
-VERSION = "office-construct/1.2.0"
+VERSION = "office-construct/1.3.0"
 
 POLICIES = {
     "pptx_basic": ["brief_sequence", "risk_descending", "owner_alphabetical"],
@@ -60,10 +60,10 @@ def build_contract():
         },
         "termination": {
             "this_is_final_remediation_version": True,
-            "pre_outcome_amendment_from": "office-generators/2.1.1",
+            "explicit_successor_authorization_from": "office-generators/2.1.2",
             "unresolved_deterministic_construct_blocker": "construct_gate_failed",
             "automatic_family_removal_allowed": False,
-            "automatic_2_1_3_allowed": False,
+            "automatic_2_2_1_allowed": False,
         },
     }
 
@@ -78,7 +78,12 @@ def load_contract(path=CONTRACT_PATH):
     return validate_contract(load_canonical_json(path))
 
 
+def write_contract(path=CONTRACT_PATH):
+    return replace_canonical_json(path, validate_contract(build_contract()))
+
+
 __all__ = [
     "CONTRACT_PATH", "POLICIES", "SCHEMA_VERSION", "VERSION",
     "ConstructContractError", "build_contract", "load_contract", "validate_contract",
+    "write_contract",
 ]

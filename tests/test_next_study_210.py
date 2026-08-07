@@ -30,7 +30,7 @@ def test_final_construct_claim_and_rehearsal_contracts_are_exact(tmp_path):
     rendered = load_canonical_json(
         Path("evidence/next-study/semantic-validation-report/artifact.json")
     )
-    assert construct["generator_version"] == "office-generators/2.1.2"
+    assert construct["generator_version"] == "office-generators/2.2.0"
     assert construct["matched_triplets"] == 176
     assert len(construct["policies"]) == 11
     assert claim["threshold_inclusive"] is True
@@ -64,7 +64,7 @@ def test_final_construct_claim_and_rehearsal_contracts_are_exact(tmp_path):
 
 def _authorization():
     return build_authorization(
-        tag="v0.13.1", tag_object_sha="9" * 40, commit_sha="a" * 40,
+        tag="v0.13.2", tag_object_sha="9" * 40, commit_sha="a" * 40,
         artifact_digests={name: "b" * 64 for name in REQUIRED_ARTIFACT_DIGESTS},
         host_fingerprint=build_fingerprint(HOST_FINGERPRINT_SCHEMA, {"host": "test"}),
         runtime_fingerprint=build_fingerprint(RUNTIME_FINGERPRINT_SCHEMA, {"runtime": "test"}),

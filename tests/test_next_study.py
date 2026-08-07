@@ -77,9 +77,9 @@ def test_retired_suite_grader_mutation_audit_replays_all_applicable_checks():
 
 def test_next_study_design_is_exact_counted_and_fail_closed():
     design = load_design()
-    assert design["status"] == "construct_gate_failed"
-    assert design["version"] == "0.8.2"
-    assert design["fresh_suite"]["generator_version"] == "office-generators/2.1.2"
+    assert design["status"] == "offline_qualified_pending_native_ci_and_shakeout"
+    assert design["version"] == "0.9.0"
+    assert design["fresh_suite"]["generator_version"] == "office-generators/2.2.0"
     assert design["fresh_suite"]["seed_namespace"] == "office-generators/2.1.0"
     assert design["fresh_suite"]["total_cases"] == 528
     assert design["calibration"]["combined_outcomes_per_family"] == 32
@@ -103,7 +103,7 @@ def test_next_study_design_is_exact_counted_and_fail_closed():
         "linux_ci_reproduction_complete": False,
         "native_windows_clean_checkout_complete": False,
         "power_and_cluster_analysis_frozen": True,
-        "semantic_internal_validity_complete": False,
+        "semantic_internal_validity_complete": True,
         "development_shakeout_complete": False,
         "scheduler_implementation_complete": True,
         "evidence_derived_attempt_extractor_complete": True,

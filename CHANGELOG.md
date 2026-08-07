@@ -4,6 +4,21 @@
 
 ### Strengthened successor program
 
+- Preserved generator 2.1.2 and `v0.13.1` as terminal, unissued construct-gate
+  history after four advisory audits produced ten deterministic prompt/grader
+  blocker classes. Added an explicit pre-outcome successor authorization for
+  `office-generators/2.2.0`, protocol 1.5.0, construct contract 1.3.0, design
+  0.9.0, and target tag `v0.13.2`; the estimand, 11 families, 220 clusters,
+  claim rule, and 2.1.0 seed namespace remain unchanged.
+- Made the exact spreadsheet formula, attendance sentence, presentation title
+  and bullet structure, preference-memory serialization and event-title grammar,
+  policy directions, email mention order, offsite title, and reminder deadline
+  sentence public in every affected task. Regenerated all 528 cases and their
+  independent outcomes, schedules, semantic evidence, grader conformance, and
+  model-free rehearsal. The bound 2.2.0 remediation closure passes all ten
+  blocker mappings with zero live model calls and no inspected effectiveness
+  data.
+
 - Permanently retired `office-generators/2.0.1` and implemented the final
   split-neutral `2.1.0` remediation with 528 cases, 176 outcome-distinct policy
   triplets, visible initial memory, leakage scanning, and executable
@@ -46,9 +61,9 @@
   collector derives evidence from the GitHub Actions run and attempt-specific
   job APIs for the Python 3.9-3.13 Ubuntu matrix, and authorization refetches
   the run before accepting it. A Windows-only authorization is impossible.
-- `v0.12.0` remains permanently unissued. Future targets are `v0.13.0` for an
-  authorized instrument, `v0.14.0` for a completed study, and `v0.15.0` for the
-  separately developed Brix demo.
+- `v0.12.0`, `v0.13.0`, and `v0.13.1` remain permanently unissued. The current
+  instrument target is `v0.13.2`, followed by `v0.14.0` for a completed study
+  and `v0.15.0` for the separately developed Brix demo.
 
 All notable changes to this repository are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions use

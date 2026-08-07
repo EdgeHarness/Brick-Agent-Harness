@@ -14,6 +14,7 @@ from . import generate_next_study
 from .next_study_contract import load_design
 from .next_study_fable_reconciliation import load_reconciliation
 from .next_study_construct_failure import load_failure
+from .next_study_successor import load_closure
 from .next_study_rehearsal import DEFAULT_OUTPUT as REHEARSAL_PATH
 from .next_study_schedule import verify_descriptive_selection
 from .next_study_statistics import load_protocol
@@ -39,6 +40,7 @@ def build_readiness_report():
     rehearsal = load_canonical_json(REHEARSAL_PATH)
     fable = load_reconciliation()
     failure = load_failure()
+    closure = load_closure()
     external_gates = {
         "score_masked_22_cell_development_shakeout": False,
         "native_windows_clean_checkout_reproduction": False,
@@ -47,14 +49,14 @@ def build_readiness_report():
         "pinned_2b_4b_9b_model_digests": False,
         "host_and_runtime_fingerprints": False,
         "advisory_audits_complete": fable["unresolved_report_count"] == 0,
-        "construct_gate_passed": fable["authorization_gate_passed"],
-        "annotated_v0_13_1_candidate_tag": False,
+        "successor_remediation_closure_passed": closure["status"] == "passed",
+        "annotated_v0_13_2_candidate_tag": False,
         "issued_program_authorization": False,
     }
     return {
         "schema_version": READINESS_SCHEMA,
         "program_identity": "Brick successor controlled comparison",
-        "current_activity": "office-generators/2.1.2 construct-gate termination",
+        "current_activity": "office-generators/2.2.0 offline qualification",
         "benchmark_running_now": False,
         "experiment_running_now": False,
         "live_model_calls": 0,
@@ -70,15 +72,16 @@ def build_readiness_report():
         "authorization_buildable": all(external_gates.values()),
         "model_free_rehearsal_passed": rehearsal.get("status") == "passed",
         "human_review_authorization_gate": False,
-        "construct_gate_status": failure["status"],
-        "confirmed_authorization_blocker_count": failure[
+        "construct_gate_status": closure["status"],
+        "historical_2_1_2_construct_gate_status": failure["status"],
+        "historical_2_1_2_authorization_blocker_count": failure[
             "confirmed_authorization_blocker_count"
         ],
         "next_transition": (
-            "stop the v0.13.1 candidate; do not run the shakeout or calibration under protocol 1.4.0"
+            "commit the exact 2.2.0 candidate, pass Linux and native clean-checkout reproduction, then run the separately authorized 22-cell score-masked shakeout"
         ),
         "later_transition": (
-            "only an explicitly authorized new protocol and independently versioned generator may remediate the confirmed blockers"
+            "only after the shakeout passes may the annotated v0.13.2 tag and host-bound research authorization be issued"
         ),
     }
 

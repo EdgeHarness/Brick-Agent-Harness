@@ -4,9 +4,9 @@ Status date: 2026-08-04; active supersession recorded 2026-08-05. This note
 records evidence used to design the successor and retains historical proposals.
 It is not a preregistration, execution authorization, benchmark result, or
 retained-data release. Where this note requires human review or names generator
-2.1.0/design 0.5.0, that text is superseded by protocol 1.4.0 and the
-`office-generators/2.1.2` replacement contract and its bound pre-outcome
-amendment. Human and agent packet reviews
+2.1.0/design 0.5.0, that text is superseded by protocol 1.5.0 and the
+`office-generators/2.2.0` successor contract and its explicit pre-outcome
+authorization. Human and agent packet reviews
 are advisory only; authorization instead binds deterministic public-outcome,
 semantic-runner, mutation, rehearsal, CI, native, and shakeout gates. Live and
 retained execution remain disabled in `next_study_design.json`.
@@ -153,8 +153,9 @@ does not close independent-oracle or prompt-validity gates for a new suite.
 ## Fail-closed successor architecture
 
 The historical design below proposed version 0.5.0 and generator 2.1.0. The
-terminal machine-readable contract is design 0.8.2 with generator 2.1.2 and the
-intentionally preserved 2.1.0 seed namespace. The allocation remains
+current machine-readable contract is design 0.9.0 with generator 2.2.0 and the
+intentionally preserved 2.1.0 seed namespace. Generator 2.1.2 and design 0.8.2
+remain terminal historical evidence. The allocation remains
 across 11 families:
 
 | Split | Cases per family | Total cases |
@@ -187,13 +188,16 @@ Before any model call, the design requires versioned artifacts for the
 generator, public-packet outcome compiler, construct and semantic simulation,
 grader mutation/conformance matrix, frozen statistics, masking/release
 rehearsal, closed research catalog, exact-commit Linux and native reproduction,
-and an explicit phase-specific authorization. The four advisory
-reports are fully mapped to deterministic reproductions or documented
-refutations. Ten blocker classes survive that process, so the candidate is
-not frozen and packet-review utilities have not supplied outcomes or set the
+and an explicit phase-specific authorization. The four advisory reports are
+fully mapped to deterministic reproductions or documented refutations. Ten
+blocker classes terminated 2.1.2. The 2.2.0 successor exposes the corresponding
+contracts in its public prompts, and its bound semantic and grader evidence
+closes them without letting packet-review utilities supply outcomes or set the
 gate by themselves.
 
 The contract returns `execution_allowed=false`; retained execution is
 separately false. Reproduce the offline generator chain with
-`python -m bench.generate_next_study --verify`. There is no next live step under
-protocol 1.4.0: the 22-cell shakeout, calibration, and `v0.13.1` are blocked.
+`python -m bench.generate_next_study --verify`. Under protocol 1.5.0, the next
+step is exact-commit Linux/native qualification and then a separately
+authorized score-masked 22-cell shakeout. Calibration remains blocked until the
+shakeout passes and `v0.13.2` authorization is issued.

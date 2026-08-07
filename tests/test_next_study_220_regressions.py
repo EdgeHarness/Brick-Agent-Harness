@@ -61,7 +61,7 @@ def test_preference_title_prefix_is_in_saved_public_facts():
     for index in range(4):
         instance = generate_instance("adversarial", "preference_learning", index)
         store = instance["content"]["ordered_subepisodes"][0]["prompt"]
-        facts = store.split("applicable facts:", 1)[1]
+        facts = store.split("separated only by semicolons:", 1)[1]
         assert "title_prefix=" in facts
 
 
@@ -284,11 +284,12 @@ def test_scratch_memory_is_neutral_but_requested_memory_is_exact(tmp_path):
     assert not build_grader(packet, outcome).grade_evidence(changed).strict_success
 
 
-def test_reported_prompt_grader_blockers_reproduce(tmp_path):
-    """Pin the ten defect classes that terminally block office-generators/2.1.2."""
+def test_reported_prompt_grader_blockers_are_closed_in_2_2_0(tmp_path):
+    """Pin the public wording and strict grading that close all ten blockers."""
 
-    # The prompt permits a formula, but the evaluator accepts only SUM(range).
-    _instance, packet, outcome, evidence = _baseline(tmp_path, "xlsx_basic")
+    # The exact SUM(range) formula is public and alternatives remain failures.
+    instance, packet, outcome, evidence = _baseline(tmp_path, "xlsx_basic")
+    assert "Cost cell is exactly the formula '=SUM(C2:C" in instance["content"]["prompt"]
     effect = next(item for item in outcome["outcome"] if item["type"] == "spreadsheet_created")
     artifacts = dict(evidence.artifact_map())
     workbook = load_workbook(BytesIO(artifacts[effect["filename"]]))
@@ -307,8 +308,9 @@ def test_reported_prompt_grader_blockers_reproduce(tmp_path):
         _rebuild(evidence, artifacts=sorted(artifacts.items()))
     ).strict_success
 
-    # A natural confirmation is not in the hidden reviewed-grader allowlist.
-    _instance, packet, outcome, evidence = _baseline(tmp_path, "email_reply")
+    # The exact affirmative opening is public and a paraphrase remains a failure.
+    instance, packet, outcome, evidence = _baseline(tmp_path, "email_reply")
+    assert "Begin the body exactly with 'I will attend.'" in instance["content"]["prompt"]
     effect = next(item for item in outcome["outcome"] if item["type"] == "email_sent")
     state = copy.deepcopy(evidence.state)
     state["sent_emails"][-1]["body"] = "I confirm my attendance. " + "; ".join(
@@ -318,7 +320,7 @@ def test_reported_prompt_grader_blockers_reproduce(tmp_path):
         _rebuild(evidence, state=state)
     ).strict_success
 
-    # highest_priority_feasible never defines whether larger numbers rank higher.
+    # Numeric priority direction is explicit.
     priority_cases = [
         generate_instance("development", "cal_add", index)
         for index in range(8)
@@ -328,18 +330,20 @@ def test_reported_prompt_grader_blockers_reproduce(tmp_path):
         if item["content"]["structure"]["decision_policy"]
         == "highest_priority_feasible"
     )
-    assert "largest priority value" not in priority["content"]["prompt"]
+    assert "largest numeric priority value" in priority["content"]["prompt"]
 
-    # "titled for" permits decoration, but the live grader requires exact equality.
-    _instance, packet, outcome, evidence = _baseline(tmp_path, "multi_offsite")
+    # Exact event/slide titles are public and decoration remains a failure.
+    instance, packet, outcome, evidence = _baseline(tmp_path, "multi_offsite")
+    assert "title is exactly the selected event name" in instance["content"]["prompt"]
     state = copy.deepcopy(evidence.state)
     state["events"][-1]["title"] = "Offsite: " + state["events"][-1]["title"]
     assert not build_grader(packet, outcome).grade_evidence(
         _rebuild(evidence, state=state)
     ).strict_success
 
-    # A natural deadline commitment outside the hidden allowlist also fails.
-    _instance, packet, outcome, evidence = _baseline(tmp_path, "remind_msg")
+    # The exact deadline sentence is public and a paraphrase remains a failure.
+    instance, packet, outcome, evidence = _baseline(tmp_path, "remind_msg")
+    assert "exact sentence 'The full checklist will be complete by" in instance["content"]["prompt"]
     effect = next(item for item in outcome["outcome"] if item["type"] == "message_sent")
     state = copy.deepcopy(evidence.state)
     state["messages"][-1]["text"] = "%s; I'll have everything done by %s." % (
@@ -349,8 +353,9 @@ def test_reported_prompt_grader_blockers_reproduce(tmp_path):
         _rebuild(evidence, state=state)
     ).strict_success
 
-    # The prompt says include the fact; a faithful label nevertheless fails.
-    _instance, packet, outcome, evidence = _baseline(tmp_path, "pptx_basic")
+    # Bare fact bullets are public and a label remains a failure.
+    instance, packet, outcome, evidence = _baseline(tmp_path, "pptx_basic")
+    assert "only bullet must be exactly that section's fact value" in instance["content"]["prompt"]
     effect = next(item for item in outcome["outcome"] if item["type"] == "presentation_created")
     artifacts = dict(evidence.artifact_map())
     deck = Presentation(BytesIO(artifacts[effect["filename"]]))
@@ -372,8 +377,12 @@ def test_reported_prompt_grader_blockers_reproduce(tmp_path):
         _rebuild(evidence, artifacts=sorted(artifacts.items()))
     ).strict_success
 
-    # The prompt prints pipe-separated facts; the grader silently requires ';'.
-    _instance, packet, outcome, evidence = _baseline(tmp_path, "preference_learning")
+    # The semicolon serialization and title grammar are public.
+    instance, packet, outcome, evidence = _baseline(tmp_path, "preference_learning")
+    store_prompt = instance["content"]["ordered_subepisodes"][0]["prompt"]
+    use_prompt = instance["content"]["ordered_subepisodes"][1]["prompt"]
+    assert "separated only by semicolons" in store_prompt
+    assert "lowercase literal 'sync with '" in use_prompt
     changed_memory = list(evidence.memory)
     changed_memory[-1] = changed_memory[-1].replace(";", " | ")
     assert changed_memory[-1] != evidence.memory[-1]
@@ -381,7 +390,7 @@ def test_reported_prompt_grader_blockers_reproduce(tmp_path):
         _rebuild(evidence, memory=changed_memory)
     ).strict_success
 
-    # The same family also has an undisclosed case-sensitive title grammar.
+    # A case-drifted title remains a failure.
     state = copy.deepcopy(evidence.state)
     state["events"][-1]["title"] = state["events"][-1]["title"].replace(
         " sync with ", " Sync with ", 1
@@ -391,7 +400,7 @@ def test_reported_prompt_grader_blockers_reproduce(tmp_path):
         _rebuild(evidence, state=state)
     ).strict_success
 
-    # One pptx policy is named but has no public definition.
+    # Every presentation ordering policy is defined publicly.
     brief_cases = [
         generate_instance("development", "pptx_basic", index)
         for index in range(8)
@@ -402,10 +411,11 @@ def test_reported_prompt_grader_blockers_reproduce(tmp_path):
     )
     prompt = brief["content"]["prompt"]
     assert "brief_sequence" in prompt
-    assert "brief_sequence selects" not in prompt
+    assert "brief_sequence sorts by the smallest sequence value first" in prompt
 
-    # Enumerated values are silently order-sensitive in the reviewed grader.
-    _instance, packet, outcome, evidence = _baseline(tmp_path, "email_reply")
+    # Required email field order is public and reversed order remains a failure.
+    instance, packet, outcome, evidence = _baseline(tmp_path, "email_reply")
+    assert "in this exact order" in instance["content"]["prompt"]
     effect = next(item for item in outcome["outcome"] if item["type"] == "email_sent")
     state = copy.deepcopy(evidence.state)
     state["sent_emails"][-1]["body"] = "I will attend. " + "; ".join(

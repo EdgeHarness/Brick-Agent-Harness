@@ -35,20 +35,19 @@ audit raised three ceiling flags and one floor flag. S8/S9 are blocked, retained
 execution remains disabled, and no condition-level or confirmatory effect
 estimate exists.
 
-The tagged `v0.13.0` successor candidate is invalidated before calibration, and
-no live study cell ran. A bound pre-outcome amendment based on Sunnycho100's
-consolidated audit created the offline `office-generators/2.1.2` candidate for
-target tag `v0.13.1`. The generator retains the 2.1.0 seed namespace
-deliberately: relative to 2.1.1, 240 public semantic surfaces remain unchanged
-and 288 cases in six repaired families change. All full content hashes and packet
-identities are regenerated and rebound. The
-current machine gates use independently compiled public outcomes, 1,056
-production-runner positive traces, 4,332 targeted grader mutations, and 1,872
-benign controls. Human and agent packet review is advisory and cannot itself
-satisfy an authorization gate. Four completed reports are now reconciled into
-deterministic checks. Ten public-prompt/live-grader contradictions survive,
-so 2.1.2 is `construct_gate_failed` and live execution is terminally disabled
-under protocol 1.4.0. No 2.1.3 or family removal is permitted automatically.
+The `v0.13.0`/2.1.0 candidate was invalidated before calibration. The 2.1.2
+replacement then failed its construct gate on ten independently reproduced
+public-prompt/live-grader contradictions, so `v0.13.1` remains unissued. An
+explicit pre-outcome successor authorization now creates
+`office-generators/2.2.0` under protocol 1.5.0 and target tag `v0.13.2` without
+changing the 11-family estimand, sample sizes, claim rule, or preserved 2.1.0
+seed namespace. All ten contracts are public, all 528 outcomes independently
+reconstruct, 1,056 production-runner positive traces pass, and the grader passes
+528 baselines, 4,332 mutations, and 1,872 benign controls. A bound remediation
+closure records zero live model calls and zero inspected effectiveness data.
+Human and agent review remains advisory. Live execution is still disabled until
+the exact committed candidate passes Linux, native Windows clean-checkout, and
+the separately authorized score-masked 22-cell development shakeout.
 
 Annotated tags and their bound evidence are authoritative. The tagged S4 release
 commit `R` adds only `evidence/s4/v0.5.0.json` to tested candidate `C`; docs-only
@@ -96,8 +95,9 @@ Predictions and model-folder labels are hypotheses, not observations.
 
 ## 3. Current research and product boundary
 
-The program still targets two related outputs, but the S7 benchmark lineage is
-terminal and cannot supply the research output:
+The program still targets two related outputs. The S7 and 2.1.2 lineages are
+terminal; the independently versioned 2.2.0 successor may supply the research
+output only after its remaining gates:
 
 - **Research:** a valid fixed-family comparison of a generic harness against a
   competent native-tools baseline.
@@ -112,9 +112,10 @@ systems.
 
 The synthetic pack is not a selected Brix production workflow. Actual workflow
 discovery, data authorization, integration, shadow evaluation, pilot, and
-deployment remain future work outside the blocked S7 lineage. The 2.1.2
-successor failed its construct gate, so `v0.13.1` and the dependent `v0.14.0`
-study release are not reachable under protocol 1.4.0.
+deployment remain future work outside the research lineage. The current 2.2.0
+candidate does not validate the product prototype and has not yet run a
+benchmark. `v0.14.0` is reachable only after `v0.13.2` authorization and every
+sealed live phase passes.
 
 ### Repository roles and convergence
 

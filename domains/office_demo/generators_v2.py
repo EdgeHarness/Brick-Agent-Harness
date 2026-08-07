@@ -1,8 +1,8 @@
 """Final successor generators for the eleven synthetic office families.
 
-Version 2.1.2 is a pre-outcome semantic repair of 2.1.1. It deliberately retains the
+Version 2.2.0 is the protocol-1.5.0 successor to terminal 2.1.2. It retains the
 2.1.0 seed/entity namespace so unaffected public packets remain byte-stable,
-while every repaired packet receives a new content hash.
+while repaired single-outcome prompt contracts receive new content hashes.
 48 genuine semantic shapes per family, explicit difficulty/action axes, and an
 independent prompt-to-outcome oracle check on every generated instance.  Every
 agent-visible surface is split-neutral; split membership exists only in the
@@ -25,9 +25,9 @@ from .outcome_oracle_v2 import derive_outcome
 
 
 SUITE = "office-synthetic-v2"
-GENERATOR_VERSION = "office-generators/2.1.2"
+GENERATOR_VERSION = "office-generators/2.2.0"
 SEED_NAMESPACE = "office-generators/2.1.0"
-FAMILY_VERSION = "2.1.2"
+FAMILY_VERSION = "2.2.0"
 NEXT_SPLITS = (
     "development",
     "calibration",
@@ -250,10 +250,14 @@ def _pptx_basic(ctx):
     filename = "office_%02d_review.pptx" % ctx.ordinal
     prompt = (
         "Create presentation %s from these approved section records: %s. "
-        "Order section slides by policy %s. Use exactly %d slides: one title slide "
-        "named '%s', then one slide per section. Use each section name as its slide "
-        "title and include that section's exact fact as a bullet. Do not create any "
-        "other artifact."
+        "Order section slides by policy %s. Policy definitions: brief_sequence sorts "
+        "by the smallest sequence value first; risk_descending sorts by the largest "
+        "risk value first, breaking ties by section name; owner_alphabetical sorts by "
+        "owner then section name alphabetically. Apply only the named policy. Use "
+        "exactly %d slides: one title slide named '%s' with no body text, then one "
+        "slide per section. Use each section name as its exact slide title. Each "
+        "section slide's only bullet must be exactly that section's fact value, with "
+        "no label and no additional bullet. Do not create any other artifact."
         % (
             filename,
             " | ".join(
@@ -322,8 +326,10 @@ def _pptx_from_email(ctx):
     prompt = (
         "List the inbox and read every email whose subject begins '%s'. Then create %s "
         "with title slide '%s', followed by one slide per approved email ordered by "
-        "policy %s. Use Region as each slide title and include the exact Revenue cents "
-        "value. Ignore DRAFT REGION messages."
+        "policy %s. The title slide must have no body text. Use Region as each exact "
+        "section-slide title. Each section slide's only bullet must be exactly the "
+        "bare Revenue cents integer, with no label and no additional bullet. Ignore "
+        "DRAFT REGION messages."
         % (prefix, filename, title, policy)
     )
     effects = [
@@ -360,11 +366,12 @@ def _xlsx_basic(ctx):
     filename = "office_%02d_budget.xlsx" % ctx.ordinal
     prompt = (
         "Create spreadsheet %s. Headers: Owner | Item | Cost. Approved rows: %s. Row order "
-        "rule: %s. Add exactly one final Total row using a formula."
+        "rule: %s. Add exactly one final Total row whose Cost cell is exactly the "
+        "formula '=SUM(C2:C%d)'."
         % (
             filename,
             " | ".join("Owner=%s,Item=%s,Cost=%d" % tuple(row) for row in rows),
-            rule,
+            rule, len(rows) + 1,
         )
     )
     effects = [{
@@ -424,9 +431,9 @@ def _xlsx_from_email(ctx):
         "List the inbox and read every email whose subject begins '%s'. Then create %s "
         "with headers Date | Vendor | Amount. Include one row per paid receipt. Row "
         "order rule: %s. In the Amount column, enter USD dollar values: convert each "
-        "amount_cents=N source value to N/100 dollars. Add one final Total row using "
-        "a formula. Ignore drafts and quotes."
-        % (prefix, filename, rule)
+        "amount_cents=N source value to N/100 dollars. Add one final Total row whose "
+        "Amount cell is exactly the formula '=SUM(C2:C%d)'. Ignore drafts and quotes."
+        % (prefix, filename, rule, len(rows) + 1)
     )
     effects = [
         {"type": "sources_read", "source": "email", "ids": source_ids,
@@ -498,9 +505,10 @@ def _email_reply(ctx):
         "visible date; highest_priority selects the largest priority value; "
         "decision_key_match selects the request whose decision_key exactly equals the "
         "decision email's selection_key. Apply only the named policy. Reply exactly "
-        "once to that request's sender. Subject must contain '%s'. Body must confirm "
-        "attendance and include the decision's confirmation_code, confirmation_date, "
-        "and the selected request_id, copying all three field values exactly as shown. "
+        "once to that request's sender. Subject must contain '%s'. Begin the body "
+        "exactly with 'I will attend.' Then include, in this exact order, the "
+        "decision's confirmation_code, confirmation_date, and the selected request_id, "
+        "copying all three field values exactly as shown. "
         "Do not reply to any other sender or create any reminder, event, chat message, "
         "or file."
         % (prefix, policy, project)
@@ -576,7 +584,12 @@ def _cal_add(ctx):
     attendee_text = " | ".join(item["email"] for item in attendees)
     prompt = (
         "Inspect calendar date %s. Candidate requests: %s. Select one feasible request "
-        "using policy %s and add exactly one event with that candidate's exact title, "
+        "using policy %s. Policy definitions: earliest_feasible selects the feasible "
+        "request with the earliest start; highest_priority_feasible selects the "
+        "feasible request with the largest numeric priority value; "
+        "shortest_duration_feasible selects the feasible request with the shortest "
+        "duration. Apply only the named policy. Add exactly one event with that "
+        "candidate's exact title, "
         "time, location, and these attendees: %s. Preserve every existing event."
         % (
             date,
@@ -726,9 +739,11 @@ def _cal_brief(ctx):
     prompt = (
         "Inspect calendar date %s. Send exactly one chat message to %s. Include, in "
         "policy %s order, only event titles beginning 'Priority:' and each start "
-        "time, formatting every entry exactly as '<title> at <HH:MM>'. Exclude every "
-        "other title and date. Then send exactly one separate "
-        "chat message to %s containing '%s' and 'priority-count=%d'."
+        "time, formatting every entry exactly as '<title> at <HH:MM>'. The first "
+        "message may contain only those formatted entries: exclude every other title "
+        "and do not include any calendar date. Then send exactly one separate chat "
+        "message to %s containing, in this exact order, '%s' and "
+        "'priority-count=%d'."
         % (date, recipient["name"], policy, auditor["name"], date, len(ordered))
     )
     effects = [
@@ -801,8 +816,8 @@ def _remind_msg(ctx):
         "14:00 on the first ordered item's due date. Use the resulting full ordered ID "
         "list as the reminder checklist. Then send exactly one chat message to %s repeating "
         "the same full ordered ID list "
-        "in order and committing that the full checklist will be complete by %s, which "
-        "is the first ordered item's due date. Mention every ordered ID exactly once and "
+        "in order, followed by the exact sentence 'The full checklist will be complete "
+        "by %s.' This date is the first ordered item's due date. Mention every ordered ID exactly once and "
         "do not mention any other checkpoint ID. Preserve all reminders."
         % (
             " | ".join(
@@ -894,8 +909,9 @@ def _preference_learning(ctx):
             "id": "store",
             "prompt": (
                 "For subject %s, evaluate these preference bundles: %s. Select by "
-                "policy %s and save exactly one memory containing only the selected "
-                "bundle's applicable facts: %s."
+                "policy %s and save exactly one memory. Its complete content must be "
+                "the selected bundle's applicable facts in the displayed order, "
+                "separated only by semicolons: %s."
                 % (
                     colleague["email"],
                     " | ".join(
@@ -905,7 +921,7 @@ def _preference_learning(ctx):
                            item["duration"], item["start"], item["location"], item["prefix"])
                         for item in bundles
                     ),
-                    policy, " | ".join(facts),
+                    policy, "; ".join(facts),
                 )
             ),
             "required_effects": [store_effect],
@@ -914,9 +930,12 @@ def _preference_learning(ctx):
             "id": "use",
             "prompt": (
                 "Schedule exactly one sync with %s on %s. The attendee is %s. Retrieve "
-                "and apply the selected same-attempt preference bundle; the winning "
-                "start, duration, location, and optional title prefix are not repeated "
-                "here."
+                "and apply the selected same-attempt preference bundle. Treat the "
+                "stored earliest_start as the exact event start. Construct the exact "
+                "event title by concatenating the stored title_prefix, one space, the "
+                "lowercase literal 'sync with ', and the exact colleague name shown "
+                "above. The winning start, duration, location, and title prefix are not "
+                "repeated here."
                 % (colleague["name"], date, colleague["email"])
             ),
             "required_effects": [use_effect],
@@ -990,9 +1009,11 @@ def _multi_offsite(ctx):
         "highest_approval_rank selects the largest approval_rank value; "
         "consensus_supported selects the largest consensus value. Apply only the named "
         "policy, then read that exact FINAL OFFSITE DETAIL email. Use "
-        "only the selected detail to add the offsite event exactly, reply to its sender confirming "
-        "attendance, and create %s with exactly one slide titled for the event and "
-        "bullets containing every listed fact in order. Ignore draft messages."
+        "only the selected detail to add the offsite event exactly with no attendees. "
+        "Reply to its sender with the exact body 'I will attend.' Create %s with "
+        "exactly one slide whose title is exactly the selected event name. Its bullets "
+        "must be exactly the listed facts, one fact per bullet in the listed order, "
+        "with no labels and no additional bullet. Ignore draft messages."
         % (index_subject, policy, filename)
     )
     effects = [
@@ -1048,7 +1069,7 @@ def validate_office_instance_v2(instance):
     validate_office_instance(instance)
     content = instance["content"]
     if content["generator_version"] != GENERATOR_VERSION:
-        raise ValueError("instance is not from office-generators/2.1.2")
+        raise ValueError("instance is not from office-generators/2.2.0")
     if content["family_version"] != FAMILY_VERSION:
         raise ValueError("unexpected v2 family version")
     if content["split"] not in NEXT_SPLITS:

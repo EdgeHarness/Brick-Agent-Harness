@@ -1,15 +1,15 @@
-# Brick successor study: terminal 2.1.2 construct-gate state
+# Brick successor study: offline-qualified 2.2.0 candidate
 
-This document records why the frozen replacement cannot advance. It does not
-authorize a model call or report a model result.
+This document records the repaired offline instrument and its remaining gates.
+It does not authorize a model call or report a model result.
 
-## Candidate and terminal audit result
+## Candidate and audit result
 
-- `office-generators/2.1.2` produces 528 unique, split-neutral cases across 11
-  fixed synthetic families. It deliberately retains the 2.1.0 seed namespace:
-  relative to 2.1.1, 240 public semantic surfaces remain unchanged and 288
-  cases across six repaired families change. Full content hashes are rebound.
-  Generator 2.1.0 and tag `v0.13.0` are invalidated before calibration.
+- `office-generators/2.1.2` remains terminal with ten confirmed prompt/grader
+  blockers and `v0.13.1` permanently unissued. An explicit pre-outcome
+  authorization creates `office-generators/2.2.0` under protocol 1.5.0 and
+  target tag `v0.13.2`. It preserves the 2.1.0 seed namespace, 11 families,
+  220 retained clusters, and the claim rule. Full content hashes are rebound.
 - The construct contract freezes three genuine decision policies per family.
   All 176 workload/distractor-matched triplets produce three distinct outcomes
   with equal non-policy burden.
@@ -20,29 +20,28 @@ authorize a model call or report a model result.
 - Public-packet outcomes are independently compiled for all 528 cases without
   importing the generator or grader. The strict grader is built only as
   `build_grader(public_packet, validated_outcome)`.
-- The earlier semantic gate executes 1,056 legal typed positive workflows (both primary
+- The semantic gate executes 1,056 legal typed positive workflows (both primary
   conditions for every case), verifies every relevant dependency and
   record-order/distractor invariance, and reports no critical, high, or medium
-  internal-validity finding. That model-free result did not test reasonable
-  alternate public-prompt interpretations.
+  internal-validity finding. All ten previously reproduced prompt/grader
+  contradictions now have explicit public wording and deterministic regression
+  coverage.
 - Grader conformance passes 528 positive baselines, exactly 4,332 targeted
   mutations, and 1,872 benign controls. Placeholder presentations and
   alternate-policy outcomes fail.
 
 Human and agent packet-review utilities remain advisory and outside
-authorization. Four reports are now complete and byte-bound.
-Ten reported defect classes reproduce deterministically against the public
-prompt and live grader: formula grammar, confirmation language, presentation
-bullet exactness, memory separators, `brief_sequence`, preference title
-construction, and unannounced mention order. Therefore generator 2.1.2 is
-`construct_gate_failed`; this is not an inference from model agreement.
+authorization. Four reports and the terminal 2.1.2 failure remain byte-bound.
+The 2.2.0 remediation closure maps all ten blocker IDs to public wording and
+requires the regenerated manifest, semantic simulation, and grader conformance
+to pass. It records zero live model calls and no inspected effectiveness data.
 
 ## Statistics and evidence
 
-Protocol `1.4.0`, design `0.8.2`, construct contract
-`office-construct/1.2.0`, and grader `office-strict-grader/3.2.0` are active.
-The amendment from 2.1.1 is bound before any live study cell or effectiveness
-result and permits no automatic 2.1.3 successor.
+Protocol `1.5.0`, design `0.9.0`, construct contract
+`office-construct/1.3.0`, and grader `office-strict-grader/3.2.0` are active.
+The successor authorization is bound before any live study cell or
+effectiveness result and permits no automatic 2.2.1 successor.
 The machine-readable claim contract is authoritative: a directional claim
 requires an inclusive `abs(Delta) >= 0.12` and a two-sided 95% stratified
 cluster-bootstrap interval excluding zero in that direction. The exact
@@ -74,12 +73,13 @@ masked evidence, unmasking, bootstrap, LOFO, descriptives, report construction,
 and program transitions; and proves synthetic artifacts cannot pass production
 release verification. It creates no tag and writes no production evidence.
 
-## No remaining live gate under this protocol
+## Remaining gates before calibration
 
-Do not run the 22-cell shakeout, create `v0.13.1`, or start the 352-cell
-calibration. The bound amendment forbids automatic 2.1.3 and family removal.
-Any repair requires explicit authorization of a new protocol and an
-independently versioned generator; 2.1.2 must remain immutable evidence.
+Do not start calibration yet. First commit the exact candidate, pass the
+required Linux Python matrix and native Windows clean-checkout reproduction,
+then issue and run the separately authorized score-masked 22-cell development
+shakeout. It must contain zero instrument-invalid cells. Only that pass permits
+the annotated `v0.13.2` tag and host-bound research authorization.
 
 ## Historical live gates
 
@@ -102,16 +102,15 @@ non-Ubuntu evidence. The exact commit must also pass the native Windows clean
 checkout and a fresh score-masked 22-cell shakeout because the authorization
 repair changed the fingerprint.
 
-That former qualification sequence is now unreachable. All reports were
-reconciled, and deterministic counterexamples failed the construct gate before
-the native and live steps. The execution surface remains in the repository for
-audit and rehearsal, but its authorization loader rejects the terminal
-reconciliation.
+That former qualification evidence cannot authorize 2.2.0. The current
+execution surface requires the successor remediation closure and a fresh exact-
+commit Linux/native/shakeout chain; it never treats the terminal reconciliation
+as a pass.
 
 Release verification recomputes an exact-key archive from canonical artifact
 bytes, proves every artifact equals its Git blob at the archived commit,
 cross-binds every phase and the archived authorization, requires
-`authorized_research` context, rechecks the annotated `v0.13.1` instrument tag,
+`authorized_research` context, rechecks the annotated `v0.13.2` instrument tag,
 and checks that annotated `v0.14.0` peels to the archived commit. Caller-supplied
 state, uncommitted files, or arbitrary digest maps cannot satisfy it.
 

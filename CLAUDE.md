@@ -116,24 +116,21 @@ completed all 44 pairs/88 attempts as `s7-d0b-20260804T025010Z` from commit
 there is no `v0.12.0`, no S8 handoff, no condition-level result, and retained
 execution remains mechanically disabled.
 
-`v0.13.0` and `office-generators/2.1.0` are invalidated before calibration;
-zero live study cells ran. Sunnycho100's consolidated audit then authorized one
-pre-outcome, no-effectiveness-data amendment. The final replacement candidate was
-`office-generators/2.1.2`, intentionally retaining the 2.1.0 seed namespace so
-unchanged semantic surfaces remain review-comparable while repaired packets receive
-new content hashes. It has 528 split-neutral cases, 176 outcome-distinct policy
-triplets, condition-aware 9/12-request maxima, 1,056 production-runner positive
-traces, independently compiled public-packet outcomes, and
-`office-strict-grader/3.2.0`. Its conformance gate requires 528 baselines, 4,332
-targeted mutations, and 1,872 benign controls. Protocol `1.4.0` binds the claim
-contract, 50,000-draw bootstrap, LOFO, reliability metrics, hardened masking and
-release semantics, and the at-most-222-cell descriptive matrix. Human-review
-utilities are advisory and cannot authorize the study. Four completed reports
-are now reconciled, but ten concern classes reproduce as public-prompt/live-
-grader contradictions. The frozen 2.1.2 candidate is therefore
-`construct_gate_failed`; no `v0.13.1`, shakeout, or calibration is allowed.
-The protocol forbids automatic 2.1.3 and family removal. Any remediation needs
-an explicitly authorized new protocol and independently versioned generator. Read
+`v0.13.0`/generator 2.1.0 were invalidated before calibration, and the later
+2.1.2 candidate terminated with ten deterministic public-prompt/live-grader
+contradictions. Both histories remain immutable; `v0.13.1` is permanently
+unissued. The user's explicit pre-outcome directive authorizes the independent
+`office-generators/2.2.0` successor under protocol `1.5.0` and target tag
+`v0.13.2`, retaining only the 2.1.0 seed namespace and the unchanged 11-family,
+220-cluster estimand. The ten prompt contracts are now explicit. All 528 public
+outcomes reconstruct independently, all 1,056 typed positive workflows pass,
+and grader conformance passes 528 baselines, 4,332 targeted mutations, and
+1,872 benign controls. The machine-readable remediation closure passes with
+zero live model calls or inspected effectiveness data. Human-review utilities
+remain advisory and cannot authorize the study. The current candidate is
+offline-qualified but still cannot make a model call: it needs an exact clean
+commit, Linux and native Windows reproduction, and a separately authorized
+score-masked 22-cell shakeout before `v0.13.2` can be issued. Read
 [`bench/NEXT_STUDY_IMPLEMENTATION.md`](bench/NEXT_STUDY_IMPLEMENTATION.md) and
 run both offline verify commands before changing it.
 

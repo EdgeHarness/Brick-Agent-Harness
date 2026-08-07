@@ -9,6 +9,7 @@ from bench.next_study_claim import load_claim_contract
 from bench.next_study_construct import load_contract as load_construct_contract
 from bench.next_study_construct_failure import load_failure
 from bench.next_study_fable_reconciliation import load_reconciliation
+from bench.next_study_successor import load_authorization, load_closure
 from bench.next_study_validated_outcomes import validate_validated_outcomes
 from bench.s7_contract import load_protocol as load_s7_protocol
 from bench.s7_contract import s7_protocol_sha256
@@ -70,6 +71,9 @@ _ARTIFACT_PATHS = {
     "fable_reconciliation_builder": "bench/reconcile_next_study_reports.py",
     "construct_gate_failure": "evidence/next-study/office-v2.1.2-construct-gate-failure.json",
     "construct_gate_failure_implementation": "bench/next_study_construct_failure.py",
+    "successor_authorization": "evidence/next-study/office-v2.2.0-successor-authorization.json",
+    "successor_closure": "evidence/next-study/office-v2.2.0-remediation-closure.json",
+    "successor_implementation": "bench/next_study_successor.py",
 }
 
 _EXPECTED_GATES = {
@@ -88,7 +92,7 @@ _EXPECTED_GATES = {
     "linux_ci_reproduction_complete": False,
     "native_windows_clean_checkout_complete": False,
     "power_and_cluster_analysis_frozen": True,
-    "semantic_internal_validity_complete": False,
+    "semantic_internal_validity_complete": True,
     "development_shakeout_complete": False,
     "scheduler_implementation_complete": True,
     "evidence_derived_attempt_extractor_complete": True,
@@ -128,12 +132,13 @@ def _artifact_bindings():
 def build_design():
     return {
         "schema_version": "brick.next-study.design/5",
-        "version": "0.8.2",
-        "status": "construct_gate_failed",
+        "version": "0.9.0",
+        "status": "offline_qualified_pending_native_ci_and_shakeout",
         "release_sequence": {
             "v0.12.0": "permanently_unissued_terminal_s7",
             "v0.13.0": "invalidated_successor_candidate",
-            "v0.13.1": "replacement_instrument_target",
+            "v0.13.1": "permanently_unissued_construct_gate_failed",
+            "v0.13.2": "replacement_instrument_target",
             "v0.14.0": "completed_study_target",
             "v0.15.0": "isolated_product_demo_target",
         },
@@ -142,7 +147,7 @@ def build_design():
         "execution_gates": dict(_EXPECTED_GATES),
         "predecessor": dict(_PREDECESSOR),
         "fresh_suite": {
-            "generator_version": "office-generators/2.1.2",
+            "generator_version": "office-generators/2.2.0",
             "seed_namespace": "office-generators/2.1.0",
             "families": 11,
             "development_cases_per_family": 8,
@@ -310,7 +315,7 @@ def _validate_successor_semantics():
             )
     lock = load_canonical_json(ROOT / _ARTIFACT_PATHS["manifest_lock"])
     if (
-        lock.get("generator_version") != "office-generators/2.1.2"
+        lock.get("generator_version") != "office-generators/2.2.0"
         or sum(item["instances"] for item in lock.get("manifests", [])) != 528
         or lock.get("split_leakage_review", {}).get("finding_count") != 0
         or lock.get("split_leakage_review", {}).get("passed") is not True
@@ -322,7 +327,7 @@ def _validate_successor_semantics():
         raise NextStudyDesignError("successor generator audits are incomplete")
     audit = load_canonical_json(ROOT / _ARTIFACT_PATHS["oracle_audit"])
     if (
-        audit.get("generator_version") != "office-generators/2.1.2"
+        audit.get("generator_version") != "office-generators/2.2.0"
         or audit.get("case_count") != 528 or audit.get("all_exact_matches") is not True
         or audit.get("live_model_calls") != 0
     ):
@@ -384,7 +389,7 @@ def _validate_successor_semantics():
         or findings != []
         or source.get("path")
         != "evidence/next-study/office-v2-semantic-simulation.json"
-        or "office-generators/2.1.2"
+        or "office-generators/2.2.0"
         not in rendered.get("manifest", {}).get("description", "")
     ):
         raise NextStudyDesignError("semantic rendered report drifted")
@@ -430,7 +435,7 @@ def _validate_successor_semantics():
     ):
         raise NextStudyDesignError("full-suite machine conformance is incomplete")
     protocol = load_protocol(ROOT / _ARTIFACT_PATHS["protocol"])
-    if protocol["version"] != "1.4.0":
+    if protocol["version"] != "1.5.0":
         raise NextStudyDesignError("successor protocol version drifted")
     verify_descriptive_selection()
     load_reconciliation(
@@ -438,6 +443,8 @@ def _validate_successor_semantics():
         require_complete=False,
     )
     load_failure(ROOT / _ARTIFACT_PATHS["construct_gate_failure"])
+    load_authorization(ROOT / _ARTIFACT_PATHS["successor_authorization"])
+    load_closure(ROOT / _ARTIFACT_PATHS["successor_closure"])
 
 
 def validate_design(design):
