@@ -1,12 +1,15 @@
 import copy
 from pathlib import Path
+import subprocess
 
 import pytest
 
 from bench.next_study_live import (
-    NextStudyLiveError, _attempt_key, _condition, _producer, build_execution_protocol,
+    CLEAN_CHECKOUT_TEST_COMMAND, NextStudyLiveError, _attempt_key, _condition,
+    _prepare_clean_checkout, _producer, build_execution_protocol,
     build_shakeout_authorization, collect_linux_ci_reproduction,
-    validate_native_preflight, validate_linux_ci_reproduction,
+    validate_clean_checkout_reproduction, validate_native_preflight,
+    validate_linux_ci_reproduction,
     validate_shakeout_authorization, verify_linux_ci_reproduction,
 )
 from bench.next_study_program import (
@@ -26,6 +29,31 @@ from harness.evidence import EvidenceStore
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_clean_checkout_is_a_detached_clone_without_ignored_material(tmp_path):
+    source = tmp_path / "source"
+    source.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=source, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.invalid"], cwd=source, check=True)
+    subprocess.run(["git", "config", "user.name", "Brick Test"], cwd=source, check=True)
+    (source / ".gitignore").write_text("poison.py\n", encoding="utf-8")
+    (source / "tracked.py").write_text("VALUE = 1\n", encoding="utf-8")
+    subprocess.run(["git", "add", ".gitignore", "tracked.py"], cwd=source, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "fixture"], cwd=source, check=True)
+    commit = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=source, check=True,
+        capture_output=True, text=True,
+    ).stdout.strip()
+    (source / "poison.py").write_text("raise RuntimeError('must not copy')\n", encoding="utf-8")
+
+    checkout = _prepare_clean_checkout(commit, tmp_path / "qualification", source)
+    assert (checkout / "tracked.py").is_file()
+    assert not (checkout / "poison.py").exists()
+    assert subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=checkout, check=True,
+        capture_output=True, text=True,
+    ).stdout.strip() == commit
+
+
 def _preflight(model_digest="4" * 64):
     document = {
         "schema_version": "brick.next-study.native-preflight/1",
@@ -42,6 +70,43 @@ def _preflight(model_digest="4" * 64):
     from harness.instances import sha256_bytes
     document["preflight_sha256"] = sha256_bytes(canonical_json_bytes(document))
     return validate_native_preflight(document)
+
+
+def _clean_checkout(preflight):
+    document = {
+        "schema_version": "brick.next-study.clean-checkout-reproduction/2",
+        "status": "passed", "passed": True,
+        "commit_sha": preflight["commit_sha"],
+        "preflight_sha256": preflight["preflight_sha256"],
+        "platform": "windows-arm64",
+        "checkout_method": "local_no_hardlink_clone_detached_commit",
+        "checkout_commit_sha": preflight["commit_sha"],
+        "test_command": CLEAN_CHECKOUT_TEST_COMMAND,
+        "return_code": 0, "output_sha256": "a" * 64,
+        "started_at": "2026-08-07T00:00:00+00:00",
+        "finished_at": "2026-08-07T00:01:00+00:00",
+        "live_model_calls": 0,
+    }
+    from harness.evidence import canonical_json_bytes
+    from harness.instances import sha256_bytes
+    document["reproduction_sha256"] = sha256_bytes(canonical_json_bytes(document))
+    return document
+
+
+def test_clean_checkout_attestation_rejects_partial_test_command():
+    preflight = _preflight()
+    document = _clean_checkout(preflight)
+    validate_clean_checkout_reproduction(document, preflight)
+    document["test_command"] = ["-m", "pytest", "-q", "tests/test_next_study_live.py"]
+    unsigned = {
+        key: value for key, value in document.items()
+        if key != "reproduction_sha256"
+    }
+    from harness.evidence import canonical_json_bytes
+    from harness.instances import sha256_bytes
+    document["reproduction_sha256"] = sha256_bytes(canonical_json_bytes(unsigned))
+    with pytest.raises(NextStudyLiveError, match="does not represent a pass"):
+        validate_clean_checkout_reproduction(document, preflight)
 
 
 def test_successor_execution_protocol_has_exact_budget_and_runtime_role_names():

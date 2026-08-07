@@ -92,7 +92,11 @@ PREFLIGHT_SCHEMA = "brick.next-study.native-preflight/1"
 SHAKEOUT_AUTHORIZATION_SCHEMA = "brick.next-study.shakeout-authorization/1"
 SHAKEOUT_DECISION_SCHEMA = "brick.next-study.shakeout-decision/1"
 RUN_METADATA_SCHEMA = "brick.next-study.live-run-metadata/1"
-CLEAN_CHECKOUT_SCHEMA = "brick.next-study.clean-checkout-reproduction/1"
+CLEAN_CHECKOUT_SCHEMA = "brick.next-study.clean-checkout-reproduction/2"
+CLEAN_CHECKOUT_TEST_COMMAND = [
+    "-m", "pytest", "-q", "-p", "no:cacheprovider",
+    "--basetemp", "<temporary>",
+]
 LINUX_CI_SCHEMA = "brick.next-study.linux-ci-reproduction/1"
 DESCRIPTIVE_MODEL_PREFLIGHT_SCHEMA = (
     "brick.next-study.descriptive-model-preflight/1"
@@ -488,8 +492,42 @@ def validate_descriptive_model_preflight(document, authorization):
     return document
 
 
+def _prepare_clean_checkout(commit_sha, directory, source=ROOT):
+    """Clone only committed material and detach at the preflight-bound commit."""
+
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    checkout = directory / "checkout"
+    clone = subprocess.run(
+        [
+            "git", "clone", "--quiet", "--no-hardlinks", "--no-checkout",
+            str(source), str(checkout),
+        ],
+        capture_output=True, text=True,
+    )
+    if clone.returncode != 0:
+        raise NextStudyLiveError("clean-checkout clone failed")
+    detached = subprocess.run(
+        ["git", "-C", str(checkout), "checkout", "--quiet", "--detach", commit_sha],
+        capture_output=True, text=True,
+    )
+    if detached.returncode != 0:
+        raise NextStudyLiveError("clean-checkout detached checkout failed")
+    head = subprocess.run(
+        ["git", "-C", str(checkout), "rev-parse", "HEAD"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    status = subprocess.run(
+        ["git", "-C", str(checkout), "status", "--porcelain=v1"],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    if head != commit_sha or status != "":
+        raise NextStudyLiveError("detached clean checkout identity drifted")
+    return checkout
+
+
 def collect_clean_checkout_reproduction(preflight):
-    """Run the complete suite from the clean, preflight-bound checkout."""
+    """Run the complete suite from a detached clone of the bound commit."""
 
     validate_native_preflight(preflight)
     if preflight["require_clean"] is not True or preflight["git_clean"] is not True:
@@ -497,14 +535,15 @@ def collect_clean_checkout_reproduction(preflight):
     if _git("status", "--porcelain=v1") != "":
         raise NextStudyLiveError("worktree changed after native preflight")
     temporary = Path(tempfile.mkdtemp(prefix=".qualification-tmp-", dir=ROOT))
-    command = [
-        sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
-        "--basetemp", str(temporary / "pytest"),
-    ]
     started = datetime.datetime.now(datetime.timezone.utc)
     try:
+        checkout = _prepare_clean_checkout(preflight["commit_sha"], temporary)
+        command = [
+            sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+            "--basetemp", str(temporary / "pytest"),
+        ]
         completed = subprocess.run(
-            command, cwd=ROOT, capture_output=True, text=True, timeout=1800,
+            command, cwd=checkout, capture_output=True, text=True, timeout=1800,
         )
     finally:
         shutil.rmtree(temporary, ignore_errors=True)
@@ -519,7 +558,9 @@ def collect_clean_checkout_reproduction(preflight):
         "commit_sha": preflight["commit_sha"],
         "preflight_sha256": preflight["preflight_sha256"],
         "platform": "windows-arm64",
-        "test_command": command[1:-2] + ["--basetemp", "<temporary>"],
+        "checkout_method": "local_no_hardlink_clone_detached_commit",
+        "checkout_commit_sha": preflight["commit_sha"],
+        "test_command": CLEAN_CHECKOUT_TEST_COMMAND,
         "return_code": completed.returncode,
         "output_sha256": hashlib.sha256(combined).hexdigest(),
         "started_at": started.isoformat(),
@@ -534,7 +575,8 @@ def validate_clean_checkout_reproduction(document, preflight):
     validate_native_preflight(preflight)
     expected = {
         "schema_version", "status", "passed", "commit_sha", "preflight_sha256",
-        "platform", "test_command", "return_code", "output_sha256", "started_at",
+        "platform", "checkout_method", "checkout_commit_sha", "test_command",
+        "return_code", "output_sha256", "started_at",
         "finished_at", "live_model_calls", "reproduction_sha256",
     }
     if not isinstance(document, dict) or set(document) != expected:
@@ -547,10 +589,11 @@ def validate_clean_checkout_reproduction(document, preflight):
         or document["status"] != "passed" or document["passed"] is not True
         or document["return_code"] != 0 or document["live_model_calls"] != 0
         or document["platform"] != "windows-arm64"
+        or document["checkout_method"] != "local_no_hardlink_clone_detached_commit"
+        or document["checkout_commit_sha"] != preflight["commit_sha"]
         or document["commit_sha"] != preflight["commit_sha"]
         or document["preflight_sha256"] != preflight["preflight_sha256"]
-        or not isinstance(document["test_command"], list)
-        or not document["test_command"]
+        or document["test_command"] != CLEAN_CHECKOUT_TEST_COMMAND
     ):
         raise NextStudyLiveError("clean-checkout reproduction does not represent a pass")
     _sha256(document["output_sha256"], "qualification output")

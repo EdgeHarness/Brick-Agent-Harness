@@ -94,7 +94,10 @@ builder. The premature local tag was deleted and its authorization was retained
 under `results-next-study/authorization-invalidated-linux-gate/` for audit.
 
 The repaired authorization now requires all five Ubuntu jobs (Python 3.9
-through 3.13) from GitHub Actions for the exact native-preflight commit. The
+through 3.13) from GitHub Actions for the exact native-preflight commit. Native
+qualification clones committed material without hardlinks, detaches at that
+same commit, and runs the full suite there so ignored workspace files cannot
+affect the result. The
 collector reads the GitHub Actions run and attempt-specific jobs API, retains a
 canonical projection, and hashes it. Authorization refetches that run and
 rejects absent, stale, hand-authored, wrong-commit, failed, incomplete, or

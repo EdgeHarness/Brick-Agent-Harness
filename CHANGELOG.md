@@ -61,6 +61,11 @@
   collector derives evidence from the GitHub Actions run and attempt-specific
   job APIs for the Python 3.9-3.13 Ubuntu matrix, and authorization refetches
   the run before accepting it. A Windows-only authorization is impossible.
+- Corrected native clean-checkout qualification to clone committed material
+  without hardlinks and detach at the preflight-bound commit before running the
+  complete suite. Ignored or untracked files in the working repository can no
+  longer influence this gate; the `/2` attestation records the checkout method
+  and verified commit.
 - `v0.12.0`, `v0.13.0`, and `v0.13.1` remain permanently unissued. The current
   instrument target is `v0.13.2`, followed by `v0.14.0` for a completed study
   and `v0.15.0` for the separately developed Brix demo.
