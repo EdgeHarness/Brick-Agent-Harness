@@ -35,6 +35,7 @@ _PREDECESSOR = {
 _ARTIFACT_PATHS = {
     "retired_2_0_1": "evidence/next-study/office-v2.0.1-retirement.json",
     "invalidated_v0_13_0": "evidence/next-study/v0.13.0-invalidation.json",
+    "pre_outcome_amendment": "evidence/next-study/office-v2.1.2-pre-outcome-amendment.json",
     "manifest_lock": "bench/manifests/office-v2/manifest-lock.json",
     "generator_implementation": "domains/office_demo/generators_v2.py",
     "oracle_audit": "evidence/next-study/office-v2-oracle-audit.json",
@@ -101,7 +102,7 @@ class NextStudyDesignError(ValueError):
 def _sha256(path):
     path = Path(path)
     payload = path.read_bytes()
-    if path.suffix.lower() in {".json", ".md", ".py", ".txt"}:
+    if path.suffix.lower() in {".csv", ".json", ".md", ".py", ".txt"}:
         try:
             payload = payload.decode("utf-8").replace("\r\n", "\n").encode("utf-8")
         except UnicodeDecodeError:
@@ -123,7 +124,7 @@ def _artifact_bindings():
 def build_design():
     return {
         "schema_version": "brick.next-study.design/5",
-        "version": "0.8.0",
+        "version": "0.8.1",
         "status": "replacement_under_construction",
         "release_sequence": {
             "v0.12.0": "permanently_unissued_terminal_s7",
@@ -137,7 +138,7 @@ def build_design():
         "execution_gates": dict(_EXPECTED_GATES),
         "predecessor": dict(_PREDECESSOR),
         "fresh_suite": {
-            "generator_version": "office-generators/2.1.1",
+            "generator_version": "office-generators/2.1.2",
             "seed_namespace": "office-generators/2.1.0",
             "families": 11,
             "development_cases_per_family": 8,
@@ -252,9 +253,60 @@ def _validate_successor_semantics():
         != "office-generators/2.1.0"
     ):
         raise NextStudyDesignError("v0.13.0 invalidation evidence drifted")
+    amendment = load_canonical_json(
+        ROOT / _ARTIFACT_PATHS["pre_outcome_amendment"]
+    )
+    if amendment != {
+        "schema_version": "brick.next-study.pre-outcome-amendment/1",
+        "status": "authorized_narrow_semantic_remediation",
+        "from_generator_version": "office-generators/2.1.1",
+        "to_generator_version": "office-generators/2.1.2",
+        "seed_namespace": "office-generators/2.1.0",
+        "oracle_version": "office-prompt-oracle/2.1.0",
+        "grader_version": "office-strict-grader/3.2.0",
+        "target_instrument_tag": "v0.13.1",
+        "live_study_cells_run": 0,
+        "no_effectiveness_data_inspected": True,
+        "source_audit_commit": "a50ed8bc1a4c0fc941d3c6c27da8b39b406c3e03",
+        "source_audit_files": [
+            {
+                "path": "docs/office-v2-prompt-audit.md",
+                "canonical_text_sha256": "da99b198916b786255f20f490a67597ed2a79eb4183cb687a73c9ea6a8ae7d39",
+            },
+            {
+                "path": "docs/office-v2-prompt-audit-responses.csv",
+                "canonical_text_sha256": "38e01b8098ab246262760caaa22b8488bde4e7fe9af11aec96633839f8c5260c",
+            },
+            {
+                "path": "docs/office-v2-prompt-audit-runbook.md",
+                "canonical_text_sha256": "ec0f6235a53c4c1ec863d564c4fef1b4d535a3b24a3cbdad95ed604ff3fade9c",
+            },
+            {
+                "path": "docs/office-v2-audit-append.py",
+                "canonical_text_sha256": "655d70ba8306d8db52a02d2ff9406cdd1a1adb121e3ba71aab23abbd5a8502ae",
+            },
+        ],
+        "approved_changes": [
+            "clarify_xlsx_from_email_amount_cents_to_usd_dollars",
+            "define_cal_freeslot_email_reply_and_multi_offsite_policy_precedence",
+            "make_remind_msg_dependencies_due_date_coherent_and_grade_exact_identifier_sequences",
+            "pin_cal_brief_entry_format_and_retain_exclusion_enforcement",
+        ],
+        "next_failure_disposition": "construct_gate_failed_no_2.1.3",
+    }:
+        raise NextStudyDesignError("2.1.2 pre-outcome amendment drifted")
+    for source in amendment["source_audit_files"]:
+        source_path = ROOT / source["path"]
+        if (
+            not source_path.is_file()
+            or _sha256(source_path) != source["canonical_text_sha256"]
+        ):
+            raise NextStudyDesignError(
+                "2.1.2 source audit binding drifted: %s" % source["path"]
+            )
     lock = load_canonical_json(ROOT / _ARTIFACT_PATHS["manifest_lock"])
     if (
-        lock.get("generator_version") != "office-generators/2.1.1"
+        lock.get("generator_version") != "office-generators/2.1.2"
         or sum(item["instances"] for item in lock.get("manifests", [])) != 528
         or lock.get("split_leakage_review", {}).get("finding_count") != 0
         or lock.get("split_leakage_review", {}).get("passed") is not True
@@ -266,7 +318,7 @@ def _validate_successor_semantics():
         raise NextStudyDesignError("successor generator audits are incomplete")
     audit = load_canonical_json(ROOT / _ARTIFACT_PATHS["oracle_audit"])
     if (
-        audit.get("generator_version") != "office-generators/2.1.1"
+        audit.get("generator_version") != "office-generators/2.1.2"
         or audit.get("case_count") != 528 or audit.get("all_exact_matches") is not True
         or audit.get("live_model_calls") != 0
     ):
@@ -328,7 +380,7 @@ def _validate_successor_semantics():
         or findings != []
         or source.get("path")
         != "evidence/next-study/office-v2-semantic-simulation.json"
-        or "office-generators/2.1.1"
+        or "office-generators/2.1.2"
         not in rendered.get("manifest", {}).get("description", "")
     ):
         raise NextStudyDesignError("semantic rendered report drifted")
@@ -353,15 +405,19 @@ def _validate_successor_semantics():
         != "brick.next-study.grader-validated-conformance/1"
         or machine.get("case_count") != 528
         or machine.get("positive_baselines") != 528
-        or machine.get("targeted_mutations") != 4104
+        or machine.get("targeted_mutations") != 4332
         or machine.get("benign_non_rejection_controls") != 1872
         or machine.get("semantic_probe_counts") != {
+            "extra_identifier": 96,
             "forbidden_date": 48,
+            "forbidden_mention": 36,
             "memory_exactness": 48,
+            "missing_exact_deadline": 48,
             "negated_deadline": 48,
             "negated_email": 96,
             "presentation_fact": 648,
             "presentation_order": 48,
+            "reformatted_email_field": 48,
             "source_list": 192,
         }
         or machine.get("passed") is not True

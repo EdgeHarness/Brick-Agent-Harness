@@ -31,3 +31,6 @@ domains/office_demo/outcome_oracle_v2.py text eol=lf
 CLAUDE.md text eol=lf
 PROJECT_GUIDE.md text eol=lf
 PROJECT_SETUP.md text eol=lf
+docs/office-v2-prompt-audit*.md text eol=lf
+docs/office-v2-prompt-audit-responses.csv text eol=lf
+docs/office-v2-audit-append.py text eol=lf

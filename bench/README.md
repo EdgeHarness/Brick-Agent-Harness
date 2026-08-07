@@ -618,8 +618,8 @@ python -m pytest tests/test_next_study.py tests/test_next_study_v2.py -q
 ```
 
 `bench/next_study_design.json` is the artifact-bound replacement candidate at
-version `0.8.0`. Six canonical manifests hold 528 split-neutral
-`office-generators/2.1.1` cases with the preserved 2.1.0 seed namespace.
+version `0.8.1`. Six canonical manifests hold 528 split-neutral
+`office-generators/2.1.2` cases with the preserved 2.1.0 seed namespace.
 Protocol `1.4.0` freezes calibration (352),
 sentinel (88), retained primary (880), and at most 222 descriptive cells, with
 exact-uniform bootstrap sampling and descriptive-only LOFO sensitivity. The

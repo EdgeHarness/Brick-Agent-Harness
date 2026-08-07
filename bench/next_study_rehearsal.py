@@ -165,8 +165,8 @@ def _evidence_store_smoke(directory, schedule):
     key = AttemptKey(
         domain_name="office_demo", domain_version="0.1.0",
         domain_content_sha256="a" * 64, task_family=cell["family"],
-        task_version="2.1.1", generator_version="office-generators/2.1.1",
-        grader_version="3.1.0", model_tag="mock:4b",
+        task_version="2.1.2", generator_version="office-generators/2.1.2",
+        grader_version="3.2.0", model_tag="mock:4b",
         model_digest="sha256:" + schedule["model_sha256"],
         condition_name=cell["condition"], condition_version="1.4.0",
         mechanism_sha256="b" * 64, instance_id=cell["instance_id"],

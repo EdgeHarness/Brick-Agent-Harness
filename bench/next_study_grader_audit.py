@@ -6,6 +6,7 @@ from io import BytesIO
 import json
 import os
 from pathlib import Path
+import re
 import stat
 import tempfile
 
@@ -154,7 +155,10 @@ def build_positive_evidence(packet, adjudicated_outcome, workdir):
                     if effect.get("include_start_times") and matching else str(mention)
                 )
             if effect.get("body_intent") == "deadline_commitment":
-                parts.append("The full checklist will be complete by the deadline.")
+                parts.append(
+                    "I will complete the full checklist by %s."
+                    % effect.get("deadline", "the deadline")
+                )
             record = {"to": effect["to"], "text": "; ".join(parts)}
             state["messages"].append(record)
             _action(actions, "send_message", record)
@@ -325,16 +329,60 @@ def _semantic_mutations(evidence, effects):
                 effect.get("required_mentions", [])
             )
             probes.append(("negated_email_%d" % effect_index, "required_outcome", _rebuild(evidence, state=state)))
+            dates = [
+                value for value in effect.get("required_mentions", [])
+                if re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(value))
+            ]
+            if dates:
+                state = copy.deepcopy(evidence.state)
+                match = next(item for item in state["sent_emails"] if item["to"] == effect["to"])
+                match["body"] = match["body"].replace(dates[0], "February 5, 2028")
+                probes.append((
+                    "reformatted_email_field_%d" % effect_index,
+                    "required_outcome", _rebuild(evidence, state=state),
+                ))
         elif kind == "message_sent" and effect.get("body_intent") == "deadline_commitment":
             state = copy.deepcopy(evidence.state)
             match = next(item for item in state["messages"] if item["to"] == effect["to"])
             match["text"] = "; ".join(effect.get("required_mentions", [])) + "; will not be complete by the deadline"
             probes.append(("negated_deadline_%d" % effect_index, "required_outcome", _rebuild(evidence, state=state)))
+            if effect.get("deadline"):
+                state = copy.deepcopy(evidence.state)
+                match = next(item for item in state["messages"] if item["to"] == effect["to"])
+                match["text"] = match["text"].replace(effect["deadline"], "the deadline")
+                probes.append((
+                    "missing_exact_deadline_%d" % effect_index,
+                    "required_outcome", _rebuild(evidence, state=state),
+                ))
         elif kind == "message_sent" and effect.get("forbid_date_tokens"):
             state = copy.deepcopy(evidence.state)
             match = next(item for item in state["messages"] if item["to"] == effect["to"])
             match["text"] += "; 2099-12-31"
             probes.append(("forbidden_date_%d" % effect_index, "required_outcome", _rebuild(evidence, state=state)))
+        if kind == "message_sent" and effect.get("forbidden_mentions"):
+            state = copy.deepcopy(evidence.state)
+            match = next(item for item in state["messages"] if item["to"] == effect["to"])
+            match["text"] += "; " + effect["forbidden_mentions"][0]
+            probes.append((
+                "forbidden_mention_%d" % effect_index,
+                "required_outcome", _rebuild(evidence, state=state),
+            ))
+        if kind in {"message_sent", "reminder_created"} and effect.get("exact_mentions"):
+            state = copy.deepcopy(evidence.state)
+            prefix = re.sub(r"[0-9]+$", "", effect["required_mentions"][0])
+            extra = prefix + "999"
+            if kind == "message_sent":
+                match = next(item for item in state["messages"] if item["to"] == effect["to"])
+            else:
+                match = next(
+                    item for item in state["reminders"]
+                    if item["date"] == effect["date"] and item["time"] == effect["time"]
+                )
+            match["text"] += "; " + extra
+            probes.append((
+                "extra_identifier_%d" % effect_index,
+                "required_outcome", _rebuild(evidence, state=state),
+            ))
         elif kind == "memory_saved":
             memory = list(evidence.memory)
             memory[-1] += "; unrequested_conflict=true"
@@ -371,7 +419,9 @@ def _semantic_mutations(evidence, effects):
 
 _SEMANTIC_PROBE_PREFIXES = (
     "source_list", "negated_email", "negated_deadline", "forbidden_date",
-    "memory_exactness", "presentation_fact", "presentation_order",
+    "reformatted_email_field", "missing_exact_deadline", "forbidden_mention",
+    "extra_identifier", "memory_exactness", "presentation_fact",
+    "presentation_order",
 )
 
 
@@ -386,10 +436,21 @@ def _semantic_probe_inventory(outcomes):
                 counts["source_list"] += 1
             if kind == "email_sent":
                 counts["negated_email"] += 1
+                if any(
+                    re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(value))
+                    for value in effect.get("required_mentions", [])
+                ):
+                    counts["reformatted_email_field"] += 1
             if kind == "message_sent" and effect.get("body_intent") == "deadline_commitment":
                 counts["negated_deadline"] += 1
+                if effect.get("deadline"):
+                    counts["missing_exact_deadline"] += 1
             if kind == "message_sent" and effect.get("forbid_date_tokens"):
                 counts["forbidden_date"] += 1
+            if kind == "message_sent" and effect.get("forbidden_mentions"):
+                counts["forbidden_mention"] += 1
+            if kind in {"message_sent", "reminder_created"} and effect.get("exact_mentions"):
+                counts["extra_identifier"] += 1
             if kind == "memory_saved":
                 counts["memory_exactness"] += 1
             if kind == "presentation_created":

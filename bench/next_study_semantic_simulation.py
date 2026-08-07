@@ -236,7 +236,10 @@ def _effect_call(effect, state):
                 else str(mention)
             )
         if effect.get("body_intent") == "deadline_commitment":
-            parts.append("The full checklist will be complete by the deadline.")
+            parts.append(
+                "I will complete the full checklist by %s."
+                % effect.get("deadline", "the deadline")
+            )
         return "send_message", {"to": effect["to"], "text": "; ".join(parts)}
     if kind == "reminder_created":
         return "set_reminder", {

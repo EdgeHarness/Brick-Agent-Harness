@@ -1,4 +1,4 @@
-"""Frozen construct contract for office-generators/2.1.1."""
+"""Frozen construct contract for office-generators/2.1.2."""
 
 from pathlib import Path
 
@@ -9,7 +9,7 @@ from harness.instances import load_canonical_json
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = ROOT / "bench" / "next_study_construct_contract.json"
 SCHEMA_VERSION = "brick.next-study.construct-contract/1"
-VERSION = "office-construct/1.1.0"
+VERSION = "office-construct/1.2.0"
 
 POLICIES = {
     "pptx_basic": ["brief_sequence", "risk_descending", "owner_alphabetical"],
@@ -60,9 +60,10 @@ def build_contract():
         },
         "termination": {
             "this_is_final_remediation_version": True,
+            "pre_outcome_amendment_from": "office-generators/2.1.1",
             "unresolved_deterministic_construct_blocker": "construct_gate_failed",
             "automatic_family_removal_allowed": False,
-            "automatic_2_3_0_allowed": False,
+            "automatic_2_1_3_allowed": False,
         },
     }
 

@@ -36,12 +36,14 @@ execution remains disabled, and no condition-level or confirmatory effect
 estimate exists.
 
 The tagged `v0.13.0` successor candidate is invalidated before calibration, and
-no live study cell ran. Its replacement is the offline
-`office-generators/2.1.1` candidate for target tag `v0.13.1`. The generator
-retains the 2.1.0 seed namespace deliberately: 384 public packets remain
-byte-identical and 144 repaired packets have changed contents and hashes. The
+no live study cell ran. A bound pre-outcome amendment based on Sunnycho100's
+consolidated audit authorizes the offline `office-generators/2.1.2` candidate
+for target tag `v0.13.1`. The generator retains the 2.1.0 seed namespace
+deliberately: relative to 2.1.1, 240 public semantic surfaces remain unchanged
+and 288 cases in six repaired families change. All full content hashes and packet
+identities are regenerated and rebound. The
 current machine gates use independently compiled public outcomes, 1,056
-production-runner positive traces, 4,104 targeted grader mutations, and 1,872
+production-runner positive traces, 4,332 targeted grader mutations, and 1,872
 benign controls. Human and agent packet review is advisory and cannot satisfy or
 alter an authorization gate. Live execution remains disabled pending the
 remaining Fable finding reconciliation and replacement qualification evidence.

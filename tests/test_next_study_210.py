@@ -30,7 +30,7 @@ def test_final_construct_claim_and_rehearsal_contracts_are_exact(tmp_path):
     rendered = load_canonical_json(
         Path("evidence/next-study/semantic-validation-report/artifact.json")
     )
-    assert construct["generator_version"] == "office-generators/2.1.1"
+    assert construct["generator_version"] == "office-generators/2.1.2"
     assert construct["matched_triplets"] == 176
     assert len(construct["policies"]) == 11
     assert claim["threshold_inclusive"] is True
@@ -55,6 +55,11 @@ def test_final_construct_claim_and_rehearsal_contracts_are_exact(tmp_path):
     lf.write_bytes(b"alpha\nbeta\n")
     crlf.write_bytes(b"alpha\r\nbeta\r\n")
     assert _sha256(lf) == _sha256(crlf)
+    lf_csv = tmp_path / "lf.csv"
+    crlf_csv = tmp_path / "crlf.csv"
+    lf_csv.write_bytes(b"case,result\n1,pass\n")
+    crlf_csv.write_bytes(b"case,result\r\n1,pass\r\n")
+    assert _sha256(lf_csv) == _sha256(crlf_csv)
 
 
 def _authorization():

@@ -11,9 +11,9 @@ from harness.evidence import canonical_json_bytes
 from harness.instances import load_canonical_json, sha256_bytes
 
 
-SCHEMA_VERSION = "brick.next-study.fable-reconciliation/1"
+SCHEMA_VERSION = "brick.next-study.fable-reconciliation/2"
 DEFAULT_PATH = "evidence/next-study/office-v2-fable-reconciliation.json"
-GENERATOR_VERSION = "office-generators/2.1.1"
+GENERATOR_VERSION = "office-generators/2.1.2"
 SEED_NAMESPACE = "office-generators/2.1.0"
 
 
@@ -38,7 +38,7 @@ def build_pending():
         "unresolved_report_count": 3,
         "authorization_gate_passed": False,
         "advisory_reports_may_supply_outcomes": False,
-        "no_flags_can_establish_validity": False,
+        "absence_of_flags_can_establish_validity": False,
         "live_model_calls": 0,
     }
     document["reconciliation_sha256"] = _digest(document)
@@ -51,7 +51,7 @@ def validate_reconciliation(document, require_complete=False):
         "invalidated_instrument_tag", "minimum_reports_required",
         "reports_received", "findings", "unresolved_report_count",
         "authorization_gate_passed", "advisory_reports_may_supply_outcomes",
-        "no_flags_can_establish_validity", "live_model_calls",
+        "absence_of_flags_can_establish_validity", "live_model_calls",
         "reconciliation_sha256",
     }
     if not isinstance(document, dict) or set(document) != expected:
@@ -71,7 +71,7 @@ def validate_reconciliation(document, require_complete=False):
         or not isinstance(reports, list)
         or not isinstance(findings, list)
         or document["advisory_reports_may_supply_outcomes"] is not False
-        or document["no_flags_can_establish_validity"] is not False
+        or document["absence_of_flags_can_establish_validity"] is not False
         or document["live_model_calls"] != 0
     ):
         raise FableReconciliationError("Fable reconciliation semantics drifted")
@@ -93,7 +93,10 @@ def validate_reconciliation(document, require_complete=False):
             is None
             or report["source_content_sha256"] in source_hashes
             or report["reviewed_generator_version"]
-            not in ("office-generators/2.1.0", GENERATOR_VERSION)
+            not in (
+                "office-generators/2.1.0", "office-generators/2.1.1",
+                GENERATOR_VERSION,
+            )
             or type(report["reviewed_case_count"]) is not int
             or report["reviewed_case_count"] < 1
             or type(report["findings_reported"]) is not int

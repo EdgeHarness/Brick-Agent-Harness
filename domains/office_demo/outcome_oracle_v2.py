@@ -1,4 +1,4 @@
-"""Independent prompt-to-outcome oracle for office-generators/2.1.1.
+"""Independent prompt-to-outcome oracle for office-generators/2.1.2.
 
 The public entry point accepts only prompt text, subepisode prompt text,
 initial state, the task family, and the frozen date.  It cannot consume a
@@ -13,7 +13,7 @@ import datetime
 import re
 
 
-ORACLE_VERSION = "office-prompt-oracle/2.0.0"
+ORACLE_VERSION = "office-prompt-oracle/2.1.0"
 
 
 class OracleInputError(ValueError):
@@ -342,8 +342,8 @@ def _cal_freeslot(prompt, state, _today):
     match = _search(
         r"Inspect calendar date (\d{4}-\d{2}-\d{2})\. Between (\d{2}:\d{2}) "
         r"and (\d{2}:\d{2}), find (\d+)-minute slots aligned to 30 minutes and "
-        r"choose (earliest_free|latest_free|closest_to_preferred); the preferred "
-        r"start is (\d{2}:\d{2})\. Add exactly one event "
+        r"choose (earliest_free|latest_free|closest_to_preferred)\.[\s\S]*?"
+        r"closest to preferred start (\d{2}:\d{2}),[\s\S]*?Add exactly one event "
         r"titled '(.*?)' in that slot, with no attendees and location '(.*?)'\.",
         prompt,
         "free-slot contract",
@@ -388,7 +388,7 @@ def _cal_brief(prompt, state, _today):
         r"Inspect calendar date (\d{4}-\d{2}-\d{2})\. Send exactly one chat "
         r"message to (.*?)\. Include, in policy "
         r"(chronological|severity_descending|owner_alphabetical) order, only event titles "
-        r"beginning 'Priority:' and each start time\.[\s\S]*?Then send exactly "
+        r"beginning 'Priority:' and each start time,[\s\S]*?Then send exactly "
         r"one separate chat message to (.*?) containing '(\d{4}-\d{2}-\d{2})' "
         r"and 'priority-count=(\d+)'\.",
         prompt,
@@ -440,7 +440,7 @@ def _cal_brief(prompt, state, _today):
 def _remind_msg(prompt, _state, _today):
     match = _search(
         r"Action items: (.*?)\. Order them using policy "
-        r"(due_date_ascending|priority_descending|dependency_order)\. Create exactly "
+        r"(due_date_ascending|priority_descending|dependency_order)\.[\s\S]*?Create exactly "
         r"one reminder at (\d{2}:\d{2}) on the first ordered item's due date\. "
         r"Use the resulting full ordered ID list as the reminder checklist\. Then send "
         r"exactly one chat message to (.*?) repeating",
@@ -470,9 +470,12 @@ def _remind_msg(prompt, _state, _today):
                 if item["depends_on"] == "none"
                 or item["depends_on"] in {value["id"] for value in ordered}
             ]
-            if len(eligible) != 1:
-                raise OracleInputError("dependency order is not unique")
-            selected = eligible[0]
+            if not eligible:
+                raise OracleInputError("dependency order contains a cycle")
+            selected = sorted(
+                eligible,
+                key=lambda item: (-item["priority"], item["due"], item["id"]),
+            )[0]
             ordered.append(selected)
             remaining.pop(selected["id"])
         records = ordered
@@ -484,12 +487,15 @@ def _remind_msg(prompt, _state, _today):
             "date": date,
             "time": time,
             "required_mentions": values,
+            "exact_mentions": True,
             "exact_count": 1,
         },
         {
             "type": "message_sent",
             "to": recipient,
             "required_mentions": values,
+            "exact_mentions": True,
+            "deadline": date,
             "body_intent": "deadline_commitment",
             "exact_count": 1,
         },
@@ -573,7 +579,7 @@ def _preference_learning(_prompt, _state, _today, subepisode_prompts):
 def _multi_offsite(prompt, state, _today):
     match = _search(
         r"subject '([^']+)'\. Select one detail source using policy "
-        r"(latest_issued|highest_approval_rank|consensus_supported),[\s\S]*?"
+        r"(latest_issued|highest_approval_rank|consensus_supported)\.[\s\S]*?"
         r"create ([a-z0-9_.-]+\.pptx)",
         prompt,
         "offsite source and artifact",

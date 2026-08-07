@@ -5,9 +5,10 @@ qualification. It does not authorize a model call or report a model result.
 
 ## Qualified instrument
 
-- `office-generators/2.1.1` produces 528 unique, split-neutral cases across 11
+- `office-generators/2.1.2` produces 528 unique, split-neutral cases across 11
   fixed synthetic families. It deliberately retains the 2.1.0 seed namespace:
-  384 visible packets remain byte-identical and 144 repaired packets change.
+  relative to 2.1.1, 240 public semantic surfaces remain unchanged and 288
+  cases across six repaired families change. Full content hashes are rebound.
   Generator 2.1.0 and tag `v0.13.0` are invalidated before calibration.
 - The construct contract freezes three genuine decision policies per family.
   All 176 workload/distractor-matched triplets produce three distinct outcomes
@@ -23,7 +24,7 @@ qualification. It does not authorize a model call or report a model result.
   conditions for every case), verifies every relevant dependency and
   record-order/distractor invariance, and reports no critical, high, or medium
   internal-validity finding.
-- Grader conformance passes 528 positive baselines, exactly 4,104 targeted
+- Grader conformance passes 528 positive baselines, exactly 4,332 targeted
   mutations, and 1,872 benign controls. Placeholder presentations and
   alternate-policy outcomes fail.
 
@@ -34,8 +35,10 @@ hold, not a substitute answer key or a real-world validity claim.
 
 ## Statistics and evidence
 
-Protocol `1.4.0`, design `0.8.0`, construct contract
-`office-construct/1.1.0`, and grader `office-strict-grader/3.1.0` are active.
+Protocol `1.4.0`, design `0.8.1`, construct contract
+`office-construct/1.2.0`, and grader `office-strict-grader/3.2.0` are active.
+The amendment from 2.1.1 is bound before any live study cell or effectiveness
+result and permits no automatic 2.1.3 successor.
 The machine-readable claim contract is authoritative: a directional claim
 requires an inclusive `abs(Delta) >= 0.12` and a two-sided 95% stratified
 cluster-bootstrap interval excluding zero in that direction. The exact

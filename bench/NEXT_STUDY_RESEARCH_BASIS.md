@@ -5,7 +5,8 @@ records evidence used to design the successor and retains historical proposals.
 It is not a preregistration, execution authorization, benchmark result, or
 retained-data release. Where this note requires human review or names generator
 2.1.0/design 0.5.0, that text is superseded by protocol 1.4.0 and the
-`office-generators/2.1.1` replacement contract. Human and agent packet reviews
+`office-generators/2.1.2` replacement contract and its bound pre-outcome
+amendment. Human and agent packet reviews
 are advisory only; authorization instead binds deterministic public-outcome,
 semantic-runner, mutation, rehearsal, CI, native, and shakeout gates. Live and
 retained execution remain disabled in `next_study_design.json`.
@@ -152,7 +153,7 @@ does not close independent-oracle or prompt-validity gates for a new suite.
 ## Fail-closed successor architecture
 
 The historical design below proposed version 0.5.0 and generator 2.1.0. The
-active machine-readable contract is design 0.8.0 with generator 2.1.1 and the
+active machine-readable contract is design 0.8.1 with generator 2.1.2 and the
 intentionally preserved 2.1.0 seed namespace. The allocation remains
 across 11 families:
 

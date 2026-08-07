@@ -15,8 +15,8 @@ from harness.instances import sha256_bytes
 from .strict_graders import _number, _rows, _slides, _text
 
 
-GRADER_VERSION = "3.1.0"
-GRADER_IDENTITY = "office-strict-grader/3.1.0"
+GRADER_VERSION = "3.2.0"
+GRADER_IDENTITY = "office-strict-grader/3.2.0"
 PACKET_SCHEMA = "brick.next-study.blind-review-packet/2"
 OUTCOMES_SCHEMA = "brick.next-study.adjudicated-outcomes/2"
 CHECKS = (
@@ -118,6 +118,22 @@ def _contains_in_order(text, values):
             return False
         position += match.end()
     return True
+
+
+def _contains_exact_identifier_sequence(text, values):
+    """Require each requested numbered identifier once, in order, with no peer IDs."""
+
+    if not values or not all(isinstance(value, str) for value in values):
+        return False
+    prefixes = {re.sub(r"[0-9]+$", "", value.casefold()) for value in values}
+    if len(prefixes) != 1 or "" in prefixes:
+        return False
+    prefix = next(iter(prefixes))
+    observed = re.findall(
+        r"(?<![a-z0-9])%s[0-9]+(?![a-z0-9])" % re.escape(prefix),
+        str(text).casefold(),
+    )
+    return observed == [value.casefold() for value in values]
 
 
 def _intent(text, name):
@@ -246,6 +262,10 @@ def _effect_passes(effect, state, memory, artifacts):
             mentions = effect.get("ordered_mentions", effect.get("required_mentions", []))
             if not _contains_in_order(item.get("text", ""), mentions):
                 continue
+            if effect.get("exact_mentions") and not _contains_exact_identifier_sequence(
+                item.get("text", ""), mentions
+            ):
+                continue
             if any(
                 _contains_in_order(item.get("text", ""), [value])
                 for value in effect.get("forbidden_mentions", [])
@@ -262,12 +282,19 @@ def _effect_passes(effect, state, memory, artifacts):
                     continue
             if "body_intent" in effect and not _intent(item.get("text", ""), effect["body_intent"]):
                 continue
+            if "deadline" in effect and not _contains_in_order(
+                item.get("text", ""), [effect["deadline"]]
+            ):
+                continue
             matches.append(item)
         return len(matches) == effect["exact_count"]
     if kind == "reminder_created":
         matches = [item for item in state["reminders"] if item.get("date") == effect["date"]
                    and item.get("time") == effect["time"]
-                   and _contains_in_order(item.get("text", ""), effect["required_mentions"])]
+                   and _contains_in_order(item.get("text", ""), effect["required_mentions"])
+                   and (not effect.get("exact_mentions") or _contains_exact_identifier_sequence(
+                       item.get("text", ""), effect["required_mentions"]
+                   ))]
         return len(matches) == effect["exact_count"]
     if kind == "memory_saved":
         added = memory[effect["_initial_memory_count"]:]

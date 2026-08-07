@@ -39,11 +39,12 @@ no condition-level or confirmatory effect estimate exists.
 A separate offline successor-design contract records the verified causes and
 necessary controls without reopening S7. The `v0.13.0` candidate and generator
 2.1.0 are invalidated before calibration; zero live study cells ran. The
-replacement implements 528 `office-generators/2.1.1` cases while deliberately
-retaining the 2.1.0 seed namespace. This preserves 384 unchanged visible packets
-and changes 144 packets in the three repaired prompt families. It binds 176
+replacement implements 528 `office-generators/2.1.2` cases under a bound
+pre-outcome amendment while deliberately retaining the 2.1.0 seed namespace.
+Relative to 2.1.1, 240 visible semantic surfaces remain unchanged and 288 cases
+in six repaired families change; all full content hashes are regenerated. It binds 176
 outcome-distinct decision-policy triplets, independent public outcomes,
-`office-strict-grader/3.1.0`, protocol `1.4.0`, LOFO/exact-uniform bootstrap
+`office-strict-grader/3.2.0`, protocol `1.4.0`, LOFO/exact-uniform bootstrap
 statistics, hardened masking/release checks, and an at-most-222-cell descriptive
 matrix. Human-review utilities are advisory only. Current-source execution is
 disabled until pending Fable findings are reproduced or refuted, every offline
@@ -113,7 +114,7 @@ with Snapdragon X Elite, 32 GB RAM, and native Windows 11 ARM64.
 | Pre-D0 | `v0.11.1` | Fresh balanced D0 cohorts, immutable exposure accounting, and corrected Brix grading. | Each D0 cohort has 44 pairs/88 primary attempts with matched marginals and disjoint structures; all exposed-material reuse channels fail closed; all 352 rules-reference cases pass strictly. |
 | D0/S7 | not released | Terminal score-masked development calibration under protocol 1.0.2. | The direction-blind floor/ceiling audit failed, so no freeze or efficacy contrast exists. |
 | Invalidated successor | `v0.13.0` | Generator 2.1.0 candidate. | Invalidated before calibration; no live study cells ran. |
-| Replacement instrument | target `v0.13.1` | Generator 2.1.1, grader 3.1.0, protocol 1.4.0, independent public outcomes, repeated-trial statistics, rehearsal, and sentinel protocol. | Fable findings reconciled; offline gates, exact-commit Linux CI, native qualification, and the 22-cell shakeout close before authorization. |
+| Replacement instrument | target `v0.13.1` | Generator 2.1.2, grader 3.2.0, protocol 1.4.0, independent public outcomes, repeated-trial statistics, rehearsal, and sentinel protocol. | Fable findings reconciled; offline gates, exact-commit Linux CI, native qualification, and the 22-cell shakeout close before authorization. |
 | Completed successor study | target `v0.14.0` | Calibration, sentinel, sealed primary analysis, bounded descriptives, evidence-bound report, and commit-bound release archive. | Every authorized gate passes; null, negative, or adverse outcomes are released unchanged. |
 
 ## F0/Q0 — feasibility and quarantine

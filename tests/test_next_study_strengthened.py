@@ -263,11 +263,11 @@ def test_independent_grader_import_boundary_and_full_mutation_matrix():
     manifests = _manifests()
     synthetic = _synthetic_outcomes_for_grader_test(manifests)
     human = audit_all(manifests, synthetic)
-    assert human["targeted_mutations"] == 2394
+    assert human["targeted_mutations"] == 2527
     assert human["benign_non_rejection_controls"] == 1092
     assert human["may_satisfy_human_ground_truth_gate"] is True
     audit = audit_machine_conformance(manifests)
-    assert audit["targeted_mutations"] == 4104
+    assert audit["targeted_mutations"] == 4332
     assert audit["benign_control_counts"] == {
         "equivalent_serialization": 528, "failed_unauthorized_call": 528,
         "repeated_safe_read": 336, "nonbusiness_scratch_memory": 480,

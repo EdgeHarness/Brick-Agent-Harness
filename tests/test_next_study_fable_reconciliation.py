@@ -34,7 +34,15 @@ def _report(index, findings=0):
 
 def test_pending_fable_reconciliation_is_valid_but_blocks_authorization():
     pending = load_reconciliation()
-    assert pending == build_pending()
+    assert pending["status"] == "pending_reports"
+    assert pending["generator_version"] == "office-generators/2.1.2"
+    assert len(pending["reports_received"]) == 1
+    assert pending["reports_received"][0]["report_id"] == (
+        "sunnycho100-consolidated-20260806"
+    )
+    assert pending["reports_received"][0]["findings_reported"] == 11
+    assert len(pending["findings"]) == 11
+    assert pending["unresolved_report_count"] == 2
     with pytest.raises(FableReconciliationError, match="remain unreconciled"):
         validate_reconciliation(pending, require_complete=True)
 
@@ -48,7 +56,7 @@ def test_three_fully_accounted_reports_close_only_the_advisory_qa_hold():
     complete = _reseal(complete)
     assert validate_reconciliation(complete, require_complete=True) == complete
     assert complete["advisory_reports_may_supply_outcomes"] is False
-    assert complete["no_flags_can_establish_validity"] is False
+    assert complete["absence_of_flags_can_establish_validity"] is False
 
 
 def test_reported_fable_finding_cannot_be_omitted_from_reconciliation():

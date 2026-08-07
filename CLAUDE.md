@@ -117,13 +117,14 @@ there is no `v0.12.0`, no S8 handoff, no condition-level result, and retained
 execution remains mechanically disabled.
 
 `v0.13.0` and `office-generators/2.1.0` are invalidated before calibration;
-zero live study cells ran. The replacement under construction is
-`office-generators/2.1.1`, intentionally retaining the 2.1.0 seed namespace so
-unchanged packets remain review-comparable while repaired packets receive new
-content hashes. It has 528 split-neutral cases, 176 outcome-distinct policy
+zero live study cells ran. Sunnycho100's consolidated audit then authorized one
+pre-outcome, no-effectiveness-data amendment. The replacement under construction is
+`office-generators/2.1.2`, intentionally retaining the 2.1.0 seed namespace so
+unchanged semantic surfaces remain review-comparable while repaired packets receive
+new content hashes. It has 528 split-neutral cases, 176 outcome-distinct policy
 triplets, condition-aware 9/12-request maxima, 1,056 production-runner positive
 traces, independently compiled public-packet outcomes, and
-`office-strict-grader/3.1.0`. Its conformance gate requires 528 baselines, 4,104
+`office-strict-grader/3.2.0`. Its conformance gate requires 528 baselines, 4,332
 targeted mutations, and 1,872 benign controls. Protocol `1.4.0` binds the claim
 contract, 50,000-draw bootstrap, LOFO, reliability metrics, hardened masking and
 release semantics, and the at-most-222-cell descriptive matrix. Human-review

@@ -1,6 +1,6 @@
 """Final successor generators for the eleven synthetic office families.
 
-Version 2.1.1 is a semantic repair of 2.1.0. It deliberately retains the
+Version 2.1.2 is a pre-outcome semantic repair of 2.1.1. It deliberately retains the
 2.1.0 seed/entity namespace so unaffected public packets remain byte-stable,
 while every repaired packet receives a new content hash.
 48 genuine semantic shapes per family, explicit difficulty/action axes, and an
@@ -25,9 +25,9 @@ from .outcome_oracle_v2 import derive_outcome
 
 
 SUITE = "office-synthetic-v2"
-GENERATOR_VERSION = "office-generators/2.1.1"
+GENERATOR_VERSION = "office-generators/2.1.2"
 SEED_NAMESPACE = "office-generators/2.1.0"
-FAMILY_VERSION = "2.1.1"
+FAMILY_VERSION = "2.1.2"
 NEXT_SPLITS = (
     "development",
     "calibration",
@@ -423,7 +423,9 @@ def _xlsx_from_email(ctx):
     prompt = (
         "List the inbox and read every email whose subject begins '%s'. Then create %s "
         "with headers Date | Vendor | Amount. Include one row per paid receipt. Row "
-        "order rule: %s. Add one final Total row using a formula. Ignore drafts and quotes."
+        "order rule: %s. In the Amount column, enter USD dollar values: convert each "
+        "amount_cents=N source value to N/100 dollars. Add one final Total row using "
+        "a formula. Ignore drafts and quotes."
         % (prefix, filename, rule)
     )
     effects = [
@@ -491,10 +493,16 @@ def _email_reply(ctx):
         selected = next(item for item in request_records if item["key"] == decision_key)
     prompt = (
         "List the inbox and read the decision plus all three attendance requests with "
-        "subject prefix '%s'. Select exactly one request using policy %s. Reply exactly "
+        "subject prefix '%s'. Select exactly one request using policy %s. "
+        "Policy definitions: latest_request selects the request with the most recent "
+        "visible date; highest_priority selects the largest priority value; "
+        "decision_key_match selects the request whose decision_key exactly equals the "
+        "decision email's selection_key. Apply only the named policy. Reply exactly "
         "once to that request's sender. Subject must contain '%s'. Body must confirm "
         "attendance and include the decision's confirmation_code, confirmation_date, "
-        "and the selected request_id. Do not reply to any other sender."
+        "and the selected request_id, copying all three field values exactly as shown. "
+        "Do not reply to any other sender or create any reminder, event, chat message, "
+        "or file."
         % (prefix, policy, project)
     )
     effects = [
@@ -626,7 +634,11 @@ def _cal_freeslot(ctx):
     location = "Focus room"
     prompt = (
         "Inspect calendar date %s. Between 09:00 and 17:00, find 30-minute slots "
-        "aligned to 30 minutes and choose %s; the preferred start is %s. Add exactly "
+        "aligned to 30 minutes and choose %s. Policy definitions: earliest_free selects "
+        "the earliest free slot; latest_free selects the latest free slot; "
+        "closest_to_preferred selects the slot closest to preferred start %s, breaking "
+        "an equal-distance tie toward the earlier slot. Apply only the named policy. "
+        "Add exactly "
         "one event titled '%s' in "
         "that slot, with no attendees and location '%s'. Ignore other dates."
         % (date, rule, _clock(preferred), title, location)
@@ -714,7 +726,8 @@ def _cal_brief(ctx):
     prompt = (
         "Inspect calendar date %s. Send exactly one chat message to %s. Include, in "
         "policy %s order, only event titles beginning 'Priority:' and each start "
-        "time. Exclude every other title and date. Then send exactly one separate "
+        "time, formatting every entry exactly as '<title> at <HH:MM>'. Exclude every "
+        "other title and date. Then send exactly one separate "
         "chat message to %s containing '%s' and 'priority-count=%d'."
         % (date, recipient["name"], policy, auditor["name"], date, len(ordered))
     )
@@ -745,7 +758,7 @@ def _cal_brief(ctx):
 def _remind_msg(ctx):
     recipient = ctx.entity("recipient")
     priorities = (5, 9, 7, 4, 3, 2)
-    dependency_order = (2, 0, 1, 3, 4, 5)
+    dependency_order = (1, 0, 2, 3, 4, 5)
     records = []
     for index in range(ctx.axes["workload"]):
         dependency_position = dependency_order.index(index)
@@ -754,8 +767,9 @@ def _remind_msg(ctx):
             "due": ctx.date(3 + index),
             "priority": priorities[index],
             "depends_on": (
-                "none" if dependency_position == 0
-                else "checkpoint-%d" % (dependency_order[dependency_position - 1] + 1)
+                "none" if index < 2
+                else "checkpoint-1" if index == 2
+                else "checkpoint-%d" % index
             ),
             "dependency_position": dependency_position,
         })
@@ -778,19 +792,25 @@ def _remind_msg(ctx):
     date = selected[0]["due"]
     time = "14:00"
     prompt = (
-        "Action items: %s. Order them using policy %s. Create exactly one reminder at "
+        "Action items: %s. Order them using policy %s. Policy definitions: "
+        "due_date_ascending sorts by earliest due date then ID; priority_descending "
+        "sorts by largest priority then ID; dependency_order repeatedly selects an "
+        "item whose depends_on value is none or already selected, breaking multiple-eligible "
+        "ties by larger priority, then earlier due date, then ID. Apply only the named "
+        "policy. Create exactly one reminder at "
         "14:00 on the first ordered item's due date. Use the resulting full ordered ID "
         "list as the reminder checklist. Then send exactly one chat message to %s repeating "
         "the same full ordered ID list "
-        "in order and committing that the full checklist will be complete by the "
-        "deadline. Preserve all reminders."
+        "in order and committing that the full checklist will be complete by %s, which "
+        "is the first ordered item's due date. Mention every ordered ID exactly once and "
+        "do not mention any other checkpoint ID. Preserve all reminders."
         % (
             " | ".join(
                 "id=%s,due=%s,priority=%d,depends_on=%s"
                 % (item["id"], item["due"], item["priority"], item["depends_on"])
                 for item in records
             ),
-            policy, recipient["name"],
+            policy, recipient["name"], date,
         )
     )
     effects = [
@@ -799,12 +819,15 @@ def _remind_msg(ctx):
             "date": date,
             "time": time,
             "required_mentions": checklist,
+            "exact_mentions": True,
             "exact_count": 1,
         },
         {
             "type": "message_sent",
             "to": recipient["name"],
             "required_mentions": checklist,
+            "exact_mentions": True,
+            "deadline": date,
             "body_intent": "deadline_commitment",
             "exact_count": 1,
         },
@@ -962,7 +985,11 @@ def _multi_offsite(ctx):
         selected = max(candidates, key=lambda item: item["consensus"])
     prompt = (
         "List the inbox and read the index email with subject '%s'. Select one detail "
-        "source using policy %s, then read that exact FINAL OFFSITE DETAIL email. Use "
+        "source using policy %s. Policy definitions: latest_issued selects the largest "
+        "issued_rank value (also the newest visible detail-email date); "
+        "highest_approval_rank selects the largest approval_rank value; "
+        "consensus_supported selects the largest consensus value. Apply only the named "
+        "policy, then read that exact FINAL OFFSITE DETAIL email. Use "
         "only the selected detail to add the offsite event exactly, reply to its sender confirming "
         "attendance, and create %s with exactly one slide titled for the event and "
         "bullets containing every listed fact in order. Ignore draft messages."
@@ -1021,7 +1048,7 @@ def validate_office_instance_v2(instance):
     validate_office_instance(instance)
     content = instance["content"]
     if content["generator_version"] != GENERATOR_VERSION:
-        raise ValueError("instance is not from office-generators/2.1.1")
+        raise ValueError("instance is not from office-generators/2.1.2")
     if content["family_version"] != FAMILY_VERSION:
         raise ValueError("unexpected v2 family version")
     if content["split"] not in NEXT_SPLITS:
