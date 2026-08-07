@@ -3,6 +3,7 @@
 import copy
 from io import BytesIO
 from pathlib import Path
+import re
 
 from openpyxl import load_workbook
 from pptx import Presentation
@@ -281,3 +282,134 @@ def test_scratch_memory_is_neutral_but_requested_memory_is_exact(tmp_path):
         }],
     )
     assert not build_grader(packet, outcome).grade_evidence(changed).strict_success
+
+
+def test_reported_prompt_grader_blockers_reproduce(tmp_path):
+    """Pin the seven defects that terminally block office-generators/2.1.2."""
+
+    # The prompt permits a formula, but the evaluator accepts only SUM(range).
+    _instance, packet, outcome, evidence = _baseline(tmp_path, "xlsx_basic")
+    effect = next(item for item in outcome["outcome"] if item["type"] == "spreadsheet_created")
+    artifacts = dict(evidence.artifact_map())
+    workbook = load_workbook(BytesIO(artifacts[effect["filename"]]))
+    sheet = workbook.active
+    last_data_row = sheet.max_row - 1
+    total_column = sheet.max_column
+    sheet.cell(row=sheet.max_row, column=total_column).value = "=" + "+".join(
+        "%s%d" % (sheet.cell(row=1, column=total_column).column_letter, row)
+        for row in range(2, last_data_row + 1)
+    )
+    output = BytesIO()
+    workbook.save(output)
+    workbook.close()
+    artifacts[effect["filename"]] = output.getvalue()
+    assert not build_grader(packet, outcome).grade_evidence(
+        _rebuild(evidence, artifacts=sorted(artifacts.items()))
+    ).strict_success
+
+    # A natural confirmation is not in the hidden reviewed-grader allowlist.
+    _instance, packet, outcome, evidence = _baseline(tmp_path, "email_reply")
+    effect = next(item for item in outcome["outcome"] if item["type"] == "email_sent")
+    state = copy.deepcopy(evidence.state)
+    state["sent_emails"][-1]["body"] = "I confirm my attendance. " + "; ".join(
+        effect["required_mentions"]
+    )
+    assert not build_grader(packet, outcome).grade_evidence(
+        _rebuild(evidence, state=state)
+    ).strict_success
+
+    # The prompt says include the fact; a faithful label nevertheless fails.
+    _instance, packet, outcome, evidence = _baseline(tmp_path, "pptx_basic")
+    effect = next(item for item in outcome["outcome"] if item["type"] == "presentation_created")
+    artifacts = dict(evidence.artifact_map())
+    deck = Presentation(BytesIO(artifacts[effect["filename"]]))
+    wanted = str(effect["required_values_by_slide"][1][0])
+    changed = False
+    for slide in deck.slides:
+        for shape in slide.shapes:
+            if not getattr(shape, "has_text_frame", False):
+                continue
+            for paragraph in shape.text_frame.paragraphs:
+                if paragraph.text.strip() == wanted and not changed:
+                    paragraph.text = "Fact: " + wanted
+                    changed = True
+    output_path = tmp_path / "labelled-fact.pptx"
+    deck.save(output_path)
+    assert changed
+    artifacts[effect["filename"]] = output_path.read_bytes()
+    assert not build_grader(packet, outcome).grade_evidence(
+        _rebuild(evidence, artifacts=sorted(artifacts.items()))
+    ).strict_success
+
+    # The prompt prints pipe-separated facts; the grader silently requires ';'.
+    _instance, packet, outcome, evidence = _baseline(tmp_path, "preference_learning")
+    changed_memory = list(evidence.memory)
+    changed_memory[-1] = changed_memory[-1].replace(";", " | ")
+    assert changed_memory[-1] != evidence.memory[-1]
+    assert not build_grader(packet, outcome).grade_evidence(
+        _rebuild(evidence, memory=changed_memory)
+    ).strict_success
+
+    # The same family also has an undisclosed case-sensitive title grammar.
+    state = copy.deepcopy(evidence.state)
+    state["events"][-1]["title"] = state["events"][-1]["title"].replace(
+        " sync with ", " Sync with ", 1
+    )
+    assert state["events"][-1]["title"] != evidence.state["events"][-1]["title"]
+    assert not build_grader(packet, outcome).grade_evidence(
+        _rebuild(evidence, state=state)
+    ).strict_success
+
+    # One pptx policy is named but has no public definition.
+    brief_cases = [
+        generate_instance("development", "pptx_basic", index)
+        for index in range(8)
+    ]
+    brief = next(
+        item for item in brief_cases
+        if item["content"]["structure"]["decision_policy"] == "brief_sequence"
+    )
+    prompt = brief["content"]["prompt"]
+    assert "brief_sequence" in prompt
+    assert "brief_sequence selects" not in prompt
+
+    # Enumerated values are silently order-sensitive in the reviewed grader.
+    _instance, packet, outcome, evidence = _baseline(tmp_path, "email_reply")
+    effect = next(item for item in outcome["outcome"] if item["type"] == "email_sent")
+    state = copy.deepcopy(evidence.state)
+    state["sent_emails"][-1]["body"] = "I will attend. " + "; ".join(
+        reversed(effect["required_mentions"])
+    )
+    assert not build_grader(packet, outcome).grade_evidence(
+        _rebuild(evidence, state=state)
+    ).strict_success
+
+
+def test_successor_live_path_uses_only_reviewed_grader():
+    source = (Path(__file__).resolve().parents[1] / "bench" / "next_study_live.py").read_text(
+        encoding="utf-8"
+    )
+    assert "from domains.office_demo.reviewed_grader_v2 import" in source
+    assert "domains.office_demo.generated_grader" not in source
+
+
+def test_cal_add_feasibility_is_currently_vacuous():
+    for split, count in (
+        ("development", 8), ("calibration", 8), ("validation", 4),
+        ("sentinel", 4), ("adversarial", 4),
+    ):
+        for index in range(count):
+            content = generate_instance(split, "cal_add", index)["content"]
+            candidates = re.findall(
+                r"start=(\d\d:\d\d),duration=(\d+)", content["prompt"]
+            )
+            assert len(candidates) == 3
+            occupied = [
+                (event["start"], event["end"])
+                for event in content["initial_state"]["events"]
+            ]
+            for start, duration in candidates:
+                hour, minute = map(int, start.split(":"))
+                end_minutes = hour * 60 + minute + int(duration)
+                end = "%02d:%02d" % divmod(end_minutes, 60)
+                assert all(end <= old_start or start >= old_end for old_start, old_end in occupied)

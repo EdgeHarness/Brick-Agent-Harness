@@ -7,6 +7,7 @@ from bench.next_study_schedule import verify_descriptive_selection
 from bench.next_study_statistics import load_protocol
 from bench.next_study_claim import load_claim_contract
 from bench.next_study_construct import load_contract as load_construct_contract
+from bench.next_study_construct_failure import load_failure
 from bench.next_study_fable_reconciliation import load_reconciliation
 from bench.next_study_validated_outcomes import validate_validated_outcomes
 from bench.s7_contract import load_protocol as load_s7_protocol
@@ -66,6 +67,9 @@ _ARTIFACT_PATHS = {
     "live_implementation": "bench/next_study_live.py",
     "fable_reconciliation": "evidence/next-study/office-v2-fable-reconciliation.json",
     "fable_reconciliation_implementation": "bench/next_study_fable_reconciliation.py",
+    "fable_reconciliation_builder": "bench/reconcile_next_study_reports.py",
+    "construct_gate_failure": "evidence/next-study/office-v2.1.2-construct-gate-failure.json",
+    "construct_gate_failure_implementation": "bench/next_study_construct_failure.py",
 }
 
 _EXPECTED_GATES = {
@@ -84,7 +88,7 @@ _EXPECTED_GATES = {
     "linux_ci_reproduction_complete": False,
     "native_windows_clean_checkout_complete": False,
     "power_and_cluster_analysis_frozen": True,
-    "semantic_internal_validity_complete": True,
+    "semantic_internal_validity_complete": False,
     "development_shakeout_complete": False,
     "scheduler_implementation_complete": True,
     "evidence_derived_attempt_extractor_complete": True,
@@ -124,8 +128,8 @@ def _artifact_bindings():
 def build_design():
     return {
         "schema_version": "brick.next-study.design/5",
-        "version": "0.8.1",
-        "status": "replacement_under_construction",
+        "version": "0.8.2",
+        "status": "construct_gate_failed",
         "release_sequence": {
             "v0.12.0": "permanently_unissued_terminal_s7",
             "v0.13.0": "invalidated_successor_candidate",
@@ -433,6 +437,7 @@ def _validate_successor_semantics():
         ROOT / _ARTIFACT_PATHS["fable_reconciliation"],
         require_complete=False,
     )
+    load_failure(ROOT / _ARTIFACT_PATHS["construct_gate_failure"])
 
 
 def validate_design(design):

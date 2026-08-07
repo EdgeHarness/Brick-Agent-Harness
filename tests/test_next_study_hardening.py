@@ -361,7 +361,7 @@ def test_preflight_requires_the_actually_held_machine_lease(tmp_path):
 def test_readiness_report_names_the_real_next_gate_without_overclaiming():
     report = build_readiness_report()
     assert report["current_activity"] == (
-        "v0.13.0 invalidation and v0.13.1 replacement qualification"
+        "office-generators/2.1.2 construct-gate termination"
     )
     assert report["benchmark_running_now"] is False
     assert report["experiment_running_now"] is False
@@ -374,6 +374,12 @@ def test_readiness_report_names_the_real_next_gate_without_overclaiming():
     assert report["external_or_evidence_dependent_gates"][
         "github_actions_linux_python_3_9_through_3_13"
     ] is False
-    assert report["next_transition"].startswith(
-        "reconcile every remaining Fable finding"
-    )
+    assert report["construct_gate_status"] == "construct_gate_failed"
+    assert report["confirmed_authorization_blocker_count"] == 7
+    assert report["external_or_evidence_dependent_gates"][
+        "advisory_audits_complete"
+    ] is True
+    assert report["external_or_evidence_dependent_gates"][
+        "construct_gate_passed"
+    ] is False
+    assert report["next_transition"].startswith("stop the v0.13.1 candidate")

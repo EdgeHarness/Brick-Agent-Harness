@@ -552,11 +552,14 @@ def main(argv=None):
             if ledger["status"] == "pending_human_review"
             else "advisory_completed_not_authoritative"
         )
+    from bench.next_study_fable_reconciliation import load_reconciliation
+    construct_gate_status = load_reconciliation()["status"]
     print(json.dumps({
         "status": status,
         "generator_version": GENERATOR_VERSION,
         "instances": sum(item["instances"] for item in lock["manifests"]),
         "advisory_review_status": ledger_status,
+        "construct_gate_status": construct_gate_status,
         "live_model_calls": 0,
     }, sort_keys=True))
 

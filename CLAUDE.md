@@ -118,7 +118,7 @@ execution remains mechanically disabled.
 
 `v0.13.0` and `office-generators/2.1.0` are invalidated before calibration;
 zero live study cells ran. Sunnycho100's consolidated audit then authorized one
-pre-outcome, no-effectiveness-data amendment. The replacement under construction is
+pre-outcome, no-effectiveness-data amendment. The final replacement candidate was
 `office-generators/2.1.2`, intentionally retaining the 2.1.0 seed namespace so
 unchanged semantic surfaces remain review-comparable while repaired packets receive
 new content hashes. It has 528 split-neutral cases, 176 outcome-distinct policy
@@ -128,10 +128,12 @@ traces, independently compiled public-packet outcomes, and
 targeted mutations, and 1,872 benign controls. Protocol `1.4.0` binds the claim
 contract, 50,000-draw bootstrap, LOFO, reliability metrics, hardened masking and
 release semantics, and the at-most-222-cell descriptive matrix. Human-review
-utilities are advisory and cannot authorize the study. Execution remains
-disabled until all pending Fable reports are deterministically reconciled,
-offline qualification passes, exact-commit Linux/native evidence exists, and a
-fresh 22-cell score-masked shakeout passes under the replacement fingerprint. Read
+utilities are advisory and cannot authorize the study. Three promised reports
+are now reconciled, but seven concern classes reproduce as public-prompt/live-
+grader contradictions. The frozen 2.1.2 candidate is therefore
+`construct_gate_failed`; no `v0.13.1`, shakeout, or calibration is allowed.
+The protocol forbids automatic 2.1.3 and family removal. Any remediation needs
+an explicitly authorized new protocol and independently versioned generator. Read
 [`bench/NEXT_STUDY_IMPLEMENTATION.md`](bench/NEXT_STUDY_IMPLEMENTATION.md) and
 run both offline verify commands before changing it.
 

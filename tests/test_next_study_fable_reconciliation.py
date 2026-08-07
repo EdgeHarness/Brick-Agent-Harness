@@ -4,10 +4,10 @@ import pytest
 
 from bench.next_study_fable_reconciliation import (
     FableReconciliationError,
-    build_pending,
     load_reconciliation,
     validate_reconciliation,
 )
+from bench.next_study_construct_failure import load_failure
 from harness.evidence import canonical_json_bytes
 from harness.instances import sha256_bytes
 
@@ -21,36 +21,27 @@ def _reseal(document):
     return document
 
 
-def _report(index, findings=0):
-    return {
-        "report_id": "fable-%d" % index,
-        "model": "Fable 5",
-        "source_content_sha256": ("%064x" % index),
-        "reviewed_generator_version": "office-generators/2.1.0",
-        "reviewed_case_count": 308,
-        "findings_reported": findings,
+def test_three_reports_are_complete_but_terminally_block_authorization():
+    document = load_reconciliation()
+    assert document["status"] == "construct_gate_failed"
+    assert document["generator_version"] == "office-generators/2.1.2"
+    assert len(document["reports_received"]) == 3
+    assert {item["findings_reported"] for item in document["reports_received"]} == {
+        1, 10, 11
     }
+    assert len(document["findings"]) == 21
+    assert document["unresolved_report_count"] == 0
+    assert document["confirmed_authorization_blocker_count"] == 7
+    assert document["authorization_gate_passed"] is False
+    with pytest.raises(FableReconciliationError, match="construct gate failed"):
+        validate_reconciliation(document, require_complete=True)
 
 
-def test_pending_fable_reconciliation_is_valid_but_blocks_authorization():
-    pending = load_reconciliation()
-    assert pending["status"] == "pending_reports"
-    assert pending["generator_version"] == "office-generators/2.1.2"
-    assert len(pending["reports_received"]) == 1
-    assert pending["reports_received"][0]["report_id"] == (
-        "sunnycho100-consolidated-20260806"
-    )
-    assert pending["reports_received"][0]["findings_reported"] == 11
-    assert len(pending["findings"]) == 11
-    assert pending["unresolved_report_count"] == 2
-    with pytest.raises(FableReconciliationError, match="remain unreconciled"):
-        validate_reconciliation(pending, require_complete=True)
-
-
-def test_three_fully_accounted_reports_close_only_the_advisory_qa_hold():
-    complete = build_pending()
-    complete["reports_received"] = [_report(index) for index in range(1, 4)]
-    complete["unresolved_report_count"] = 0
+def test_complete_reports_pass_only_when_no_confirmed_blocker_exists():
+    complete = load_reconciliation()
+    for finding in complete["findings"]:
+        finding["blocks_authorization"] = False
+    complete["confirmed_authorization_blocker_count"] = 0
     complete["status"] = "passed"
     complete["authorization_gate_passed"] = True
     complete = _reseal(complete)
@@ -59,27 +50,39 @@ def test_three_fully_accounted_reports_close_only_the_advisory_qa_hold():
     assert complete["absence_of_flags_can_establish_validity"] is False
 
 
-def test_reported_fable_finding_cannot_be_omitted_from_reconciliation():
-    forged = build_pending()
-    forged["reports_received"] = [
-        _report(1, findings=1), _report(2), _report(3)
-    ]
-    forged["unresolved_report_count"] = 0
-    forged["status"] = "passed"
-    forged["authorization_gate_passed"] = True
+def test_reported_finding_cannot_be_omitted_from_reconciliation():
+    forged = load_reconciliation()
+    forged["findings"].pop()
     forged = _reseal(forged)
     with pytest.raises(FableReconciliationError, match="fully reconciled"):
-        validate_reconciliation(forged, require_complete=True)
+        validate_reconciliation(forged)
 
 
 def test_duplicate_report_content_cannot_count_as_multiple_sessions():
-    forged = build_pending()
-    reports = [_report(index) for index in range(1, 4)]
-    reports[2]["source_content_sha256"] = reports[1]["source_content_sha256"]
-    forged["reports_received"] = reports
-    forged["unresolved_report_count"] = 0
-    forged["status"] = "passed"
-    forged["authorization_gate_passed"] = True
+    forged = load_reconciliation()
+    forged["reports_received"][2]["source_content_sha256"] = (
+        forged["reports_received"][1]["source_content_sha256"]
+    )
     forged = _reseal(forged)
     with pytest.raises(FableReconciliationError, match="report record is invalid"):
-        validate_reconciliation(forged, require_complete=True)
+        validate_reconciliation(forged)
+
+
+def test_report_bytes_are_part_of_the_gate():
+    forged = load_reconciliation()
+    forged["reports_received"][1]["source_content_sha256"] = "0" * 64
+    forged = _reseal(forged)
+    with pytest.raises(FableReconciliationError, match="source binding drifted"):
+        validate_reconciliation(forged)
+
+
+def test_terminal_failure_binds_reconciliation_and_forbids_live_transitions():
+    failure = load_failure()
+    reconciliation = load_reconciliation()
+    assert failure["reconciliation_sha256"] == reconciliation["reconciliation_sha256"]
+    assert failure["confirmed_authorization_blocker_count"] == 7
+    assert failure["development_shakeout_allowed"] is False
+    assert failure["calibration_allowed"] is False
+    assert failure["instrument_tag_allowed"] is False
+    assert failure["automatic_2_1_3_allowed"] is False
+    assert failure["required_disposition"] == "terminate_current_11_family_program"

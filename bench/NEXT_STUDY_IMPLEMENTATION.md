@@ -1,9 +1,9 @@
-# Brick successor study: implemented state
+# Brick successor study: terminal 2.1.2 construct-gate state
 
-This document describes the replacement successor instrument under offline
-qualification. It does not authorize a model call or report a model result.
+This document records why the frozen replacement cannot advance. It does not
+authorize a model call or report a model result.
 
-## Qualified instrument
+## Candidate and terminal audit result
 
 - `office-generators/2.1.2` produces 528 unique, split-neutral cases across 11
   fixed synthetic families. It deliberately retains the 2.1.0 seed namespace:
@@ -20,22 +20,26 @@ qualification. It does not authorize a model call or report a model result.
 - Public-packet outcomes are independently compiled for all 528 cases without
   importing the generator or grader. The strict grader is built only as
   `build_grader(public_packet, validated_outcome)`.
-- The semantic gate executes 1,056 legal typed positive workflows (both primary
+- The earlier semantic gate executes 1,056 legal typed positive workflows (both primary
   conditions for every case), verifies every relevant dependency and
   record-order/distractor invariance, and reports no critical, high, or medium
-  internal-validity finding.
+  internal-validity finding. That model-free result did not test reasonable
+  alternate public-prompt interpretations.
 - Grader conformance passes 528 positive baselines, exactly 4,332 targeted
   mutations, and 1,872 benign controls. Placeholder presentations and
   alternate-policy outcomes fail.
 
-Human and agent packet-review utilities are advisory and outside authorization.
-They can surface hypotheses, but every accepted finding must be reduced to a
-deterministic counterexample or test. Pending Fable reports are a pre-freeze QA
-hold, not a substitute answer key or a real-world validity claim.
+Human and agent packet-review utilities remain advisory and outside
+authorization. The three promised reports are now complete and byte-bound.
+Seven reported defect classes reproduce deterministically against the public
+prompt and live grader: formula grammar, confirmation language, presentation
+bullet exactness, memory separators, `brief_sequence`, preference title
+construction, and unannounced mention order. Therefore generator 2.1.2 is
+`construct_gate_failed`; this is not an inference from model agreement.
 
 ## Statistics and evidence
 
-Protocol `1.4.0`, design `0.8.1`, construct contract
+Protocol `1.4.0`, design `0.8.2`, construct contract
 `office-construct/1.2.0`, and grader `office-strict-grader/3.2.0` are active.
 The amendment from 2.1.1 is bound before any live study cell or effectiveness
 result and permits no automatic 2.1.3 successor.
@@ -52,7 +56,7 @@ authorization, and release artifacts use context-bound `/2` schemas. Resource
 rows are extracted from marker-last evidence and unknown token counts remain
 explicit bounds.
 
-The frozen program is:
+The frozen program would have been:
 
 ```text
 352 calibration
@@ -70,7 +74,14 @@ masked evidence, unmasking, bootstrap, LOFO, descriptives, report construction,
 and program transitions; and proves synthetic artifacts cannot pass production
 release verification. It creates no tag and writes no production evidence.
 
-## Remaining live gates
+## No remaining live gate under this protocol
+
+Do not run the 22-cell shakeout, create `v0.13.1`, or start the 352-cell
+calibration. The bound amendment forbids automatic 2.1.3 and family removal.
+Any repair requires explicit authorization of a new protocol and an
+independently versioned generator; 2.1.2 must remain immutable evidence.
+
+## Historical live gates
 
 The invalidated 2.1.0 candidate passed native Windows qualification and completed a
 score-masked 22-cell development shakeout: all 22 cells committed and zero were
@@ -91,15 +102,11 @@ non-Ubuntu evidence. The exact commit must also pass the native Windows clean
 checkout and a fresh score-masked 22-cell shakeout because the authorization
 repair changed the fingerprint.
 
-After every remaining Fable finding is reproduced or refuted and all offline
-tests pass, the remaining order is: commit and push; collect exact-commit Linux
-evidence; repeat native preflight and clean-checkout qualification; rebuild
-schedules; rerun the zero-invalid shakeout; create the local annotated
-`v0.13.1` tag; then issue marker-last authorization
-binding the tag object, host, runtime, model digests, schedules, artifacts,
-descriptive selection, and both platform gates. Calibration remains
-mechanically blocked until those steps pass. The execution surface is
-`python -m bench.next_study_live --help`.
+That former qualification sequence is now unreachable. All reports were
+reconciled, and deterministic counterexamples failed the construct gate before
+the native and live steps. The execution surface remains in the repository for
+audit and rehearsal, but its authorization loader rejects the terminal
+reconciliation.
 
 Release verification recomputes an exact-key archive from canonical artifact
 bytes, proves every artifact equals its Git blob at the archived commit,

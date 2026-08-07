@@ -1,6 +1,7 @@
 # Retained attestations are canonical JSON byte streams. They must never be
 # rewritten by a Windows checkout, regardless of the user's core.autocrlf.
 evidence/**/*.json text eol=lf
+evidence/next-study/advisory-audits/*.md text eol=lf
 bench/manifests/**/*.json text eol=lf
 bench/next_study_design.json text eol=lf
 bench/next_study_protocol.json text eol=lf

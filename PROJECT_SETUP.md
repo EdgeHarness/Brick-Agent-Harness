@@ -46,10 +46,14 @@ in six repaired families change; all full content hashes are regenerated. It bin
 outcome-distinct decision-policy triplets, independent public outcomes,
 `office-strict-grader/3.2.0`, protocol `1.4.0`, LOFO/exact-uniform bootstrap
 statistics, hardened masking/release checks, and an at-most-222-cell descriptive
-matrix. Human-review utilities are advisory only. Current-source execution is
-disabled until pending Fable findings are reproduced or refuted, every offline
-gate passes, exact-commit GitHub Actions and native qualification are recorded,
-and a fresh 22-cell score-masked shakeout passes for target tag `v0.13.1`.
+matrix. Human-review utilities are advisory only. The three promised advisory
+reports are complete. Seven defect classes were independently reproduced as
+public-prompt/live-grader contradictions, so 2.1.2 is
+`construct_gate_failed`. Current-source execution, the 22-cell shakeout,
+calibration, and target tag `v0.13.1` are forbidden under protocol 1.4.0. The
+bound amendment permits neither automatic 2.1.3 nor family removal; future
+repair requires an explicitly authorized new protocol and independently
+versioned generator.
 The operational specification is `bench/NEXT_STUDY_IMPLEMENTATION.md`.
 
 Release identity is authoritative in annotated Git tags and their bound
@@ -114,8 +118,8 @@ with Snapdragon X Elite, 32 GB RAM, and native Windows 11 ARM64.
 | Pre-D0 | `v0.11.1` | Fresh balanced D0 cohorts, immutable exposure accounting, and corrected Brix grading. | Each D0 cohort has 44 pairs/88 primary attempts with matched marginals and disjoint structures; all exposed-material reuse channels fail closed; all 352 rules-reference cases pass strictly. |
 | D0/S7 | not released | Terminal score-masked development calibration under protocol 1.0.2. | The direction-blind floor/ceiling audit failed, so no freeze or efficacy contrast exists. |
 | Invalidated successor | `v0.13.0` | Generator 2.1.0 candidate. | Invalidated before calibration; no live study cells ran. |
-| Replacement instrument | target `v0.13.1` | Generator 2.1.2, grader 3.2.0, protocol 1.4.0, independent public outcomes, repeated-trial statistics, rehearsal, and sentinel protocol. | Fable findings reconciled; offline gates, exact-commit Linux CI, native qualification, and the 22-cell shakeout close before authorization. |
-| Completed successor study | target `v0.14.0` | Calibration, sentinel, sealed primary analysis, bounded descriptives, evidence-bound report, and commit-bound release archive. | Every authorized gate passes; null, negative, or adverse outcomes are released unchanged. |
+| Failed replacement instrument | `v0.13.1` unissued | Generator 2.1.2, grader 3.2.0, protocol 1.4.0. | Three advisory reports are fully reconciled; seven deterministic public-prompt/live-grader blockers terminate the candidate before the shakeout or calibration. |
+| Completed successor study | `v0.14.0` unreachable under 1.4.0 | Calibration, sentinel, sealed primary analysis, bounded descriptives, evidence-bound report, and commit-bound release archive. | Requires a future explicitly authorized protocol and independently versioned instrument. |
 
 ## F0/Q0 — feasibility and quarantine
 

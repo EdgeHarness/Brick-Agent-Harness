@@ -617,16 +617,17 @@ python -m bench.generate_next_study --verify
 python -m pytest tests/test_next_study.py tests/test_next_study_v2.py -q
 ```
 
-`bench/next_study_design.json` is the artifact-bound replacement candidate at
-version `0.8.1`. Six canonical manifests hold 528 split-neutral
+`bench/next_study_design.json` records the terminal replacement candidate at
+version `0.8.2`. Six canonical manifests hold 528 split-neutral
 `office-generators/2.1.2` cases with the preserved 2.1.0 seed namespace.
 Protocol `1.4.0` freezes calibration (352),
 sentinel (88), retained primary (880), and at most 222 descriptive cells, with
 exact-uniform bootstrap sampling and descriptive-only LOFO sensitivity. The
-semantic and grader-conformance gates pass, while explicit live authorization
-remains false pending deterministic reconciliation of the remaining Fable
-reports, an exact-commit GitHub Actions Linux matrix pass, fresh native
-qualification, and a fresh 22-cell development shakeout under one fingerprint.
+earlier semantic and grader-conformance gates pass, but three completed
+advisory audits exposed seven deterministic public prompt/live-grader
+contradictions. Generator 2.1.2 is therefore `construct_gate_failed`; live
+authorization, the shakeout, calibration, and `v0.13.1` are forbidden under
+protocol 1.4.0.
 `execution_allowed()` still returns false. See
 `NEXT_STUDY_IMPLEMENTATION.md` for the implemented controls and remaining gates.
 

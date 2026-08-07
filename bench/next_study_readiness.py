@@ -13,6 +13,7 @@ from harness.instances import load_canonical_json
 from . import generate_next_study
 from .next_study_contract import load_design
 from .next_study_fable_reconciliation import load_reconciliation
+from .next_study_construct_failure import load_failure
 from .next_study_rehearsal import DEFAULT_OUTPUT as REHEARSAL_PATH
 from .next_study_schedule import verify_descriptive_selection
 from .next_study_statistics import load_protocol
@@ -37,6 +38,7 @@ def build_readiness_report():
     selection = verify_descriptive_selection()
     rehearsal = load_canonical_json(REHEARSAL_PATH)
     fable = load_reconciliation()
+    failure = load_failure()
     external_gates = {
         "score_masked_22_cell_development_shakeout": False,
         "native_windows_clean_checkout_reproduction": False,
@@ -44,16 +46,15 @@ def build_readiness_report():
         "native_lenovo_preflight": False,
         "pinned_2b_4b_9b_model_digests": False,
         "host_and_runtime_fingerprints": False,
-        "remaining_fable_audits_reconciled": fable[
-            "authorization_gate_passed"
-        ],
+        "advisory_audits_complete": fable["unresolved_report_count"] == 0,
+        "construct_gate_passed": fable["authorization_gate_passed"],
         "annotated_v0_13_1_candidate_tag": False,
         "issued_program_authorization": False,
     }
     return {
         "schema_version": READINESS_SCHEMA,
         "program_identity": "Brick successor controlled comparison",
-        "current_activity": "v0.13.0 invalidation and v0.13.1 replacement qualification",
+        "current_activity": "office-generators/2.1.2 construct-gate termination",
         "benchmark_running_now": False,
         "experiment_running_now": False,
         "live_model_calls": 0,
@@ -69,11 +70,15 @@ def build_readiness_report():
         "authorization_buildable": all(external_gates.values()),
         "model_free_rehearsal_passed": rehearsal.get("status") == "passed",
         "human_review_authorization_gate": False,
+        "construct_gate_status": failure["status"],
+        "confirmed_authorization_blocker_count": failure[
+            "confirmed_authorization_blocker_count"
+        ],
         "next_transition": (
-            "reconcile every remaining Fable finding into a deterministic reproduction, then complete the replacement test and evidence gates"
+            "stop the v0.13.1 candidate; do not run the shakeout or calibration under protocol 1.4.0"
         ),
         "later_transition": (
-            "obtain exact-commit Linux and Windows evidence, rerun the 22-cell score-masked shakeout, and authorize v0.13.1"
+            "only an explicitly authorized new protocol and independently versioned generator may remediate the confirmed blockers"
         ),
     }
 

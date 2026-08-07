@@ -37,16 +37,18 @@ estimate exists.
 
 The tagged `v0.13.0` successor candidate is invalidated before calibration, and
 no live study cell ran. A bound pre-outcome amendment based on Sunnycho100's
-consolidated audit authorizes the offline `office-generators/2.1.2` candidate
-for target tag `v0.13.1`. The generator retains the 2.1.0 seed namespace
+consolidated audit created the offline `office-generators/2.1.2` candidate for
+target tag `v0.13.1`. The generator retains the 2.1.0 seed namespace
 deliberately: relative to 2.1.1, 240 public semantic surfaces remain unchanged
 and 288 cases in six repaired families change. All full content hashes and packet
 identities are regenerated and rebound. The
 current machine gates use independently compiled public outcomes, 1,056
 production-runner positive traces, 4,332 targeted grader mutations, and 1,872
-benign controls. Human and agent packet review is advisory and cannot satisfy or
-alter an authorization gate. Live execution remains disabled pending the
-remaining Fable finding reconciliation and replacement qualification evidence.
+benign controls. Human and agent packet review is advisory and cannot itself
+satisfy an authorization gate. Three completed reports are now reconciled into
+deterministic checks. Seven public-prompt/live-grader contradictions survive,
+so 2.1.2 is `construct_gate_failed` and live execution is terminally disabled
+under protocol 1.4.0. No 2.1.3 or family removal is permitted automatically.
 
 Annotated tags and their bound evidence are authoritative. The tagged S4 release
 commit `R` adds only `evidence/s4/v0.5.0.json` to tested candidate `C`; docs-only
@@ -110,8 +112,9 @@ systems.
 
 The synthetic pack is not a selected Brix production workflow. Actual workflow
 discovery, data authorization, integration, shadow evaluation, pilot, and
-deployment remain future work outside the blocked S7 lineage. The successor
-instrument targets `v0.13.1`; a completed, sealed study targets `v0.14.0`.
+deployment remain future work outside the blocked S7 lineage. The 2.1.2
+successor failed its construct gate, so `v0.13.1` and the dependent `v0.14.0`
+study release are not reachable under protocol 1.4.0.
 
 ### Repository roles and convergence
 

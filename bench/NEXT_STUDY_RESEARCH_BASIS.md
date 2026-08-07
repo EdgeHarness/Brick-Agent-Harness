@@ -153,7 +153,7 @@ does not close independent-oracle or prompt-validity gates for a new suite.
 ## Fail-closed successor architecture
 
 The historical design below proposed version 0.5.0 and generator 2.1.0. The
-active machine-readable contract is design 0.8.1 with generator 2.1.2 and the
+terminal machine-readable contract is design 0.8.2 with generator 2.1.2 and the
 intentionally preserved 2.1.0 seed namespace. The allocation remains
 across 11 families:
 
@@ -183,17 +183,17 @@ cells would have an exact one-sided 95% binomial upper bound of
 distributed Bernoulli model. The protocol labels that bound diagnostic only;
 it is not an efficacy or deployment-reliability claim.
 
-Before any model call, the active design requires versioned artifacts for the
+Before any model call, the design requires versioned artifacts for the
 generator, public-packet outcome compiler, construct and semantic simulation,
 grader mutation/conformance matrix, frozen statistics, masking/release
 rehearsal, closed research catalog, exact-commit Linux and native reproduction,
-and an explicit phase-specific authorization. Pending Fable reports must be
-mapped to deterministic reproductions or documented refutations before the
-candidate is frozen. Packet-review utilities remain available for advisory QA
-but cannot set a gate or change a validated outcome.
+and an explicit phase-specific authorization. The three promised advisory
+reports are fully mapped to deterministic reproductions or documented
+refutations. Seven blocker classes survive that process, so the candidate is
+not frozen and packet-review utilities have not supplied outcomes or set the
+gate by themselves.
 
-The contract currently returns `execution_allowed=false`; retained execution is
+The contract returns `execution_allowed=false`; retained execution is
 separately false. Reproduce the offline generator chain with
-`python -m bench.generate_next_study --verify`. The next live step is not
-calibration: it is a new 22-cell score-masked shakeout after all replacement
-offline, CI, native, and Fable-reconciliation evidence has closed.
+`python -m bench.generate_next_study --verify`. There is no next live step under
+protocol 1.4.0: the 22-cell shakeout, calibration, and `v0.13.1` are blocked.
