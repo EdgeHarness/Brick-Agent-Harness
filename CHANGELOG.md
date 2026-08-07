@@ -66,6 +66,11 @@
   complete suite. Ignored or untracked files in the working repository can no
   longer influence this gate; the `/2` attestation records the checkout method
   and verified commit.
+- Live shakeout and research execution now recollect the complete native
+  preflight immediately before opening the evidence store or acquiring the
+  lease, and require exact equality with the authorization-bound preflight.
+  A stale document can no longer authorize calls after checkout, package,
+  runtime, model, host, or implementation drift.
 - `v0.12.0`, `v0.13.0`, and `v0.13.1` remain permanently unissued. The current
   instrument target is `v0.13.2`, followed by `v0.14.0` for a completed study
   and `v0.15.0` for the separately developed Brix demo.

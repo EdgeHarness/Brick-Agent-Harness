@@ -6,7 +6,8 @@ import pytest
 
 from bench.next_study_live import (
     CLEAN_CHECKOUT_TEST_COMMAND, NextStudyLiveError, _attempt_key, _condition,
-    _prepare_clean_checkout, _producer, build_execution_protocol,
+    _assert_current_native_preflight, _prepare_clean_checkout, _producer,
+    build_execution_protocol,
     build_shakeout_authorization, collect_linux_ci_reproduction,
     validate_clean_checkout_reproduction, validate_native_preflight,
     validate_linux_ci_reproduction,
@@ -107,6 +108,16 @@ def test_clean_checkout_attestation_rejects_partial_test_command():
     document["reproduction_sha256"] = sha256_bytes(canonical_json_bytes(unsigned))
     with pytest.raises(NextStudyLiveError, match="does not represent a pass"):
         validate_clean_checkout_reproduction(document, preflight)
+
+
+def test_live_launch_recollects_and_rejects_stale_native_preflight(monkeypatch):
+    bound = _preflight()
+    current = _preflight("5" * 64)
+    monkeypatch.setattr(
+        "bench.next_study_live.collect_native_preflight", lambda **_kwargs: current
+    )
+    with pytest.raises(NextStudyLiveError, match="differs from the bound preflight"):
+        _assert_current_native_preflight(bound)
 
 
 def test_successor_execution_protocol_has_exact_budget_and_runtime_role_names():
@@ -350,7 +361,7 @@ def test_sentinel_live_producer_never_constructs_or_invokes_a_grader(
     assert calls == []
 
 
-def test_research_executor_requires_authorization_bound_program_state(tmp_path):
+def test_research_executor_requires_authorization_bound_program_state(tmp_path, monkeypatch):
     manifests = {
         name: load_canonical_json(
             ROOT / "bench" / "manifests" / "office-v2" / (name + ".json")
@@ -389,6 +400,9 @@ def test_research_executor_requires_authorization_bound_program_state(tmp_path):
         issued_at="2026-08-05T10:00:00Z", issuer="tester",
     )
     from bench.next_study_live import execute_schedule
+    monkeypatch.setattr(
+        "bench.next_study_live.collect_native_preflight", lambda **_kwargs: _preflight()
+    )
     with pytest.raises(NextStudyLiveError, match="sealed program state"):
         execute_schedule(
             schedule=schedules["calibration"], manifest=manifests["calibration"],

@@ -405,6 +405,18 @@ def validate_native_preflight(document):
     return document
 
 
+def _assert_current_native_preflight(bound_preflight):
+    """Recollect launch state and require byte-for-byte preflight identity."""
+
+    validate_native_preflight(bound_preflight)
+    current = collect_native_preflight(require_clean=True)
+    if current != bound_preflight:
+        raise NextStudyLiveError(
+            "current native environment differs from the bound preflight"
+        )
+    return current
+
+
 def collect_descriptive_model_preflight(
     authorization, endpoint="http://127.0.0.1:11434", session=None,
 ):
@@ -1150,6 +1162,7 @@ def execute_schedule(
     lease_path=None, program_state=None, eligible_descriptive_schedule=None,
 ):
     validate_native_preflight(preflight)
+    _assert_current_native_preflight(preflight)
     is_shakeout = schedule.get("phase") == "development_shakeout"
     if is_shakeout:
         validate_shakeout_authorization(authorization)

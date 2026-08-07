@@ -105,6 +105,11 @@ non-Ubuntu evidence. The exact commit must also pass the native Windows clean
 checkout and a fresh score-masked 22-cell shakeout because the authorization
 repair changed the fingerprint.
 
+Every live executor recollects the native preflight at launch and requires
+exact equality with its bound preflight before creating an evidence store or
+acquiring the machine lease. This closes stale-preflight reuse after any
+checkout, implementation, package, Ollama, model, or host drift.
+
 That former qualification evidence cannot authorize 2.2.0. The current
 execution surface requires the successor remediation closure and a fresh exact-
 commit Linux/native/shakeout chain; it never treats the terminal reconciliation
