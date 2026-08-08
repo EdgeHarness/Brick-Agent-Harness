@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -87,6 +88,10 @@ def test_supervisor_recovers_completed_evidence_before_deriving_terminal_state()
     assert "Pop-Location" in text
 
 
+@pytest.mark.skipif(
+    os.name != "nt",
+    reason="Windows PowerShell 5.1 native-stderr regression",
+)
 @pytest.mark.skipif(
     shutil.which("pwsh") is None and shutil.which("powershell") is None,
     reason="PowerShell is unavailable on this host",
