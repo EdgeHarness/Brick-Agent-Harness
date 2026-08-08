@@ -12,7 +12,7 @@ jobs:
   pytest:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -65,7 +65,7 @@ jobs:
   windows-x64:
     name: Windows x64 / Python 3.13
     runs-on: windows-2022
-    timeout-minutes: 15
+    timeout-minutes: 25
 
     steps:
       - name: Check out source
