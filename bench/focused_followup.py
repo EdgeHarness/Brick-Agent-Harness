@@ -70,7 +70,7 @@ CALIBRATION_SCHEDULE_PATH = (
 CALIBRATION_MANIFEST_PATH = MANIFEST_DIRECTORY / "calibration.json"
 CALIBRATION_RUNS_ROOT = ROOT / "results-next-study" / "qualification-v230-r1" / "research-runs"
 CALIBRATION_RUN_ID = "v133-calibration-fa900f39-r1"
-FOCUSED_RUN_ID = "v0134-focused-followup-r1"
+FOCUSED_RUN_ID = "v0135-focused-followup-r1"
 FOCUSED_RUNS_ROOT_RELATIVE = "results-next-study/focused-" + FOCUSED_RUN_ID
 SHAKEOUT_SCHEDULE_PATH = ROOT / "results-next-study" / "qualification-v230-r1" / "schedules" / "development-shakeout.json"
 SHAKEOUT_AUTHORIZATION_PATH = ROOT / "results-next-study" / "qualification-v230-r1" / "shakeout-authorization.json"
@@ -81,7 +81,7 @@ PROTOCOL_SCHEMA = "brick.focused-followup.protocol/1"
 SCHEDULE_SCHEMA = "brick.next-study.schedule/1"
 AUTHORIZATION_SCHEMA = "brick.focused-followup.authorization/1"
 RUN_METADATA_SCHEMA = "brick.focused-followup.run-metadata/1"
-ATTEMPT_RECORD_SCHEMA = "brick.focused-followup.attempt-record/1"
+ATTEMPT_RECORD_SCHEMA = "brick.focused-followup.attempt-record/2"
 RECOVERY_SCHEMA = "brick.focused-followup.recovery-attestation/1"
 BLOCK_SEAL_SCHEMA = "brick.focused-followup.block-seal/1"
 BLOCK_START_SCHEMA = "brick.focused-followup.block-start/1"
@@ -805,7 +805,7 @@ def _load_base_program_authorization():
 
 def build_authorization(
     preflight, issued_at, issuer, supervisor_path, run_id,
-    followup_tag="v0.13.4", base_tag="v0.13.3", protocol=None,
+    followup_tag="v0.13.5", base_tag="v0.13.3", protocol=None,
 ):
     """Build a clean-worktree, tag-bound authorization for all three blocks."""
 
@@ -909,7 +909,7 @@ def validate_authorization(document, protocol=None):
         or document["status"] != "authorized"
         or document["protocol_sha256"] != protocol_sha256(protocol)
         or document["base_tag"] != protocol["base_instrument"]["tag"]
-        or document["followup_tag"] != "v0.13.4"
+        or document["followup_tag"] != "v0.13.5"
         or document["maximum_logical_cells"] != 720
         or document["maximum_physical_attempts"] != 1440
         or document["same_seed_retry_limit"] != 1
@@ -977,7 +977,7 @@ def _validate_authorization_repository_bindings(authorization):
     """Re-open immutable Git and v0.13.3 authorization bindings at use time."""
 
     base = _annotated_tag_binding("v0.13.3", authorization["base_commit_sha"])
-    followup = _annotated_tag_binding("v0.13.4", authorization["followup_commit_sha"])
+    followup = _annotated_tag_binding("v0.13.5", authorization["followup_commit_sha"])
     if (
         base["tag_object_sha"] != authorization["base_tag_object_sha"]
         or followup["tag_object_sha"] != authorization["followup_tag_object_sha"]
@@ -1178,6 +1178,16 @@ def _record_digest(record):
     return sha256_bytes(canonical_json_bytes(record, allow_float=True))
 
 
+def _opportunity_budget_exhausted(result):
+    """Derive the terminal budget-exhaustion signal from validated evidence."""
+
+    failure = result.get("failure") if isinstance(result, dict) else None
+    return bool(
+        isinstance(failure, dict)
+        and failure.get("type") == "opportunity_budget_exhausted"
+    )
+
+
 def _expected_attempt_key(instance, cell, authorization, repeat):
     """Reconstruct the complete frozen producer key for one physical attempt.
 
@@ -1273,6 +1283,7 @@ def _attempt_record_from_committed(
         "failure_origin": origin,
         "retryable": retryable,
         "strict_success": strict_success,
+        "opportunity_budget_exhausted": _opportunity_budget_exhausted(result),
         "evidence_sha256": evidence_digest,
         "grade_record_sha256": sha256_bytes(canonical_json_bytes(committed.get("grade"), allow_float=True)),
         "marker_last_verified": True,
@@ -1285,7 +1296,8 @@ def _attempt_record_from_committed(
 def validate_attempt_record(record, cell):
     expected = {
         "schema_version", "logical_cell_id", "repeat", "trial_seed", "failure_origin",
-        "retryable", "strict_success", "evidence_sha256", "grade_record_sha256",
+        "retryable", "strict_success", "opportunity_budget_exhausted",
+        "evidence_sha256", "grade_record_sha256",
         "marker_last_verified", "model_calls", "successful_reads", "successful_mutations",
         "generated_tokens_exact", "generated_tokens_lower_bound", "generated_tokens_upper_bound",
         "model_time_ms", "wall_time_ms",
@@ -1299,6 +1311,7 @@ def validate_attempt_record(record, cell):
         or type(record["repeat"]) is not int or record["repeat"] not in (0, 1)
         or record["failure_origin"] not in ("none", "model", "environment", "instrument")
         or type(record["retryable"]) is not bool
+        or type(record["opportunity_budget_exhausted"]) is not bool
         or record["marker_last_verified"] is not True
     ):
         raise FocusedFollowupError("focused attempt record identity drifted")
@@ -1311,6 +1324,10 @@ def validate_attempt_record(record, cell):
         raise FocusedFollowupError("focused invalid attempt success must be null")
     if record["retryable"] and not (record["failure_origin"] == "environment" and record["repeat"] == 0):
         raise FocusedFollowupError("focused retry eligibility drifted")
+    if record["opportunity_budget_exhausted"] and not (
+        record["failure_origin"] == "model" and record["strict_success"] is False
+    ):
+        raise FocusedFollowupError("focused budget-exhaustion signal is inconsistent")
     for field in ("model_calls", "successful_reads", "successful_mutations", "model_time_ms", "wall_time_ms"):
         if type(record[field]) is not int or record[field] < 0:
             raise FocusedFollowupError("focused resource metric is invalid")
@@ -2325,7 +2342,7 @@ def _analyze_paired_records(
             if any(item["failure_origin"] not in ("none", "model") for item in chosen):
                 raise FocusedFollowupError("focused analysis contains invalid attempt")
             values[condition] = sum((Fraction(int(item["strict_success"]), 1) for item in chosen), Fraction(0, 1)) / len(chosen)
-            caps[condition] = any(item["model_calls"] >= 18 for item in chosen)
+            caps[condition] = any(item["opportunity_budget_exhausted"] for item in chosen)
             condition_success[condition].append(values[condition])
             cap_by_condition[condition].append((caps[condition], values[condition]))
             resource_by_condition[condition].extend(chosen)
@@ -2408,6 +2425,11 @@ def _analyze_paired_records(
         "leave_one_family_out": lofo,
         "variance": _variance_records(family_differences),
         "sign_flip": _sign_flip(all_cluster_diffs),
+        "cap_definition": (
+            "terminal validated result.failure.type equals "
+            "opportunity_budget_exhausted; full budget utilization without "
+            "terminal exhaustion is not counted"
+        ),
         "cap_report": cap_report,
         "cap_patterns": {
             "neither_cap_hit": cap_patterns[(False, False)],
@@ -2488,6 +2510,49 @@ def _recovered_in_band_effect(rows):
     }
 
 
+def _augment_recovered_budget_exhaustion(store, attempts):
+    """Add an analysis-only signal without changing shared /2 attempt records.
+
+    The retired calibration extractor and its record digest remain untouched.
+    After the shared extractor validates every committed record, this function
+    binds the projection back to those extracted evidence digests and derives
+    only the terminal failure type needed for the focused follow-up's cap
+    sensitivity.
+    """
+
+    required = {item["evidence_sha256"] for item in attempts}
+    if len(required) != len(attempts):
+        raise FocusedFollowupError("recovered calibration evidence digest is duplicated")
+    projection = store.read_committed()
+    if not isinstance(projection, dict) or not isinstance(projection.get("records"), list):
+        raise FocusedFollowupError("recovered calibration evidence projection is invalid")
+    signals = {}
+    for committed in projection["records"]:
+        evidence_digest = _record_digest(committed)
+        if evidence_digest not in required:
+            continue
+        if evidence_digest in signals:
+            raise FocusedFollowupError("recovered calibration evidence signal is duplicated")
+        result = committed.get("result")
+        if not isinstance(result, dict):
+            raise FocusedFollowupError("recovered calibration cap signal is unreadable")
+        signals[evidence_digest] = _opportunity_budget_exhausted(result)
+    if set(signals) != required:
+        raise FocusedFollowupError("recovered calibration cap signal is incomplete")
+    augmented = []
+    for item in attempts:
+        record = dict(item)
+        record["opportunity_budget_exhausted"] = signals[item["evidence_sha256"]]
+        if record["opportunity_budget_exhausted"] and not (
+            record["failure_origin"] == "model" and record["strict_success"] is False
+        ):
+            raise FocusedFollowupError(
+                "recovered calibration budget-exhaustion signal is inconsistent"
+            )
+        augmented.append(record)
+    return augmented
+
+
 def _rebuild_recovered_calibration_components(protocol):
     """Re-extract the original marker-last evidence for validation and reporting."""
 
@@ -2521,9 +2586,10 @@ def _rebuild_recovered_calibration_components(protocol):
         raise FocusedFollowupError("recovered calibration attempt topology is invalid") from exc
     if pending:
         raise FocusedFollowupError("recovered calibration requires all 352 completed cells")
+    analysis_attempts = _augment_recovered_budget_exhaustion(store, attempts)
     cells = {cell["logical_cell_id"]: cell for cell in schedule["records"]}
     by_cell = defaultdict(list)
-    for attempt in attempts:
+    for attempt in analysis_attempts:
         by_cell[attempt["logical_cell_id"]].append(attempt)
     final = {logical_id: max(entries, key=lambda item: item["repeat"]) for logical_id, entries in by_cell.items()}
     if len(final) != 352 or any(item["failure_origin"] not in ("none", "model") for item in final.values()):
@@ -3185,7 +3251,7 @@ def build_parser():
     authorize.add_argument("--issuer", required=True)
     authorize.add_argument("--supervisor-path", required=True)
     authorize.add_argument("--base-tag", default="v0.13.3")
-    authorize.add_argument("--followup-tag", default="v0.13.4")
+    authorize.add_argument("--followup-tag", default="v0.13.5")
     authorize.set_defaults(handler=_cli_authorize)
     validate_auth = subparsers.add_parser("validate-authorization")
     validate_auth.add_argument("--authorization", required=True)

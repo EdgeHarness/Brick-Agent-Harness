@@ -29,7 +29,7 @@ SHA256_B = "b" * 64
 SHA256_C = "c" * 64
 SHA1_A = "a" * 40
 SHA1_B = "b" * 40
-RUN_ID = "v0134-focused-followup-r1"
+RUN_ID = "v0135-focused-followup-r1"
 PUBLIC_COMBINED_CALIBRATION_TOTALS = {
     "cal_add": 25,
     "cal_brief": 8,
@@ -97,7 +97,7 @@ def _authorization(protocol, model_digest=MODEL_DIGEST):
         "base_tag_object_sha": SHA1_A,
         "base_commit_sha": SHA1_B,
         "base_program_authorization_sha256": SHA256_A,
-        "followup_tag": "v0.13.4",
+        "followup_tag": "v0.13.5",
         "followup_tag_object_sha": SHA1_B,
         "followup_commit_sha": SHA1_A,
         "issued_at": "2026-08-08T12:00:00-05:00",
@@ -147,10 +147,11 @@ def _resign(document):
     return document
 
 
-def _record(success, calls=4):
+def _record(success, calls=4, opportunity_budget_exhausted=False):
     return {
         "failure_origin": "none",
         "strict_success": success,
+        "opportunity_budget_exhausted": opportunity_budget_exhausted,
         "model_calls": calls,
         "successful_reads": 1,
         "successful_mutations": 1,
@@ -162,7 +163,10 @@ def _record(success, calls=4):
     }
 
 
-def _valid_attempt_record(cell, *, repeat=0, failure_origin="none", retryable=False, success=True):
+def _valid_attempt_record(
+    cell, *, repeat=0, failure_origin="none", retryable=False, success=True,
+    opportunity_budget_exhausted=False,
+):
     """A complete extracted-record fixture accepted by retry/seal validation."""
 
     return {
@@ -173,6 +177,7 @@ def _valid_attempt_record(cell, *, repeat=0, failure_origin="none", retryable=Fa
         "failure_origin": failure_origin,
         "retryable": retryable,
         "strict_success": success if failure_origin in ("none", "model") else None,
+        "opportunity_budget_exhausted": opportunity_budget_exhausted,
         "evidence_sha256": SHA256_A,
         "grade_record_sha256": SHA256_B,
         "marker_last_verified": True,
@@ -194,8 +199,12 @@ def _key_for_real_schedule_cell(instance, cell, authorization, repeat=0):
     return AttemptKey.from_dict(expected)
 
 
-def _write_real_committed_success(writer):
+def _write_real_committed_success(
+    writer, *, opportunity_budget_exhausted=False, model_calls=1,
+):
     """Write the minimal valid marker-last evidence payload without a model call."""
+
+    generated_tokens = 6144 if opportunity_budget_exhausted else 1
 
     writer.write_json("initial-state.json", {
         "schema_version": "brick.evidence-state/1",
@@ -209,17 +218,28 @@ def _write_real_committed_success(writer):
     })
     writer.write_json("result.json", {
         "schema_version": "brick.evidence-result/1",
-        "execution_status": "done",
+        "execution_status": (
+            "budget_exhausted" if opportunity_budget_exhausted else "done"
+        ),
         "tool_status": "clean",
-        "failure_origin": "none",
-        "failure": None,
-        "metrics": {"model_calls": 1, "generated_tokens": 1},
-        "diagnostics": {"ledger": {"generated_tokens_exact": True}},
+        "failure_origin": "model" if opportunity_budget_exhausted else "none",
+        "failure": (
+            {"type": "opportunity_budget_exhausted"}
+            if opportunity_budget_exhausted else None
+        ),
+        "metrics": {
+            "model_calls": model_calls, "generated_tokens": generated_tokens,
+        },
+        "diagnostics": {"ledger": {
+            "generated_tokens_exact": True,
+            "generated_tokens_lower_bound": generated_tokens,
+            "generated_tokens_upper_bound": generated_tokens,
+        }},
     })
     writer.write_json("grade.json", {
         "schema_version": "brick.evidence-grade/1",
         "grader_status": "graded",
-        "candidate_decision": True,
+        "candidate_decision": not opportunity_budget_exhausted,
         "diagnostics": [],
     })
     writer.write_json("actions.json", {
@@ -492,9 +512,9 @@ def test_authorization_digest_and_base_tag_tampering_fail_closed(protocol, autho
     # or evidence root into a second execution universe.
     for field, replacement in (
         ("base_tag", "v0.13.2"),
-        ("followup_tag", "v0.13.5"),
-        ("run_id", "v0134-focused-followup-r2"),
-        ("runs_root", "results-next-study/focused-v0134-focused-followup-r2"),
+        ("followup_tag", "v0.13.4"),
+        ("run_id", "v0135-focused-followup-r2"),
+        ("runs_root", "results-next-study/focused-v0135-focused-followup-r2"),
     ):
         tampered = copy.deepcopy(authorization)
         tampered[field] = replacement
@@ -509,7 +529,7 @@ def test_cli_root_binding_rejects_alternate_evidence_universe(tmp_path, authoriz
     with pytest.raises(focused.FocusedFollowupError, match="runs root differs"):
         focused.require_authorized_runs_root(authorization, tmp_path / "alternate")
     with pytest.raises(focused.FocusedFollowupError, match="sole authorization-bound run id"):
-        focused.require_authorized_run_id(authorization, "v0134-focused-followup-r2")
+        focused.require_authorized_run_id(authorization, "v0135-focused-followup-r2")
 
 
 def test_current_environment_rejects_frozen_runtime_hash_drift(monkeypatch, protocol, authorization):
@@ -644,6 +664,77 @@ def test_real_marker_last_block_lifecycle_and_re_signed_seal_tampering(tmp_path,
     path.write_bytes(focused.canonical_json_bytes(forged, newline=True, allow_float=False))
     with pytest.raises(focused.FocusedFollowupError, match="physical-attempt count drifted"):
         focused.load_block_seal(authorization, runs_root, RUN_ID, "B1a", protocol)
+
+
+def test_budget_exhaustion_is_extracted_from_evidence_not_inferred_from_call_count(
+    tmp_path, protocol, authorization,
+):
+    """Token exhaustion below 18 is real; completing call 18 is not exhaustion."""
+
+    runs_root = tmp_path / "r"
+    store = focused._open_or_create_store(runs_root, RUN_ID, authorization)
+    schedule = focused.build_schedule("B1a", MODEL_DIGEST, protocol)
+    instances = focused._instances_by_id()
+    exhausted_cell, completed_cell = schedule["records"][:2]
+    store.execute_or_resume(
+        _key_for_real_schedule_cell(
+            instances[exhausted_cell["instance_id"]], exhausted_cell, authorization,
+        ),
+        lambda writer: _write_real_committed_success(
+            writer, opportunity_budget_exhausted=True, model_calls=9,
+        ),
+    )
+    store.execute_or_resume(
+        _key_for_real_schedule_cell(
+            instances[completed_cell["instance_id"]], completed_cell, authorization,
+        ),
+        lambda writer: _write_real_committed_success(writer, model_calls=18),
+    )
+
+    by_cell = {
+        item["logical_cell_id"]: item
+        for item in focused.extract_block_attempts(store, schedule, authorization)
+    }
+    assert by_cell[exhausted_cell["logical_cell_id"]]["model_calls"] == 9
+    assert by_cell[exhausted_cell["logical_cell_id"]]["opportunity_budget_exhausted"] is True
+    assert by_cell[completed_cell["logical_cell_id"]]["model_calls"] == 18
+    assert by_cell[completed_cell["logical_cell_id"]]["opportunity_budget_exhausted"] is False
+
+    inconsistent = dict(by_cell[completed_cell["logical_cell_id"]])
+    inconsistent["opportunity_budget_exhausted"] = True
+    with pytest.raises(focused.FocusedFollowupError, match="signal is inconsistent"):
+        focused.validate_attempt_record(inconsistent, completed_cell)
+
+
+def test_cap_report_uses_terminal_exhaustion_signal_not_full_call_utilization(protocol):
+    rows = []
+    for index in range(2):
+        for condition in focused.CONDITIONS:
+            exhausted = index == 0 and condition == "harness_full"
+            calls = 9 if exhausted else (18 if index == 0 else 4)
+            rows.append((
+                _record(False, calls, opportunity_budget_exhausted=exhausted),
+                {
+                    "family": "cal_freeslot", "instance_id": "case-%d" % index,
+                    "condition": condition, "trial_index": 0,
+                },
+            ))
+    analysis = focused._analyze_paired_records(
+        rows, "cap-golden", protocol, (0,),
+        bootstrap_builder=lambda _differences: {
+            "lower": Fraction(0), "upper": Fraction(0), "replicates": 1,
+        },
+        issue_directional_claim=False,
+    )
+    assert analysis["cap_report"]["harness_full"]["cap_hit_clusters"] == 1
+    assert analysis["cap_report"]["native_tools"]["cap_hit_clusters"] == 0
+    assert analysis["cap_patterns"] == {
+        "neither_cap_hit": 1,
+        "harness_full_only_cap_hit": 1,
+        "native_tools_only_cap_hit": 0,
+        "both_conditions_cap_hit": 0,
+    }
+    assert analysis["cap_definition"].startswith("terminal validated result.failure.type")
 
 
 @pytest.mark.parametrize("mutate", [
