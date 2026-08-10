@@ -148,6 +148,7 @@ def test_successor_supervisor_authorize_refuses_missing_metadata_before_core_exe
     combined = re.sub(
         r"\x1b\[[0-?]*[ -/]*[@-~]", "", result.stdout + result.stderr,
     )
+    combined = re.sub(r"\r?\n\s*\|\s*", " ", combined)
     assert result.returncode != 0
     assert "Authorize requires issued-at and issuer metadata only" in combined
     assert "cell_complete" not in combined
