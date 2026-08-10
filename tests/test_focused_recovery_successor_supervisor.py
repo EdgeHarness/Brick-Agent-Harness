@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -144,7 +145,9 @@ def test_successor_supervisor_authorize_refuses_missing_metadata_before_core_exe
         check=False,
         timeout=30,
     )
-    combined = result.stdout + result.stderr
+    combined = re.sub(
+        r"\x1b\[[0-?]*[ -/]*[@-~]", "", result.stdout + result.stderr,
+    )
     assert result.returncode != 0
     assert "Authorize requires issued-at and issuer metadata only" in combined
     assert "cell_complete" not in combined
