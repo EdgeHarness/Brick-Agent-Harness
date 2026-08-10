@@ -1,6 +1,7 @@
 # Retained attestations are canonical JSON byte streams. They must never be
 # rewritten by a Windows checkout, regardless of the user's core.autocrlf.
 .gitattributes text eol=lf
+.github/workflows/ci.yml text eol=lf
 evidence/**/*.json text eol=lf
 evidence/next-study/advisory-audits/*.md text eol=lf
 bench/manifests/**/*.json text eol=lf
@@ -30,6 +31,15 @@ bench/focused_followup.py text eol=lf
 bench/focused_followup_protocol.json text eol=lf
 scripts/run-focused-followup.ps1 text eol=lf
 tests/test_focused_followup*.py text eol=lf
+bench/focused_recovery_successor*.py text eol=lf
+bench/focused_recovery_release_verifier.py text eol=lf
+bench/focused_recovery_successor_protocol.json text eol=lf
+harness/experiment.py text eol=lf
+scripts/run-focused-recovery-successor.ps1 text eol=lf
+tests/test_focused_recovery_successor*.py text eol=lf
+tests/test_focused_recovery_release_verifier.py text eol=lf
+tests/test_s6_conditions.py text eol=lf
+bench/FOCUSED_RECOVERY_SUCCESSOR.md text eol=lf
 bench/NEXT_STUDY_*.md text eol=lf
 domains/office_demo/reviewed_grader_*.py text eol=lf
 domains/office_demo/generators_v2.py text eol=lf

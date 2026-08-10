@@ -147,6 +147,27 @@ for, or consumed by the product repository. That engineering transfer is not
 evidence that the product satisfies the research result, and product behavior is
 not evidence that the frozen benchmark instrument is valid.
 
+## Current focused-recovery successor status
+
+The v0.13.5 focused-follow-up evidence root is immutable. B1a's three-family
+fallback is the only completed prospective directional lane. B1b terminated
+after the source-proven exact Qwen parser signature
+`element <parameter> closed by </function>`, leaving 24 cells never started;
+B2 never started. That history is not resumable or editable.
+
+`v0.13.6` is pending freeze and authorization, not a live run. A single future
+authorization binds only the exact parser classifier, the 24-cell B1b recovery,
+and the old byte-identical 240-cell B2 schedule. B2 is mandatory after any
+validated B1b terminal disposition. Both lanes remain score-embargoed until
+their terminal artifacts validate. Recovered B1b, recovered six-family, and B2
+are nonclaiming sensitivity/repeatability outputs; they cannot replace, pool
+with, or strengthen the old B1a lane.
+
+The scope remains fixed synthetic Qwen3.5 4B `harness_full` versus competent
+`native_tools`, not a bare model or the separately evolving Llama 8B Brix
+product. The operational boundary and pending commands are in
+[`bench/FOCUSED_RECOVERY_SUCCESSOR.md`](bench/FOCUSED_RECOVERY_SUCCESSOR.md).
+
 ## 4. Research question and scope
 
 The sole confirmatory question is:

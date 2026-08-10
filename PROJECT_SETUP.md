@@ -51,11 +51,41 @@ replacement is `office-generators/2.3.0` under protocol 1.6.0 and target tag
 220-cluster estimand. Its
 regenerated 528 cases and outcomes, 176 policy triplets, 1,056 typed workflows,
 4,332 grader mutations, 1,872 benign controls, semantic report, rehearsal, and
-remediation closure pass offline. Human-review utilities remain advisory. Live
-execution stays disabled until the exact committed tree passes Linux and native
+remediation closure pass offline. Human-review utilities remain advisory. At
+that v0.13.3 qualification point, live execution stayed disabled until the exact
+committed tree passed Linux and native
 Windows clean-checkout reproduction and a separately authorized score-masked
 22-cell development shakeout.
 The operational specification is `bench/NEXT_STUDY_IMPLEMENTATION.md`.
+
+### Immediate focused-recovery status
+
+The v0.13.5 focused-follow-up root is sealed and immutable. Its three-family
+B1a fallback is the only completed prospective directional lane. B1b terminated
+after the exact source-proven Qwen parser signature
+`element <parameter> closed by </function>`, leaving exactly 24 cells never
+started. B2 never started. This evidence cannot be resumed, amended, or used as
+an open schedule.
+
+`v0.13.6` is a pending successor, not an authorization or live run. A future
+single authorization will bind exactly the 24 B1b cells never started and the
+byte-identical old 240-cell B2 same-context repeatability schedule. B2 remains
+mandatory after any validated B1b terminal state; efficacy stays embargoed until
+both lanes terminally validate. The recovered B1b, recovered six-family, and B2
+outputs are nonclaiming sensitivity/repeatability material and cannot be pooled
+into a new headline or alter the old B1a lane. The parser classifier is limited
+to the exact observed signature, not arbitrary HTTP 500 or XML errors.
+
+A JSON-only marker-last artifact is not accepted directly. Only the fixed core
+writer/validator may finish it after exact rederivation and byte-identity
+validation. Marker-only, nonempty-marker, mismatched, conflicting, or
+nonterminal states fail closed.
+
+This is still the pinned synthetic Qwen3.5 4B `harness_full` versus
+`native_tools` comparison. It is not a bare-model test and does not evaluate the
+separate Llama 8B/llama.cpp Brix product. See
+[`bench/FOCUSED_RECOVERY_SUCCESSOR.md`](bench/FOCUSED_RECOVERY_SUCCESSOR.md) for
+the pending command boundary.
 
 Release identity is authoritative in annotated Git tags and their bound
 evidence, not in mutable current-status prose. S4 uses three commits/states:

@@ -4,6 +4,21 @@
 
 ### Strengthened successor program
 
+- Recorded the sealed v0.13.5 focused-follow-up execution as immutable
+  historical evidence: the three-family B1a fallback is the only completed
+  prospective directional lane; B1b terminated after the source-proven Qwen
+  parser signature `element <parameter> closed by </function>` and left exactly
+  24 cells never started; B2 never started. The evidence root is read-only.
+- Added the **pending**, not-yet-authorized v0.13.6 focused-recovery successor.
+  One future authorization binds exact classifier coverage for that observed
+  signature only, a 24-cell B1b continuation, and the byte-identical 240-cell
+  B2 same-context repeatability schedule under a shared score embargo. Recovered
+  B1b/six-family and B2 outputs are nonclaiming sensitivity or repeatability
+  material; they cannot be pooled into a new headline or change the old B1a
+  directional lane. This remains a fixed synthetic Qwen3.5 4B
+  `harness_full` versus `native_tools` comparison, not a bare-model or Llama
+  product evaluation. See `bench/FOCUSED_RECOVERY_SUCCESSOR.md`.
+
 - Preserved the tagged `v0.13.2` / `office-generators/2.2.0` candidate as a
   pre-calibration construct-gate failure after the final audit proved that all
   `cal_add` candidates were feasible and that `preference_learning` printed

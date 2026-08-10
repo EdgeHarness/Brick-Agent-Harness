@@ -455,6 +455,7 @@ def test_transport_recognizes_only_bound_qwen35_tool_parser_signatures():
     for message in (
         "XML syntax error on line 26: unexpected EOF",
         "XML syntax error on line 4: element <function> closed by </parameter>",
+        "XML syntax error on line 11: element <parameter> closed by </function>",
     ):
         transport = OllamaTransport(
             PROTOCOL["transport"]["endpoint"], 30,
@@ -463,19 +464,44 @@ def test_transport_recognizes_only_bound_qwen35_tool_parser_signatures():
         with pytest.raises(ModelOutputProtocolError, match="XML syntax error"):
             transport.chat(payload)
 
-    for changed_payload, body in (
-        (payload, {"error": "some other server error"}),
-        ({"model": PROTOCOL["primary_model"]}, {
+    for changed_payload, status, body in (
+        (payload, 500, {"error": "some other server error"}),
+        ({"model": PROTOCOL["primary_model"]}, 500, {
             "error": "XML syntax error on line 26: unexpected EOF",
         }),
-        ({"model": "other:latest", "tools": payload["tools"]}, {
+        ({"model": "other:latest", "tools": payload["tools"]}, 500, {
             "error": "XML syntax error on line 26: unexpected EOF",
         }),
-        (payload, {"error": "XML syntax error on line 3: invalid token"}),
+        (payload, 500, {"error": "XML syntax error on line 3: invalid token"}),
+        (payload, 500, {
+            "error": "XML syntax error on line 11: "
+            "element <parameter> closed by </function> ",
+        }),
+        (payload, 500, {
+            "error": "XML syntax error on line 11: "
+            "element <parameter> closed by </parameter>",
+        }),
+        (payload, 500, {
+            "error": "XML syntax error on line 11: "
+            "element <function> closed by </function>",
+        }),
+        (payload, 500, {
+            "error": "XML syntax error on line 0: "
+            "element <parameter> closed by </function>",
+        }),
+        (payload, 500, {
+            "error": "XML syntax error on line 11: "
+            "element <parameter> closed by </function>",
+            "extra": "not source-proven",
+        }),
+        (payload, 503, {
+            "error": "XML syntax error on line 11: "
+            "element <parameter> closed by </function>",
+        }),
     ):
         transport = OllamaTransport(
             PROTOCOL["transport"]["endpoint"], 30,
-            session=Session(_response(500, body)),
+            session=Session(_response(status, body)),
         )
         with pytest.raises(requests.HTTPError):
             transport.chat(changed_payload)
@@ -671,7 +697,16 @@ def test_scheduler_retries_only_environment_failure_and_resumes_exactly(
         "environment",
         "none",
     ]
-    assert records[0]["result"]["failure"]["http_status"] == 500
+    assert records[0]["result"]["failure"] == {
+        "type": "HTTPError",
+        "message": (
+            "500 Server Error: Internal Server Error for url: "
+            "http://127.0.0.1:11434/api/chat"
+        ),
+        "retryable": True,
+        "http_status": 500,
+        "category": "provider_server_error",
+    }
 
     class MustNotRun:
         def chat(self, _payload):
@@ -694,6 +729,75 @@ def test_scheduler_retries_only_environment_failure_and_resumes_exactly(
     assert resumed == summary
 
 
+def test_scheduler_retries_an_unrecognized_qwen_xml_near_match_as_environment(
+    monkeypatch, tmp_path
+):
+    class NearMatchThenTransport(EnvironmentThenTransport):
+        def chat(self, payload):
+            if self.fail_once:
+                self.fail_once = False
+                self.payloads.append(copy.deepcopy(payload))
+
+                class Session:
+                    trust_env = True
+
+                    def post(self, _url, json, timeout):
+                        return _response(500, {
+                            "error": "XML syntax error on line 11: "
+                            "element <parameter> closed by </function> ",
+                        })
+
+                return OllamaTransport(
+                    PROTOCOL["transport"]["endpoint"], 30, session=Session()
+                ).chat(payload)
+            return FakeTransport.chat(self, payload)
+
+    instance = _one("cal_add")
+    effects = instance["content"]["required_effects"]
+    calendar = next(item for item in effects if item["type"] == "calendar_read")
+    event = next(item for item in effects if item["type"] == "event_created")
+    transport = NearMatchThenTransport([
+        ("list_events", {"date": calendar["date"]}),
+        (
+            "add_event",
+            {
+                "title": event["title"],
+                "date": event["date"],
+                "start_time": event["start"],
+                "end_time": event["end"],
+                "location": event.get("location", ""),
+                "attendees": event["attendees"],
+            },
+        ),
+        ("done", {"summary": "complete"}),
+    ])
+    monkeypatch.setattr(s6_preflight, "collect", lambda *_a, **_k: _fake_preflight())
+    monkeypatch.setattr(s6_run, "OllamaTransport", lambda *_a, **_k: transport)
+    sleeps = []
+    monkeypatch.setattr(s6_run.time, "sleep", lambda seconds: sleeps.append(seconds))
+    args = _scheduler_args(tmp_path, instance["content"]["id"], "near-match-retry")
+    summary = s6_run._run(
+        args,
+        s6_run.RunPolicy(
+            environment_retry_cooldown_seconds=60,
+            verify_transport_health_before_retry=True,
+        ),
+    )
+    assert summary["committed_attempts"] == 2
+    records = json.loads(
+        (tmp_path / "near-match-retry" / "results.json").read_text("utf-8")
+    )["records"]
+    records.sort(key=lambda record: record["attempt_key"]["repeat"])
+    assert [record["failure_origin"] for record in records] == [
+        "environment",
+        "none",
+    ]
+    assert records[0]["result"]["failure"]["retryable"] is True
+    assert records[0]["result"]["failure"]["category"] == "provider_server_error"
+    assert sleeps == [60]
+    assert transport.health_checks == 1
+
+
 def test_scheduler_never_retries_a_valid_model_failure(monkeypatch, tmp_path):
     instance = _one("cal_add")
     transport = NoToolCallTransport()
@@ -707,7 +811,7 @@ def test_scheduler_never_retries_a_valid_model_failure(monkeypatch, tmp_path):
     assert len(transport.payloads) == PROTOCOL["opportunity_budget"]["model_calls"]
 
 
-def test_parser_rejection_is_one_model_failure_with_bounded_token_telemetry(
+def test_symmetric_qwen_parser_rejection_is_one_nonretryable_model_failure(
     monkeypatch, tmp_path
 ):
     class ParserRejectTransport:
@@ -717,7 +821,8 @@ def test_parser_rejection_is_one_model_failure_with_bounded_token_telemetry(
         def chat(self, payload):
             self.payloads.append(copy.deepcopy(payload))
             raise ModelOutputProtocolError(
-                "XML syntax error on line 26: unexpected EOF", 500
+                "XML syntax error on line 11: "
+                "element <parameter> closed by </function>", 500
             )
 
     instance = _one("cal_add")
@@ -744,7 +849,10 @@ def test_parser_rejection_is_one_model_failure_with_bounded_token_telemetry(
     assert result["execution_status"] == "model_error"
     assert result["failure"] == {
         "type": "model_output_tool_syntax_rejected",
-        "message": "XML syntax error on line 26: unexpected EOF",
+        "message": (
+            "XML syntax error on line 11: "
+            "element <parameter> closed by </function>"
+        ),
         "provider": "ollama",
         "provider_parser": "qwen3.5/qwen3coder",
         "http_status": 500,

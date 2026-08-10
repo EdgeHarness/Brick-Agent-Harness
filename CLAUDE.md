@@ -131,12 +131,33 @@ outcomes reconstruct independently, all 1,056 typed positive workflows pass,
 and grader conformance passes 528 baselines, 4,332 targeted mutations, and
 1,872 benign controls. The machine-readable remediation closure passes with
 zero live model calls or inspected effectiveness data. Human-review utilities
-remain advisory and cannot authorize the study. The current candidate is
-offline-qualified but still cannot make a model call: it needs an exact clean
+remain advisory and cannot authorize the study. At that v0.13.3 qualification
+point, the candidate was offline-qualified but could not make a model call: it
+needed an exact clean
 commit, Linux and native Windows reproduction, and a separately authorized
 score-masked 22-cell shakeout before `v0.13.3` can be issued. Read
 [`bench/NEXT_STUDY_IMPLEMENTATION.md`](bench/NEXT_STUDY_IMPLEMENTATION.md) and
 run both offline verify commands before changing it.
+
+## Current focused-recovery status
+
+The v0.13.5 focused-follow-up root is immutable historical evidence. Its
+three-family B1a fallback sealed and is the only completed prospective
+directional lane. B1b terminated after the exact source-proven Qwen parser
+signature `element <parameter> closed by </function>`, leaving 24 cells never
+started; B2 never started. Do not resume, modify, or append to that root.
+
+`v0.13.6` is preauthorization only: it is not yet tagged, authorized, or run.
+Its one future authorization binds exactly those 24 missing B1b cells and the
+byte-identical 240-cell B2 same-context repeatability schedule. B2 is mandatory
+after any validated B1b terminal state, and no efficacy result may be exposed
+until both lanes are terminal. Its recovered six-family and B2 outputs are
+nonclaiming; only the old B1a fallback remains a completed prospective
+directional lane. See [`bench/FOCUSED_RECOVERY_SUCCESSOR.md`](bench/FOCUSED_RECOVERY_SUCCESSOR.md).
+
+This remains a fixed synthetic Qwen3.5 4B `harness_full` versus
+`native_tools` study. It does not test a bare model, Sharvin's Llama 8B product,
+llama.cpp backend, web UI, or production Brix harness.
 
 For S4, release state is authoritative in the annotated tag and bound evidence.
 Direct descendant `R` adds only the regular file

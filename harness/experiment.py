@@ -389,12 +389,13 @@ class ExecutionContext:
 
 _QWEN35_TOOL_XML_ERRORS = re.compile(
     r"^XML syntax error on line [1-9][0-9]*: "
-    r"(?:unexpected EOF|element <function> closed by </parameter>)$"
+    r"(?:unexpected EOF|element <function> closed by </parameter>|"
+    r"element <parameter> closed by </function>)$"
 )
 
 
 def _recognized_qwen35_tool_syntax_rejection(payload, response):
-    """Return the exact provider error for the two source-proven signatures."""
+    """Return the exact provider error for the three source-proven signatures."""
 
     if getattr(response, "status_code", None) != 500:
         return None
