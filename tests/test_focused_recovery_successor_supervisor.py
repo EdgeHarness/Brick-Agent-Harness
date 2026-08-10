@@ -17,6 +17,32 @@ ROOT = Path(__file__).resolve().parents[1]
 SUPERVISOR = ROOT / "scripts" / "run-focused-recovery-successor.ps1"
 
 
+def _powershell_output(result: subprocess.CompletedProcess[str]) -> str:
+    """Normalize only PowerShell's diagnostic rendering for text assertions."""
+
+    combined = re.sub(
+        r"\x1b\[[0-?]*[ -/]*[@-~]", "", result.stdout + result.stderr,
+    )
+    return re.sub(r"\r?\n\s*\|\s*", " ", combined)
+
+
+def test_powershell_output_normalizes_ansi_and_wrapped_continuation_lines():
+    result = subprocess.CompletedProcess(
+        args=["pwsh"],
+        returncode=1,
+        stdout="",
+        stderr=(
+            "\x1b[31;1mException: authorization is JSON-only and must be "
+            "recovered by its exact owning\x1b[0m\n"
+            "     | \x1b[31;1mcommand\x1b[0m\n"
+        ),
+    )
+    assert (
+        "authorization is JSON-only and must be recovered by its exact owning command"
+        in _powershell_output(result)
+    )
+
+
 def test_successor_supervisor_is_thin_fixed_path_score_blind_orchestration():
     text = SUPERVISOR.read_text(encoding="utf-8")
 
@@ -145,10 +171,7 @@ def test_successor_supervisor_authorize_refuses_missing_metadata_before_core_exe
         check=False,
         timeout=30,
     )
-    combined = re.sub(
-        r"\x1b\[[0-?]*[ -/]*[@-~]", "", result.stdout + result.stderr,
-    )
-    combined = re.sub(r"\r?\n\s*\|\s*", " ", combined)
+    combined = _powershell_output(result)
     assert result.returncode != 0
     assert "Authorize requires issued-at and issuer metadata only" in combined
     assert "cell_complete" not in combined
@@ -185,7 +208,7 @@ def test_successor_supervisor_rejects_operator_identity_overrides_before_executi
         check=False,
         timeout=30,
     )
-    combined = result.stdout + result.stderr
+    combined = _powershell_output(result)
     assert result.returncode != 0
     assert parameter in combined
     assert "parameter" in combined.lower()
@@ -415,7 +438,7 @@ def test_successor_supervisor_masked_stub_advances_terminated_b1b_then_b2_before
             check=False,
             timeout=30,
         )
-        combined = result.stdout + result.stderr
+        combined = _powershell_output(result)
         assert result.returncode == 0, combined
         assert "RAW_CORE_OUTPUT_MUST_NOT_SURFACE" not in combined
         assert "B1b_recovery terminal: terminated" in combined
@@ -471,7 +494,7 @@ def test_successor_supervisor_requires_a_fresh_independent_verifier_success_on_r
             check=False,
             timeout=30,
         )
-        combined = result.stdout + result.stderr
+        combined = _powershell_output(result)
         assert result.returncode != 0
         assert "independent release verification failed validation" in combined
         assert "both terminal lanes, canonical artifacts, and independent release verification validated" not in combined
@@ -512,7 +535,7 @@ def test_successor_supervisor_stub_fails_closed_when_b1b_has_no_terminal_artifac
             check=False,
             timeout=30,
         )
-        combined = result.stdout + result.stderr
+        combined = _powershell_output(result)
         assert result.returncode != 0
         assert "B1b_recovery stopped without a valid terminal artifact" in combined
         assert "RAW_CORE_OUTPUT_MUST_NOT_SURFACE" not in combined
@@ -562,7 +585,7 @@ def test_successor_supervisor_routes_json_only_publications_to_their_owning_comm
             check=False,
             timeout=30,
         )
-        combined = result.stdout + result.stderr
+        combined = _powershell_output(result)
         assert result.returncode == 0, combined
         assert "RAW_CORE_OUTPUT_MUST_NOT_SURFACE" not in combined
 
@@ -633,7 +656,7 @@ def test_successor_supervisor_recovers_authorization_json_only_only_via_authoriz
             check=False,
             timeout=30,
         )
-        combined = result.stdout + result.stderr
+        combined = _powershell_output(result)
         assert result.returncode == 0, combined
         assert "RAW_CORE_OUTPUT_MUST_NOT_SURFACE" not in combined
         authorization_marker = (
@@ -680,7 +703,7 @@ def test_successor_supervisor_run_never_treats_authorization_json_only_as_author
             check=False,
             timeout=30,
         )
-        combined = result.stdout + result.stderr
+        combined = _powershell_output(result)
         assert result.returncode != 0
         assert "authorization is JSON-only and must be recovered by its exact owning command" in combined
         assert "RAW_CORE_OUTPUT_MUST_NOT_SURFACE" not in combined
@@ -720,7 +743,7 @@ def test_successor_supervisor_rejects_invalid_terminal_markers_before_core_execu
             check=False,
             timeout=30,
         )
-        combined = result.stdout + result.stderr
+        combined = _powershell_output(result)
         assert result.returncode != 0
         assert "B1b_recovery termination" in combined
         assert "RAW_CORE_OUTPUT_MUST_NOT_SURFACE" not in combined
