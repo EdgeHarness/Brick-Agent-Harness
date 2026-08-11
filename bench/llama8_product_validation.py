@@ -32,7 +32,12 @@ import requests
 
 from bench import focused_followup as _focused
 from bench import next_study_live as _live
-from bench.next_study_program import BenchmarkLease, build_fingerprint
+from bench.next_study_program import (
+    BenchmarkLease,
+    HOST_FINGERPRINT_SCHEMA,
+    RUNTIME_FINGERPRINT_SCHEMA,
+    build_fingerprint,
+)
 from bench.next_study_review import review_packet
 from bench.next_study_validated_outcomes import (
     DEFAULT_PATH as VALIDATED_OUTCOMES_PATH,
@@ -68,8 +73,8 @@ from harness.instances import load_canonical_json, replace_canonical_json, sha25
 ROOT = Path(__file__).resolve().parents[1]
 PROTOCOL_PATH = ROOT / "bench" / "llama8_product_validation_protocol.json"
 MANIFEST_DIRECTORY = ROOT / "bench" / "manifests" / "office-v2"
-RUNS_ROOT = ROOT / "results-next-study" / "llama8-product-validation-v0137"
-RUN_ID = "v0137-llama8-product-validation-r1"
+RUNS_ROOT = ROOT / "results-next-study" / "llama8-product-validation-v0138"
+RUN_ID = "v0138-llama8-product-validation-r1"
 AUTHORIZATION_PATH = RUNS_ROOT / "authorization.json"
 PREFLIGHT_PATH = RUNS_ROOT / "preflight.json"
 SCHEDULE_PATH = RUNS_ROOT / "schedule.json"
@@ -94,7 +99,7 @@ REPORT_SCHEMA = "brick.llama8-product-validation.report/1"
 MODEL_TAG = "llama3.1:8b"
 MODEL_DIGEST = "46e0c10c039e019119339687c3c1757cc81b9da49709a3b3924863ba87ca666e"
 OLLAMA_VERSION = "0.32.5"
-FOLLOWUP_TAG = "v0.13.7"
+FOLLOWUP_TAG = "v0.13.8"
 SHARVIN_COMMIT = "7efc9b9dc2c54684f88c372de3a5d620e5497a23"
 SHARVIN_TREE = "76800c58e1d24b941cad3374cc6d11edaf004053"
 CONDITIONS = ("native_tools", "sharvin_balanced_adapter")
@@ -355,7 +360,7 @@ def validate_protocol(protocol):
     execution = protocol["execution"]
     if (
         execution.get("run_id") != RUN_ID
-        or execution.get("runs_root") != "results-next-study/llama8-product-validation-v0137"
+        or execution.get("runs_root") != "results-next-study/llama8-product-validation-v0138"
         or execution.get("maximum_physical_attempts") != 252
         or execution.get("instrument_retry_limit") != 1
         or execution.get("score_masked_console") is not True
@@ -703,12 +708,12 @@ def collect_preflight(sharvin_checkout, *, require_clean=True):
     external = _external_source_binding(sharvin_checkout)
     source_digests = _source_digests()
     tool_schema_sha256 = _digest(registry.native_schemas())
-    host = build_fingerprint("brick.llama8-product-validation.host-fingerprint/1", {
+    host = build_fingerprint(HOST_FINGERPRINT_SCHEMA, {
         "hostname": socket.gethostname(), "os": platform.platform(),
         "architecture": platform.machine(), "python": platform.python_version(),
         "python_executable_sha256": _file_digest(sys.executable),
     })
-    runtime = build_fingerprint("brick.llama8-product-validation.runtime-fingerprint/1", {
+    runtime = build_fingerprint(RUNTIME_FINGERPRINT_SCHEMA, {
         "ollama": inventory, "tool_schema_sha256": tool_schema_sha256,
         "protocol_sha256": protocol_sha256(protocol), "schedule_sha256": _digest(schedule),
         "source_digests": source_digests, "external_source": external,
@@ -809,7 +814,7 @@ def build_authorization(preflight, *, issued_at=None):
         "tag": FOLLOWUP_TAG, "tag_object_sha": preflight["tag_object_sha"],
         "commit_sha": preflight["commit_sha"], "protocol_sha256": protocol_sha256(protocol),
         "schedule_sha256": _digest(schedule), "run_id": RUN_ID,
-        "runs_root": "results-next-study/llama8-product-validation-v0137",
+        "runs_root": "results-next-study/llama8-product-validation-v0138",
         "logical_cell_ceiling": 126, "physical_attempt_ceiling": 252,
         "model": copy.deepcopy(preflight["model"]), "conditions": conditions,
         "preflight_sha256": preflight["preflight_sha256"],
@@ -849,7 +854,7 @@ def validate_authorization(document, protocol=None, *, validate_repository=False
         or document["protocol_sha256"] != protocol_sha256(protocol)
         or document["schedule_sha256"] != _digest(build_schedule(protocol))
         or document["run_id"] != RUN_ID
-        or document["runs_root"] != "results-next-study/llama8-product-validation-v0137"
+        or document["runs_root"] != "results-next-study/llama8-product-validation-v0138"
         or document["logical_cell_ceiling"] != 126
         or document["physical_attempt_ceiling"] != 252
         or document["score_embargo"] is not True
@@ -1844,7 +1849,7 @@ def _derive_report(authorization, analysis, *, reported_at=None):
     protocol = load_protocol()
     document = {
         "schema_version": REPORT_SCHEMA, "status": "final_verified_product_validation_report",
-        "study_label": "v0.13.7 Llama 3.1 8B fixed-panel product-system validation",
+        "study_label": "v0.13.8 Llama 3.1 8B fixed-panel product-system validation",
         "reported_at": reported_at or _utcnow(),
         "authorization_sha256": authorization["authorization_sha256"],
         "analysis_sha256": analysis["analysis_sha256"],

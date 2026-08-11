@@ -60,7 +60,7 @@ def _real_auth():
         "protocol_sha256": study.protocol_sha256(),
         "schedule_sha256": study._digest(schedule),
         "run_id": study.RUN_ID,
-        "runs_root": "results-next-study/llama8-product-validation-v0137",
+        "runs_root": "results-next-study/llama8-product-validation-v0138",
         "logical_cell_ceiling": 126,
         "physical_attempt_ceiling": 252,
         "model": {"model_digest": study.MODEL_DIGEST},
@@ -187,6 +187,13 @@ def test_protocol_is_canonical_and_exactly_frozen():
     assert protocol["panel"]["selection"]["subset_sha256"] == study.SELECTOR_DIGEST
     assert protocol["model"]["digest"] == study.MODEL_DIGEST
     assert protocol["source_freeze"]["selected_commit"] == study.SHARVIN_COMMIT
+
+
+def test_preflight_uses_only_shared_validated_fingerprint_schemas():
+    host = study.build_fingerprint(study.HOST_FINGERPRINT_SCHEMA, {"host": "test"})
+    runtime = study.build_fingerprint(study.RUNTIME_FINGERPRINT_SCHEMA, {"runtime": "test"})
+    assert host["schema_version"] == study.HOST_FINGERPRINT_SCHEMA
+    assert runtime["schema_version"] == study.RUNTIME_FINGERPRINT_SCHEMA
 
 
 def test_schedule_is_paired_balanced_unique_and_reproducible():
@@ -349,7 +356,7 @@ def test_authorization_tamper_rejects_after_resigning(monkeypatch):
         "issued_at": "2026-08-11T06:00:00+00:00", "tag": study.FOLLOWUP_TAG,
         "tag_object_sha": "1" * 40, "commit_sha": "2" * 40,
         "protocol_sha256": study.protocol_sha256(protocol), "schedule_sha256": study._digest(schedule),
-        "run_id": study.RUN_ID, "runs_root": "results-next-study/llama8-product-validation-v0137",
+        "run_id": study.RUN_ID, "runs_root": "results-next-study/llama8-product-validation-v0138",
         "logical_cell_ceiling": 126, "physical_attempt_ceiling": 252,
         "model": {"model_digest": study.MODEL_DIGEST}, "conditions": conditions,
         "preflight_sha256": "3" * 64, "host_fingerprint": {}, "runtime_fingerprint": runtime,
