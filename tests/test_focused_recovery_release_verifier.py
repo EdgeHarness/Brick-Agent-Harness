@@ -41,6 +41,18 @@ def test_private_complete_release_independently_rederives_when_present():
     if not verifier.AUTHORIZATION_PATH.with_name("authorization.json.complete").is_file():
         pytest.skip("private successor release is absent in clean CI")
     authorization = verifier._published(verifier.AUTHORIZATION_PATH, "authorization")
+    head = verifier.subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=verifier.ROOT, check=True,
+        capture_output=True, text=True,
+    ).stdout.strip()
+    if head != authorization["commit_sha"]:
+        pytest.skip("private successor release belongs to a different immutable checkout")
+    status = verifier.subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=all"],
+        cwd=verifier.ROOT, check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    if status:
+        pytest.skip("private successor rederivation requires its clean immutable checkout")
     verification_path = (
         verifier.SUCCESSOR_ROOT / "release" / authorization["authorization_sha256"]
         / "independent-verification.json"
