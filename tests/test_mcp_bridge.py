@@ -123,3 +123,85 @@ def test_server_published_names_are_sanitized_to_registry_law():
 def test_registry_path_is_this_repo_not_the_upstream_one():
     assert Path(mcp_config.REGISTRY_PATH).exists()
     assert "final-agent-8b" not in mcp_config.REGISTRY_PATH
+
+
+# --- schema rendering, kept in step with the upstream bridge -----------------
+
+_MS365_ISH = {
+    "type": "object",
+    "$defs": {
+        "recipient": {"type": "object", "properties": {
+            "emailAddress": {"type": "object", "properties": {
+                "address": {"type": "string"}, "name": {"type": "string"}}}}},
+        "when": {"type": "object", "properties": {
+            "dateTime": {"type": "string"}, "timeZone": {"type": "string"}}},
+    },
+    "properties": {
+        "subject": {"type": "string"},
+        "toRecipients": {"type": "array", "items": {"$ref": "#/$defs/recipient"}},
+        "start": {"$ref": "#/$defs/when"},
+        "importance": {"enum": ["low", "normal", "high"]},
+        "id": {"type": "string"},
+        "confirm": {"type": "boolean"},
+    },
+    "required": ["subject", "toRecipients"],
+}
+
+
+def test_a_ref_is_dereferenced_rather_than_rendered_as_a_bare_type():
+    params, _ = mcp_bridge._params_from_schema(_MS365_ISH)
+    # Without $ref following these are 'array' and 'any', and the model invents
+    # a shape the server rejects. This is the create-draft-email failure.
+    assert "emailAddress" in params["torecipients"][0]
+    assert "address" in params["torecipients"][0]
+    assert "dateTime" in params["start"][0]
+
+
+def test_an_array_wrapper_does_not_hide_the_item_shape():
+    params, _ = mcp_bridge._params_from_schema(_MS365_ISH)
+    assert not params["torecipients"][0].startswith("[object]")
+    assert params["torecipients"][0].startswith("[{")
+
+
+def test_enums_render_as_their_values():
+    params, _ = mcp_bridge._params_from_schema(_MS365_ISH)
+    assert '"low"' in params["importance"][0]
+
+
+def test_derived_graph_fields_are_dropped_from_nested_shapes():
+    """_SCHEMA_NOISE prunes NESTED keys, where a Graph entity would otherwise
+    spend most of an 8k context on read-only fields. Top-level parameters are
+    left alone (a server that requires 'id' means it); hide_params is the knob
+    for those. Matches the upstream bridge exactly."""
+    noisy = {"type": "object", "properties": {"item": {"type": "object", "properties": {
+        "subject": {"type": "string"}, "changeKey": {"type": "string"},
+        "lastModifiedDateTime": {"type": "string"}}}}}
+    params, _ = mcp_bridge._params_from_schema(noisy)
+    assert "subject" in params["item"][0]
+    assert "changeKey" not in params["item"][0]
+    assert "lastModifiedDateTime" not in params["item"][0]
+
+
+def test_hide_params_drops_optional_server_plumbing_only():
+    params, _ = mcp_bridge._params_from_schema(
+        _MS365_ISH, hide=("confirm", "subject"))
+    assert "confirm" not in params     # optional: dropped
+    assert "subject" in params         # required: kept even when hidden
+
+
+def test_an_arg_hint_replaces_the_generated_example_and_shortens_the_params():
+    hint = {"subject": "Q3", "toRecipients": [{"emailAddress": {"address": "a@b.c"}}]}
+    params, back = mcp_bridge._params_from_schema(_MS365_ISH, hint=hint)
+    example = mcp_bridge._example_for("ms365_create_draft_email",
+                                      _MS365_ISH, back, hint)
+    assert "use the shape in the example exactly" in params["torecipients"][0]
+    assert example["args"]["torecipients"] == hint["toRecipients"]
+    # hint keys are wire names; the example must use the sanitized param names
+    assert set(example["args"]) <= set(params)
+
+
+def test_the_registry_carries_the_measured_ms365_hints():
+    reg = mcp_config.load_registry()
+    hints = reg["ms365"].get("arg_hints") or {}
+    assert "create-draft-email" in hints
+    assert reg["ms365"].get("hide_params")
