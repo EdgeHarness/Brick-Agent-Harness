@@ -1,90 +1,49 @@
 # Brick
 
-Brick is an **experimental, local agent-harness research scaffold**. The
-implemented runtime has three domain packs:
+An **experimental local agent-harness research scaffold**. It tests one
+hypothesis: whether an explicit harness makes a small tool-using local model
+better at finishing real tasks. That hypothesis is **untested**. No benchmark
+result, training corpus, adapter or model weight is shipped here.
 
-- `office_demo@0.1.0`, the legacy synthetic inbox, calendar, messaging,
-  reminder, PPTX and XLSX fixture; and
-- `counter_demo@0.1.0`, a deliberately small structural portability fixture;
-  and
-- `brix_followup_synthetic@0.1.1`, a fictional no-network lead-follow-up slice.
+This is not a production assistant and is not connected to Brix systems.
 
-The raw and scaffolded loops call a user-supplied local Ollama server. Office
-email, calendar, chat and reminder actions mutate simulated state only; Office
-document tools do create real files in the attempt workspace.
+Two parts: a domain-independent harness core, and versioned domain packs that
+plug into it.
 
-This is not a production assistant and is not connected to Brix systems. No
-benchmark results, training corpora, adapters, or model weights are shipped.
-`counter_demo` demonstrates that a second pack can be wired through the
-surfaces; it is not evidence of generalization or performance. The proposition
-that orchestration improves model tool use remains an untested hypothesis.
+| pack | what it is |
+|---|---|
+| `office_demo@0.1.0` | synthetic inbox, calendar, messaging, reminders, PPTX and XLSX |
+| `counter_demo@0.1.0` | a deliberately tiny pack, to show a second one wires through |
+| `brix_followup_synthetic@0.1.1` | a fictional, no-network lead-follow-up slice |
 
-The latest release is `v0.11.1` (pre-D0 integrity repair), preceded by
-`v0.11.0` (S6C fair-condition runtime and scheduler), `v0.10.0` (S6G),
-`v0.9.0` (S5W), `v0.8.0` (S5), `v0.7.0` (B0),
-`v0.6.0` (S1R), `v0.5.0` (S4), and `v0.4.0` (F0/Q0).
-The required native-Windows Lenovo F0 evidence
-exists and the gate passed, establishing host and model feasibility only.
-Commit `f12dd71` contains the subsequent independent verifier correction and is
-pushed with required CI green. Native S4 acceptance, S1R, and B0 are released.
-S5 is released with strict versioned graders. The corrected generator freezes
-352 replayable, split-isolated fictional office instances across 11 logical
-families, including two fresh 44-pair D0 cohorts. S6C
-compiles them into shared native-tool primary conditions, descriptive
-ablations, a raw-JSON lower bound, a model-free rules reference, and a
-restartable disposable scheduler. The v0.11.1 exposure ledger prevents reuse of
-score-visible disposable inputs and the Brix grader now permits repeated safe
-reads while requiring one exact bound proposal. D0-A was instrument-invalid;
-D0-B completed but its direction-blind audit raised three ceiling flags and one
-floor flag. S7 is terminal without a condition comparison or confirmatory
-estimate.
+Both loops call a local Ollama server you supply. Email, calendar, chat and
+reminder actions mutate simulated state only. Document tools do write real files
+into the attempt workspace.
 
-The offline-qualified successor contains 528 split-neutral
-`office-generators/2.1.0` cases, 176 outcome-distinct policy triplets,
-condition-aware burden audits, independently compiled public outcomes,
-`office-strict-grader/3.0.0`, protocol `1.3.0` LOFO/exact-uniform bootstrap
-analysis, and the frozen 222-cell descriptive matrix. The 1,056-trace semantic
-gate, 2,976-mutation/1,392-benign grader gate, and model-free rehearsal pass.
-Human-review utilities are advisory only. Live execution remains disabled
-pending native qualification and the score-masked 22-cell shakeout. See
-[`bench/NEXT_STUDY_IMPLEMENTATION.md`](bench/NEXT_STUDY_IMPLEMENTATION.md).
-
-Annotated tags and bound evidence are release-authoritative. The tagged S4
-release commit `R` adds only `evidence/s4/v0.5.0.json` and intentionally retains
-this candidate-scoped prose. An immediate docs-only descendant `D` promotes
-changelog and current status after the tag; `D` is not part of `v0.5.0`.
+`counter_demo` proves a second pack fits the surfaces. It is not evidence of
+generalization or performance.
 
 ## Read first
 
-- [`CLAUDE.md`](CLAUDE.md) is the short orientation for a coding agent or new
-  contributor: hard rules, current position, the F0 gate, and remaining stages.
-- [`docs/EXECUTION.md`](docs/EXECUTION.md) is the operational handbook: current state,
-  schedule, hard checkpoints, cut order, and the per-session protocol.
-- [`docs/PROJECT_GUIDE.md`](docs/PROJECT_GUIDE.md) defines the canonical evidence,
-  research, product, and governance rules.
-- [`docs/BRIX_DISCOVERY.md`](docs/BRIX_DISCOVERY.md) records the non-sensitive Brix
-  discovery boundary and the relationship between the research and product
-  repositories.
-- [`docs/PROJECT_SETUP.md`](docs/PROJECT_SETUP.md) is the canonical staged
-  implementation and research plan.
-- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) describes what is implemented, what is
-  simulated, and the current trust boundaries.
-- [`bench/README.md`](bench/README.md) describes the benchmark and why current
-  outputs are exploratory.
-- [`docs/FIXES.md`](docs/FIXES.md) is the code-level defect and remediation register mapped
-  to the canonical gates.
-- [`webui/README.md`](webui/README.md) describes the local Agent Lab demo.
-- [`training_scripts/README.md`](training_scripts/README.md) describes the
-  experimental training package.
-- [`CHANGELOG.md`](CHANGELOG.md) records released repository changes; it is not
-  a claim that the research or product gates passed.
+| | |
+|---|---|
+| [`CLAUDE.md`](CLAUDE.md) | orientation: hard rules, current position, remaining stages |
+| [`docs/PROJECT_SETUP.md`](docs/PROJECT_SETUP.md) | canonical staged implementation and research plan |
+| [`docs/PROJECT_GUIDE.md`](docs/PROJECT_GUIDE.md) | canonical evidence, research and governance rules |
+| [`docs/EXECUTION.md`](docs/EXECUTION.md) | operational handbook and per-session protocol |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | what is implemented, what is simulated, trust boundaries |
+| [`docs/FIXES.md`](docs/FIXES.md) | defect and remediation register, mapped to the gates |
+| [`docs/BRIX_DISCOVERY.md`](docs/BRIX_DISCOVERY.md) | the non-sensitive Brix discovery boundary |
+| [`bench/README.md`](bench/README.md) | the benchmark, and why current output is exploratory |
+| [`CHANGELOG.md`](CHANGELOG.md) | released changes. Not a claim that any gate passed |
 
 ## Layout
 
 ```text
 harness/            runtime, grading, agent-loop and tool-registry contracts
-domains/            versioned office and counter domain packs
-bench/              domain-aware tasks, graders, runner and report
+domains/            versioned domain packs
+mcp/                connector registry for real accounts, off by default
+bench/              tasks, graders, runner and report
 agents/             per-model configs and one shared CLI runner
 webui/              loopback development console
 finetune/           live-harness data generator
@@ -93,185 +52,102 @@ tests/              offline characterization and architecture tests
 ```
 
 The public runtime boundary is `RunConfig`, `RunHooks`, `ActionPolicy`,
-`AttemptContext`, `ToolRegistry`, and `DomainPack`. `ToolRegistry` exposes
-defensive copies of tool specifications, and domain callbacks have a validated
-shape. A pack must classify every registered tool's effect explicitly, and an
-attempt rejects a policy missing any active tool. These are software
-interfaces, not authentication, process isolation,
-transactionality, provenance, or safety guarantees. Domain packs are trusted
-Python imports, and a domain version is a label rather than a content digest.
-
-## Experimental conditions
-
-The released `raw` condition is a minimal prompt-only JSON loop. The released
-`harness` condition adds examples, constrained JSON output, parser/argument
-repair, validation feedback, normalization, planning, duplicate suppression, a
-model verifier and memory injection.
-
-The benchmark defaults both conditions to the same 14-successful-call ceiling,
-measured relative to each attempt's starting LLM-call count. This does **not**
-make inference cost equal: prompts, output limits, tokens, latency and the
-purposes of calls differ. `raw` is a minimal lower-bound baseline, not a
-representative native function-calling implementation.
-
-These are legacy exploratory conditions, not the retained comparison. The
-planned primary compares `native_tools` with `harness_full` through the same
-Ollama native function-call transport, chat template, model digest, tool schemas,
-validators and opportunity limits.
+`AttemptContext`, `ToolRegistry` and `DomainPack`. A pack must classify every
+tool's effect explicitly, and an attempt rejects a policy that misses an active
+tool. These are software interfaces, not authentication, isolation,
+transactionality or safety guarantees. Domain packs are trusted Python imports.
 
 ## Install and verify
 
-The supported Python range is 3.9 through 3.13. Direct runtime dependencies are
-pinned in `pyproject.toml` and `requirements.txt`; `requirements-lock.txt`
-pins transitive versions but has no package hashes. Installation may therefore
-require an available package index or populated cache and is not a
-cryptographically reproducible supply-chain boundary.
+Python 3.9 through 3.13.
 
 ```bash
 python -m pip install -r requirements-test.txt
 python -m pytest
 ```
 
-The test suite is designed to run without Ollama. Passing it characterizes the
-implemented cases; it does not complete the S4 native gate or validate a
-retained result. Three required S4 symlink cases currently remain skipped on
-this Lenovo because Windows Developer Mode is disabled, and previously also
-because the S4 test root was unbounded against the Windows 248-character
-directory limit; the native gate
-permits no such skip.
+The suite needs no Ollama and no network. Passing it characterizes the
+implemented cases. It does not complete the S4 native gate or validate any
+result, and running it on a Mac is not a substitute for the native gate. Gate
+commands live in [`bench/README.md`](bench/README.md).
 
-The released F0 gate was a separate live-model operation. Its passing bundle is
-retained and bound to `v0.4.0` through the candidate/release attestation defined
-in [`docs/PROJECT_SETUP.md`](docs/PROJECT_SETUP.md). First-time host setup remains in
-[`bench/README.md`](bench/README.md#preparing-the-lenovo-host), and the exact
-F0 commands remain in
-[`bench/README.md`](bench/README.md#running-the-lenovo-f0-gate). The current S4
-native commands are in
-[`bench/README.md`](bench/README.md#native-windows-arm64-s4-gate); running the
-offline suite on a Mac is not a substitute.
-
-## Running the legacy benchmark for development
-
-From this directory, with the required Python packages, Ollama and the selected
-model tags already available:
-
-```bash
-python -m bench.run_bench \
-  --domain office_demo \
-  --models llama3.2:1b llama3.2:3b llama3.1:8b \
-  --conditions raw harness \
-  --outdir results-dev-001
-
-python -m bench.report --outdir results-dev-001
-```
-
-The runner validates the selected domain, conditions, tasks and duplicate model
-labels. Results are namespaced by domain and version. The reporter rejects
-missing or malformed core records and duplicate identities, and withholds
-raw-versus-harness deltas when task sets or recorded
-tool/capability/call-budget surfaces are incompatible. Those checks do not cure
-the known stale-artifact, resume, grader, isolation and provenance defects in
-[`bench/README.md`](bench/README.md). Do not publish current scores, compare
-them across code revisions, or reuse a development output directory.
-
-The listed models also do not form a clean parameter-size experiment: the 8B
-model is from a different Llama generation, and proposed larger models use
-another family.
-
-They are excluded from the retained matrix. The confirmatory candidate is
-`qwen3.5:4b-q4_K_M`, resolved by immutable digest only after Lenovo F0 passes.
-The 2B and 9B Qwen3.5 candidates are descriptive system replications, never a
-causal size curve.
+Dependencies are pinned in `pyproject.toml` and `requirements.txt`;
+`requirements-lock.txt` pins transitive versions but carries no hashes, so
+installation is not a reproducible supply-chain boundary.
 
 ## Agent Lab
 
-Agent Lab can be launched with:
-
 ```bash
-python -m webui.server
+python -m webui.server        # or python -m webui.app for a desktop window
 ```
 
-or the platform launcher where supported. It exposes the available domain
-packs, starts one agent subprocess and streams its events. The subprocess
-provides lifecycle and crash/stop containment only; it is not a security
-sandbox. S5W gives the loopback server a fresh 256-bit startup capability,
-exact Host/Origin controls, bounded JSON mutations, bounded file/log/event
-surfaces, and process-tree teardown. The browser launcher opens the capability
-URL; use only that printed URL. These controls do not make Agent Lab a
-production or multi-user service.
+Pick a model and a domain, type a task, and watch the loop: the plan, each token
+as it streams, every tool call with the arguments actually sent, and the
+domain's own state updating beside it. The workspace panel is driven by whatever
+sections a pack declares, so a new pack needs no UI work.
 
-Some launchers and UI actions can install packages or pull model weights, so
-the repository as a whole should not be described as offline.
+Use only the capability URL it prints. The loopback server takes a fresh 256-bit
+capability per launch, with Host and Origin checks and bounded request, file and
+event surfaces. The run subprocess gives lifecycle and stop containment, not a
+security sandbox, and none of this makes Agent Lab multi-user or production.
 
-The run options include a **real accounts** picker, off unless something in it
-is ticked. See [`mcp/ADDING-A-CONNECTOR.md`](mcp/ADDING-A-CONNECTOR.md) for how
-to add a provider, and the caveat in Safety below for what enabling one means.
+Some launchers and UI actions install packages or pull model weights, so the
+repository as a whole is not offline.
+
+## Real accounts
+
+Run options include a **real accounts** picker, off unless you tick something.
+It can attach live Gmail, Google Calendar, Outlook and Teams through third-party
+MCP servers, which hold the OAuth tokens. To add a provider, see
+[`mcp/ADDING-A-CONNECTOR.md`](mcp/ADDING-A-CONNECTOR.md): it is a JSON entry, not
+harness code.
+
+Enabling one is a deliberate departure from the synthetic-only boundary below.
+
+- Model inference still never leaves the machine.
+- The **tool calls** do. A Gmail read reaches Google. Do not enable a connector
+  during a demonstration whose claim is that nothing leaves the machine.
+- `draft` mode, the default, drops every tool that can transmit to a person, so
+  the model composes and a human sends. `live` mode does not.
+- Every world-changing call is classified `external_write` and is refused unless
+  an operator confirms it, because absence of a callback denies.
+- `bench/` never imports the bridge, so the comparison is unaffected.
+
+No evidence gate covers connectors and no gate result depends on one. Treat a
+connected account as production data: use a throwaway, never real Brix records.
 
 ## Safety
 
-Q0, released in `v0.4.0`, removes the legacy `--root`, `--shell`, `--yolo`,
-`--with-domain`, and `--with-office` capabilities from supported CLI, web and
-configuration surfaces. Legacy spellings are rejected before output creation,
-model access, network access or mutation. Brick retains domain-scoped synthetic
-tools and attempt-owned Office artifact writers; it does not expose a supported
-general filesystem or shell.
+Q0 removed the `--root`, `--shell`, `--yolo`, `--with-domain` and
+`--with-office` capabilities from every supported surface, and legacy spellings
+are rejected before any output, model access, network access or mutation. Brick
+has domain-scoped synthetic tools and attempt-owned document writers. It exposes
+no supported general filesystem or shell.
 
-`ActionPolicy` remains a classification/callback seam, not an operating-system
-sandbox or authorization system. Absence of a callback denies. S5W's replacement
-operator channel is deliberately narrow and binds a one-shot decision to the
-current `(run_id, confirmation_id, nonce)`; it is not generic stdin.
+`ActionPolicy` is a classification and callback seam, not an OS sandbox or an
+authorization system. Absence of a callback denies. The operator channel binds
+one decision to one `(run_id, confirmation_id, nonce)`; it is not generic stdin.
 
-Do not place real Brix member, payment, email or document data in this
-repository. Authentication, authorization, tenant isolation, privacy controls,
-retention and audit policy have not been built.
+Do not put real Brix member, payment, email or document data here.
+Authentication, tenant isolation, privacy controls, retention and audit policy
+have not been built. For demonstrations use synthetic data in a fresh
+disposable directory.
 
-**Real provider integrations now exist and are off by default.** The MCP
-connector layer can attach live Gmail, Google Calendar, Outlook and Teams
-accounts through third-party MCP servers, which hold the OAuth tokens. Nothing
-in `mcp/` runs without an explicit `--mcp` or a ticked box in the run panel, and
-without one the agent talks only to the simulated domain.
+## Where the research stands
 
-Enabling one is a deliberate departure from the synthetic-only boundary above,
-and it is narrower than it looks but not nothing:
+F0/Q0 passed on the native Lenovo host, which records host and model
+feasibility and nothing about effect. S4, S1R, B0, S5, S5W, S6G and S6C are
+released. D0-A was instrument-invalid, D0-B completed but its direction-blind
+audit raised four flags, and **S7 is terminal with no condition comparison and
+no confirmatory estimate**.
 
-- Model inference still never leaves the machine. The loopback assertion in
-  every runner still holds.
-- The **tool calls** do leave. A Gmail read reaches Google; an Outlook write
-  reaches Microsoft. Do not enable a connector during a demonstration whose
-  claim is that nothing leaves the machine.
-- `draft` mode, the default, drops every tool that can transmit to a person, so
-  the model composes and a human sends. `live` mode does not.
-- Every world-changing connector call is classified `external_write` and is
-  refused unless an operator confirms it, because absence of a callback denies.
-- The benchmark never imports the bridge. `bench/` keeps its simulated registry
-  and the raw-versus-harness comparison stays intact.
+The successor is offline-qualified but cannot make a live call yet: it needs an
+exact clean commit, Linux and native Windows reproduction, and a separately
+authorized score-masked shakeout. See
+[`bench/NEXT_STUDY_IMPLEMENTATION.md`](bench/NEXT_STUDY_IMPLEMENTATION.md).
 
-Connectors are not covered by any evidence gate, and no gate result depends on
-them. Treat a connected account as production data under the rule above: use a
-throwaway account, never real Brix records.
-
-For demonstrations, use only synthetic data in a newly created disposable
-directory.
-
-## Current boundary and next milestone
-
-F0/Q0 passed on the native Lenovo host and is released as `v0.4.0`; this records
-feasibility, not a benchmark effect. The verifier correction in `f12dd71` is
-pushed and CI-green without changing the retained bundle. At candidate `C`,
-S4's production marker-last store and attestor are implemented, while clean
-candidate CI, a native Windows ARM64 run with zero required S4 skips, and the
-candidate-bound attestation remain required rather than claimed.
-
-Release descendant `R` may add only that regular attestation file. The annotated
-tag and bound evidence—not this candidate-scoped paragraph—authoritatively establish
-whether S4 passed and `v0.5.0` was released. Immediately after the tag,
-docs-only `D` promotes current status without moving the tag. Stop for review
-before S5, which has not started. B0 is released as `v0.7.0`.
-
-No retained matrix begins before the marker-last store, repaired runtime, strict
-graders, independent generators, shared native transport, score-masked
-development run and zero-invalid sentinel pass. Fine-tuning, external benchmark
-integration and real Brix product work are outside this milestone.
+Annotated tags and bound evidence are release-authoritative. Never infer gate
+status from this file.
 
 The canonical public repository is
 [`EdgeHarness/Brick-Agent-Harness`](https://github.com/EdgeHarness/Brick-Agent-Harness).

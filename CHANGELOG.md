@@ -4,6 +4,13 @@
 
 ### Repository layout
 
+- Rewrote `README.md`: 1,868 words to 1,000. The cuts are duplication, not
+  caveats. Release history belongs to `CHANGELOG.md`, the tag and candidate
+  mechanics to `docs/PROJECT_SETUP.md`, and the successor study inventory to
+  `bench/NEXT_STUDY_IMPLEMENTATION.md`; the README now points at them instead of
+  restating them. Every boundary claim is kept, and the new console and the
+  real-accounts picker are documented.
+
 - Moved `ARCHITECTURE.md`, `EXECUTION.md`, `FIXES.md`, `PROJECT_GUIDE.md`,
   `PROJECT_SETUP.md` and `BRIX_DISCOVERY.md` into `docs/`. The root keeps
   `README.md`, `CHANGELOG.md`, `CLAUDE.md` and `SECURITY.md`, where the
