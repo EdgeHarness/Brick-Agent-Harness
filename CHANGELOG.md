@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+### Phase 2 steps 1 and 2: declared capabilities, and the office world merge
+
+Groundwork for the guards. Neither step changes what a model does.
+
+- Tools may declare `writes_file` and `opens`, joining the `simulates` key added
+  with the connectors. `ToolRegistry` gains `file_writing_tools()`,
+  `simulated_tools()` and `opener_for(path)`, derived from those declarations
+  rather than from a list of tool names kept elsewhere, so a tool added to a
+  pack later is covered the moment it says what it does. A misspelled
+  declaration is rejected at registry construction, because a key that silently
+  evaluates false would switch a cross-check off with no error anywhere.
+- `office_demo` declares its two document writers and its spreadsheet reader.
+  `counter_demo` and `brix_followup_synthetic` declare nothing and are
+  unaffected, which is the portability check.
+- **Step 2, the office world merge, is NOT in this change.** It was written,
+  and then reverted after
+  `test_transitive_model_and_analysis_sources_are_directly_bound` failed:
+  `domains/office_demo/world.py` is one of sixteen files bound by digest to
+  `v0.13.5`, and the focused-recovery successor requires the live delta against
+  that tag to be `harness/experiment.py` only. Editing the world voids the
+  v0.13.6 preauthorization. Reported, not repaired, per hard rule 2. The patch
+  is kept and the decision is recorded in `docs/PHASE2_GUARDS.md`.
+- `docs/PHASE2_GUARDS.md` records the design and the four settled decisions,
+  answered against DeepSeek Harness: guards on for interactive runs and off in
+  `bench/`, mounted for every pack, and never a default in the retained study.
+
 ### Interactive call budget raised to 50
 
 - `DEFAULT_MAX_CALLS` is 50 for the CLI and for Agent Lab, up from 14. A budget

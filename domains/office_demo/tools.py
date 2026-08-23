@@ -124,6 +124,7 @@ def office_specs():
             ),
         },
         "create_presentation": {
+            "writes_file": True,
             "desc": "Create a real .pptx PowerPoint file. Each slide is an object with a "
                     "'title' and an optional 'bullets' list. A first slide without bullets "
                     "becomes a title slide.",
@@ -152,6 +153,7 @@ def office_specs():
             ),
         },
         "create_spreadsheet": {
+            "writes_file": True,
             "desc": "Create a real .xlsx Excel file from a list of rows (first row is usually "
                     "headers). A cell string starting with '=' becomes a formula.",
             "params": {
@@ -182,6 +184,7 @@ def office_specs():
             ),
         },
         "read_spreadsheet": {
+            "opens": (".xlsx",),
             "desc": "Read back the cell contents of an existing .xlsx file.",
             "params": {"filename": ("string ending in .xlsx", True)},
             "example": {

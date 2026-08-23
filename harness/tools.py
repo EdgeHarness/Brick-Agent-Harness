@@ -117,6 +117,33 @@ def _validate_spec(name, spec):
         raise TypeError(
             f"tool {name!r} suppress_identical_repeats must be bool"
         )
+    # What a tool declares about its relationship to files. Cross-checks read
+    # these rather than a list of tool names kept elsewhere, so a tool added to
+    # a pack later is covered by whatever declares itself, and a pack that has
+    # no files declares nothing and is simply never subject to them.
+    #
+    # Validated here rather than where they are read: a misspelled key that
+    # silently evaluates false would turn a cross-check off without any error,
+    # which is the one direction this must not fail in.
+    if "writes_file" in spec and type(spec["writes_file"]) is not bool:
+        raise TypeError(f"tool {name!r} writes_file must be bool")
+    opens = spec.get("opens")
+    if opens is not None:
+        if isinstance(opens, str) or not isinstance(opens, (tuple, list)):
+            raise TypeError(
+                f"tool {name!r} opens must be a sequence of extensions"
+            )
+        for suffix in opens:
+            if not isinstance(suffix, str) or not suffix.startswith("."):
+                raise ValueError(
+                    f"tool {name!r} opens entry {suffix!r} must be an "
+                    "extension beginning with '.'"
+                )
+    simulates = spec.get("simulates")
+    if simulates is not None and (
+        not isinstance(simulates, str) or not simulates
+    ):
+        raise ValueError(f"tool {name!r} simulates must be a nonempty string")
 
 
 class ToolRegistry:
@@ -192,6 +219,39 @@ class ToolRegistry:
                     + json.dumps(_thaw(spec["example"]), ensure_ascii=False)
                 )
         return "\n".join(lines)
+
+    # ------------------------------------------------ declared capabilities --
+    #
+    # Derived from what each spec declares, never from a list of names kept
+    # somewhere else. An allow-list of survivors silently drops every tool added
+    # afterwards; a declaration means a new tool is covered the moment it says
+    # what it does, and a pack with no files says nothing and is unaffected.
+
+    def file_writing_tools(self):
+        """Every tool in this registry that produces a file."""
+        return frozenset(
+            name for name, spec in self._specs.items()
+            if spec.get("writes_file")
+        )
+
+    def simulated_tools(self):
+        """Tools standing in for a surface a real account would replace."""
+        return frozenset(
+            name for name, spec in self._specs.items() if spec.get("simulates")
+        )
+
+    def opener_for(self, path):
+        """A tool that can open this file, or None.
+
+        First match in registry order, which is the pack's own declaration
+        order, so a pack decides precedence by how it lists its tools rather
+        than by anything inferred here."""
+        low = str(path).lower()
+        for name, spec in self._specs.items():
+            for suffix in spec.get("opens") or ():
+                if low.endswith(suffix.lower()):
+                    return name
+        return None
 
     def suppresses_identical_repeats(self, name):
         if name not in self._specs:
