@@ -203,6 +203,10 @@ production or multi-user service.
 Some launchers and UI actions can install packages or pull model weights, so
 the repository as a whole should not be described as offline.
 
+The run options include a **real accounts** picker, off unless something in it
+is ticked. See [`mcp/ADDING-A-CONNECTOR.md`](mcp/ADDING-A-CONNECTOR.md) for how
+to add a provider, and the caveat in Safety below for what enabling one means.
+
 ## Safety
 
 Q0, released in `v0.4.0`, removes the legacy `--root`, `--shell`, `--yolo`,
@@ -219,7 +223,32 @@ current `(run_id, confirmation_id, nonce)`; it is not generic stdin.
 
 Do not place real Brix member, payment, email or document data in this
 repository. Authentication, authorization, tenant isolation, privacy controls,
-retention, audit policy and real provider integrations have not been built.
+retention and audit policy have not been built.
+
+**Real provider integrations now exist and are off by default.** The MCP
+connector layer can attach live Gmail, Google Calendar, Outlook and Teams
+accounts through third-party MCP servers, which hold the OAuth tokens. Nothing
+in `mcp/` runs without an explicit `--mcp` or a ticked box in the run panel, and
+without one the agent talks only to the simulated domain.
+
+Enabling one is a deliberate departure from the synthetic-only boundary above,
+and it is narrower than it looks but not nothing:
+
+- Model inference still never leaves the machine. The loopback assertion in
+  every runner still holds.
+- The **tool calls** do leave. A Gmail read reaches Google; an Outlook write
+  reaches Microsoft. Do not enable a connector during a demonstration whose
+  claim is that nothing leaves the machine.
+- `draft` mode, the default, drops every tool that can transmit to a person, so
+  the model composes and a human sends. `live` mode does not.
+- Every world-changing connector call is classified `external_write` and is
+  refused unless an operator confirms it, because absence of a callback denies.
+- The benchmark never imports the bridge. `bench/` keeps its simulated registry
+  and the raw-versus-harness comparison stays intact.
+
+Connectors are not covered by any evidence gate, and no gate result depends on
+them. Treat a connected account as production data under the rule above: use a
+throwaway account, never real Brix records.
 
 For demonstrations, use only synthetic data in a newly created disposable
 directory.

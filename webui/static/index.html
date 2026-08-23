@@ -5,24 +5,127 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agent Lab</title>
 <link rel="stylesheet" href="/static/style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧪</text></svg>">
+<!-- The circled A, transparent, so the tab strip's own colour shows through
+     instead of a black tile sitting in the middle of it. An SVG favicon can
+     answer prefers-color-scheme, so the mark inks itself dark or light to suit
+     the browser; the PNG below is the tiled fallback for anything that will
+     not take an SVG here, and browsers that do take one never fetch it. -->
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="/static/favicon.png" type="image/png">
+
+<!-- Installable as a desktop app: own window, dock icon, no URL bar. The icons
+     here are cut from the same mark.png the favicon masks, but on their own dark
+     tile — a dock and a taskbar supply no ground of their own, so unlike the
+     favicon these cannot be transparent. -->
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#f7f7f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+<link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Agent Lab">
 </head>
 <body>
 
 <header class="topbar">
-  <div class="brand">
-    <span class="logo">◆</span>
-    <div>
-      <h1>Agent Lab</h1>
-      <p>local Ollama endpoint · one runner at a time · domain-selectable</p>
-    </div>
+  <!-- The lockup itself, masked rather than drawn as an <img>: the art is a
+       white-on-transparent PNG, so using its alpha as a mask lets the ink
+       colour come from the theme and the logo reads correctly on both. -->
+  <!-- The reference for this layout keeps the conversation list pinned, so the
+       rail needs a way back once it is dismissed. -->
+  <button class="rail-btn" id="rail-btn" type="button" aria-label="Toggle conversations"
+          aria-pressed="true">▤</button>
+  <div class="mark">
+    <span class="logo" role="img" aria-label="AgentLab"></span>
+    <span class="mark-sub">your private assistant</span>
   </div>
+  <!-- Meters read value-first. "calls 4/20" makes the eye parse a label before
+       it reaches the number it came for; the figure leads and the label sits
+       under it. Tabular figures so the row does not twitch as digits change. -->
   <div class="meters" id="meters">
-    <div class="meter" id="meter-ollama"><span class="dot"></span><span class="label">checking ollama…</span></div>
-    <div class="meter hidden" id="meter-calls"><span class="label">calls</span><b id="calls-val">0/14</b>
-      <div class="bar"><i id="calls-bar"></i></div></div>
-    <div class="meter hidden" id="meter-time"><span class="label">elapsed</span><b id="time-val">0s</b></div>
-    <div class="meter hidden" id="meter-tok"><span class="label">tokens out</span><b id="tok-val">0</b></div>
+    <div class="meter dotmeter" id="meter-ollama">
+      <span class="dot"></span><span class="label">checking ollama…</span>
+    </div>
+    <div class="meter hidden" id="meter-calls">
+      <b id="calls-val">0/14</b><span>calls</span>
+      <div class="bar"><i id="calls-bar"></i></div>
+    </div>
+    <div class="meter hidden" id="meter-time"><b id="time-val">0s</b><span>elapsed</span></div>
+    <div class="meter hidden" id="meter-tok"><b id="tok-val">0</b><span>tokens</span></div>
+    <!-- The workspace is a place you go to, not a wall you look at. It opens
+         on demand, and on its own the moment the agent writes something. -->
+    <button class="ws-btn" id="ws-btn" type="button" aria-pressed="false"
+            aria-controls="artifacts" title="Show what the agent produced">
+      <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+        <path d="M1.5 4.2A1.2 1.2 0 0 1 2.7 3h3.1l1.4 1.6h5.1a1.2 1.2 0 0 1 1.2 1.2v6A1.2 1.2 0 0 1 12.3 13H2.7a1.2 1.2 0 0 1-1.2-1.2z"
+              fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+      </svg>
+      <span>Workspace</span>
+      <span class="ws-count hidden" id="ws-count">0</span>
+    </button>
+    <!-- Appearance used to be a single toggle that swapped light and dark and
+         nothing else. It lives here now with the other thing a person sets
+         once and forgets, and a two-state toggle could not express "follow the
+         system", which is the honest default and what a first run gets. -->
+    <div class="prefs-wrap">
+      <button class="theme prefs-btn" id="prefs-btn" type="button" aria-haspopup="dialog"
+              aria-expanded="false" aria-controls="prefs" title="Preferences">
+        <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+          <circle cx="8" cy="5.6" r="2.7" fill="none" stroke="currentColor" stroke-width="1.3"/>
+          <path d="M2.6 14c.5-2.7 2.7-4.2 5.4-4.2s4.9 1.5 5.4 4.2" fill="none"
+                stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+        </svg>
+        <span class="sr">Preferences</span>
+      </button>
+
+      <div class="prefs menu" id="prefs" role="dialog" aria-label="Preferences" hidden>
+        <p class="menu-head">Appearance</p>
+        <button class="menu-row" type="button" data-theme-set="system">
+          <span class="menu-label">Follow the system</span>
+          <span class="tick" aria-hidden="true">✓</span>
+        </button>
+        <button class="menu-row" type="button" data-theme-set="light">
+          <span class="menu-label">Light</span>
+          <span class="tick" aria-hidden="true">✓</span>
+        </button>
+        <button class="menu-row" type="button" data-theme-set="dark">
+          <span class="menu-label">Dark</span>
+          <span class="tick" aria-hidden="true">✓</span>
+        </button>
+
+        <div class="menu-rule"></div>
+
+        <!-- Glass is a preference, not a fixed style: it costs GPU on every
+             scroll and it lowers contrast between a panel and what is under
+             it. Off swaps in the solid panel colour, so nothing moves. -->
+        <label class="menu-row">
+          <input type="checkbox" id="opt-glass" checked>
+          <span class="menu-label">Glass panels</span>
+          <span class="tick" aria-hidden="true">✓</span>
+        </label>
+        <!-- The run counters. On by default: the numbers are the honest part of
+             the end card. Off for anyone who wanted a summary and a file, not a
+             token count. -->
+        <label class="menu-row">
+          <input type="checkbox" id="opt-stats" checked>
+          <span class="menu-label">Run details</span>
+          <span class="tick" aria-hidden="true">✓</span>
+        </label>
+
+        <div class="menu-rule"></div>
+
+        <p class="menu-head">Limits</p>
+        <!-- A ceiling on one run, not a target: an agent that finishes early
+             costs what it costs. It lives here rather than with the run options
+             because it is a standing preference about this machine's patience,
+             not a decision about one task. Blank means the model's own default. -->
+        <label class="menu-row menu-row-field" for="opt-calls">
+          <span class="menu-label">Tool call limit</span>
+          <input type="number" id="opt-calls" min="2" max="200" placeholder="50">
+        </label>
+        <p class="opt-note">Blank uses this model's default. Higher lets a long
+          task finish, lower stops a wandering one sooner.</p>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -30,79 +133,221 @@
 
   <!-- ------------------------------------------------------------ models -->
   <aside class="rail">
-    <h2 class="rail-title">Models</h2>
-    <p class="rail-hint">Pick one. Each folder is its own agent with its own
-      workspace, memory and history.</p>
-    <div id="agents" class="agents"></div>
-
-    <details class="opts" id="opts">
-      <summary>Options</summary>
-      <label class="opt">
-        <span>Domain</span>
-        <select id="opt-domain"></select>
-      </label>
-      <label class="check"><input type="checkbox" id="opt-tiers"> tiered model router</label>
-      <label class="opt inline">
-        <span>Call budget</span>
-        <input type="number" id="opt-calls" min="2" max="80" placeholder="auto">
-      </label>
-
-      <div class="opt" id="opt-mcp-block">
-        <span>Real accounts</span>
-        <p class="opt-note">Off unless you tick one. Model inference stays on
-          this machine; the tool calls reach the provider's cloud.</p>
-        <div id="opt-mcp" class="mcp-list"></div>
-        <label class="opt inline">
-          <span>Mode</span>
-          <select id="opt-mcp-mode">
-            <option value="draft">draft — never sends</option>
-            <option value="live">live — can send</option>
-            <option value="read_only">read only</option>
-          </select>
-        </label>
-        <label class="check"><input type="checkbox" id="opt-keep-office">
-          keep the simulated inbox too</label>
-      </div>
-    </details>
-  </aside>
-
-  <!-- ------------------------------------------------------------- stage -->
-  <main class="stage">
-    <section class="composer">
-      <textarea id="task" rows="2" placeholder="Tell the agent what to do…"></textarea>
-      <div class="composer-actions">
-        <button id="run" class="primary" disabled>Run</button>
-        <button id="stop" class="ghost hidden">Stop</button>
-      </div>
-    </section>
-    <div id="presets" class="presets"></div>
-
-    <section class="timeline-wrap">
-      <div id="timeline" class="timeline"></div>
-      <div id="empty" class="empty">
-        <div class="empty-art">◆</div>
-        <h3>Nothing running</h3>
-        <p>Choose a model on the left, pick or type a task, and press Run.
-           Every step — the plan, each token the model writes, every tool call
-           and its result — shows up here as it happens.</p>
-      </div>
-    </section>
-  </main>
-
-  <!-- ------------------------------------------------------------ folder -->
-  <aside class="folder">
-    <div class="folder-head">
-      <div>
-        <h2>Workspace</h2>
-        <p id="folder-path" class="folder-path">—</p>
-      </div>
-      <div class="folder-btns">
-        <button id="reveal" class="icon-btn" title="Open this folder on disk">⤢</button>
-        <button id="reset" class="icon-btn" title="Factory-reset this agent">↺</button>
-      </div>
+    <!-- Conversations first: which thread you are in is the question you ask on
+         opening the app, and which model runs it is one you answer once. -->
+    <div class="chats">
+      <button class="newchat" id="new-chat" type="button">
+        <span class="newchat-ico" aria-hidden="true">✎</span> New chat
+      </button>
+      <div id="threads" class="threads" role="list"></div>
+      <p class="rail-none" id="threads-none">No conversations yet.</p>
     </div>
-    <div id="tree" class="tree"></div>
+
+    <!-- Folded by default. Which model runs the thread is answered once; the
+         conversation list is what the sidebar is for. -->
+    <details class="rail-models">
+      <summary class="rail-sum">Models <span class="rail-sum-n" id="rail-sum-n"></span></summary>
+    <div class="rail-head">
+      <h2 class="rail-title">Models</h2>
+      <span class="rail-count" id="agent-count"></span>
+      <button class="rail-close" id="rail-close" type="button" aria-label="Close models">✕</button>
+    </div>
+    <p class="rail-hint">Each folder is its own agent, with its own workspace and memory.</p>
+    <!-- Ordered by use, so the one you reach for is the one at the top. The
+         filter only earns its place once there are enough agents to hunt
+         through, so app.js hides it below that. -->
+    <div class="rail-search hidden" id="rail-search">
+      <input type="search" id="agent-filter" placeholder="Search models"
+             autocomplete="off" aria-label="Filter models">
+    </div>
+    <div id="agents" class="agents" role="radiogroup" aria-label="Models"></div>
+    <p class="rail-none hidden" id="agents-none">No model matches that.</p>
+
+    <!-- Other models the catalog knows about. A machine with one model
+         installed should not be a dead end. -->
+    <div class="rail-more hidden" id="rail-more">
+      <h3 class="rail-sub">Available to download</h3>
+      <div id="available" class="agents"></div>
+    </div>
+    </details>
+
   </aside>
+
+  <!-- The run on the left, what it produced on the right, permanently. The
+       deck appears the moment it is written, at size, with no click. -->
+  <div class="body">
+
+    <!-- --------------------------------------------------------- the run -->
+    <section class="run">
+      <!-- The plan is the only forward-looking information in a run: it
+           answers how much longer. Each step lights as its tool fires, so it
+           is a progress bar built from state the runner already sends.
+           "Steps only" strips the reasoning down to what the agent did. -->
+      <div class="runbar">
+        <div class="plan" id="plan" aria-label="Planned steps"></div>
+      </div>
+
+      <!-- tabindex=0 on the scroll containers: a scrollable region that cannot
+           be focused cannot be scrolled from the keyboard at all. -->
+      <div class="feed" tabindex="0" role="log" aria-label="Run timeline">
+        <!-- The conversation so far. The live run's reasoning streams into the
+             timeline below it, so a turn reads as: what you asked, what it did,
+             what it answered. -->
+        <div class="thread-log" id="thread"></div>
+        <div class="feed-in" id="timeline"></div>
+        <!-- Shows once, before the first run of a session, then is hidden for
+             good. It is a welcome screen, not a status, so it greets rather
+             than reporting an absence, and it sits on the vertical centre of
+             the pane rather than pinned under the top edge.
+             The mark carries the name, so the headline does not repeat it. -->
+        <div id="empty" class="empty">
+          <span class="empty-mark" role="img" aria-label="AgentLab"></span>
+          <h3>What can I help you with?</h3>
+          <p>Pick a model, say what you want, press Run. Nothing leaves this machine.</p>
+        </div>
+      </div>
+
+      <!-- The input docks at the bottom, under the transcript it appends to.
+           It sat above the feed, which meant the newest event was furthest from
+           the thing you type into and the reading order ran backwards. -->
+      <div class="dock">
+        <div id="presets" class="presets" role="group" aria-label="Example tasks"></div>
+        <!-- One rounded field containing the input and its controls, rather
+             than a textarea with buttons floating beside it. The box is the
+             control; the border moves to it, so the row reads as a single
+             place to act instead of three unrelated widgets. -->
+        <div class="composer">
+          <textarea id="task" rows="1" placeholder="Tell the agent what to do…"></textarea>
+          <div class="composer-actions">
+            <!-- The run options live here rather than in a rail drawer. They
+                 are settings on the task you are about to send, so they belong
+                 on the thing you send it with. -->
+            <button class="plus" id="opts-btn" type="button" aria-haspopup="dialog"
+                    aria-expanded="false" aria-controls="opts" title="Run options">
+              <svg viewBox="0 0 20 20" width="17" height="17" aria-hidden="true">
+                <path d="M10 4.5v11M4.5 10h11" fill="none" stroke="currentColor"
+                      stroke-width="1.6" stroke-linecap="round"/>
+              </svg>
+              <span class="sr">Run options</span>
+            </button>
+            <span class="opt-dots" id="opt-dots" aria-live="polite"></span>
+            <span class="composer-spacer"></span>
+            <select id="model" class="model-pick"
+                    title="Which installed model actually drives this agent"></select>
+            <button id="stop" class="ghost hidden">Stop</button>
+            <button id="run" class="primary" disabled>Run</button>
+          </div>
+
+          <!-- A menu of rows, not a stacked form. Every row is the same
+               height and the same shape, the label sits at the left edge of
+               each, and state reads at the right: a tick for the switches, the
+               current value for the two that take one. Checkboxes are still
+               the underlying control, just not the visible one, so keyboard
+               and screen readers get real semantics. -->
+          <div class="opts menu" id="opts" role="dialog" aria-label="Run options" hidden>
+            <label class="menu-row">
+              <input type="checkbox" id="steps-toggle">
+              <span class="menu-label">Steps only</span>
+              <span class="tick" aria-hidden="true">✓</span>
+            </label>
+
+            <div class="menu-rule"></div>
+
+            <label class="menu-row">
+              <input type="checkbox" id="opt-keep-office">
+              <span class="menu-label">Keep simulated office tools</span>
+              <span class="tick" aria-hidden="true">✓</span>
+            </label>
+            <label class="menu-row">
+              <input type="checkbox" id="opt-tiers">
+              <span class="menu-label">Tiered model router</span>
+              <span class="tick" aria-hidden="true">✓</span>
+            </label>
+
+            <div class="menu-rule"></div>
+
+            <!-- The row that carries a value opens in place, which is what
+                 the submenu arrow promises. <details> does it without JS. -->
+            <details class="menu-sub">
+              <summary class="menu-row">
+                <span class="menu-label">Domain</span>
+                <span class="menu-val" id="domain-val">office_demo</span>
+                <span class="chev" aria-hidden="true">›</span>
+              </summary>
+              <div class="menu-body">
+                <select id="opt-domain"></select>
+                <p class="opt-note">Which world the agent works in. Each domain
+                  brings its own tools, tasks and starting state.</p>
+              </div>
+            </details>
+
+            <!-- Real mail and calendars, off unless something here is ticked.
+                 It sits with the other value rows because it is the same kind
+                 of decision, but it is the only one that can reach outside the
+                 machine, so the row states that when the menu is shut. -->
+            <details class="menu-sub">
+              <summary class="menu-row">
+                <span class="menu-label">Real accounts</span>
+                <span class="menu-val" id="conn-state">none</span>
+                <span class="chev" aria-hidden="true">›</span>
+              </summary>
+              <div class="menu-body">
+                <div id="opt-mcp" class="mcp-list"></div>
+                <label class="mcp-mode">
+                  <span>Mode</span>
+                  <select id="opt-mcp-mode">
+                    <option value="draft">draft · never sends</option>
+                    <option value="live">live · can send</option>
+                    <option value="read_only">read only</option>
+                  </select>
+                </label>
+                <p class="opt-note">Inference stays on this machine either way.
+                  These tools do not: they reach Google and Microsoft. Draft mode
+                  hides every tool that could transmit to a person.</p>
+              </div>
+            </details>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="splitter" id="splitter" role="separator" aria-orientation="vertical"
+         tabindex="0" aria-label="Resize the run and artifact panes"
+         aria-valuemin="24" aria-valuemax="68" aria-valuenow="50"></div>
+
+    <!-- ------------------------------------------------- what it produced -->
+    <section class="artifacts">
+      <div class="tabs" id="tabs" role="tablist" aria-label="Artifacts"></div>
+      <div class="canvas" id="canvas" tabindex="0">
+        <div class="pane on" id="pane-all" role="tabpanel" aria-label="All artifacts">
+          <div class="holding" id="holding">
+            <div><b>Nothing written yet</b>
+              Files the agent creates appear here<br>as it creates them.</div>
+          </div>
+          <div class="grid-all hidden" id="grid-all"></div>
+        </div>
+        <div class="pane" id="pane-ws" role="tabpanel" aria-label="Workspace">
+          <div class="folder-head">
+            <div>
+              <h2>Workspace</h2>
+              <p id="folder-path" class="folder-path">—</p>
+            </div>
+            <div class="folder-btns">
+              <button id="reveal" class="icon-btn" title="Open this folder on disk">⤢</button>
+              <button id="reset" class="icon-btn" title="Factory-reset this agent">↺</button>
+            </div>
+          </div>
+          <div id="tree" class="tree"></div>
+        </div>
+      </div>
+      <!-- Scoped to the run, not the folder: a file the agent never opened is
+           not part of the story being told. -->
+      <div class="touched" id="touched">
+        <span class="lbl">this run touched</span>
+        <span class="none" id="touched-none">nothing yet</span>
+      </div>
+    </section>
+  </div>
 </div>
 
 <!-- ------------------------------------------------------------- viewer -->

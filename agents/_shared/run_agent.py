@@ -311,10 +311,13 @@ def main(agent_dir=None, argv=None):
               + ", ".join(f"{x['id']} ({len(x['tools'])} tools)" for x in summary)
               + f"  mode: {mcp_mode}")
         # Inference is still local; the loopback assertion above still holds.
-        # It is the TOOLS that now reach Google and Microsoft. Say so, because
-        # "nothing leaves the machine" stops being true for the tool calls.
-        print("  NOTE: tool calls reach these providers' clouds. Model "
-              "inference stays on this machine.")
+        # It is the TOOLS that can now leave. Say so, because "nothing leaves
+        # the machine" stops being true for the tool calls. Worded without
+        # claiming every connector is remote: selftest is not, and a warning
+        # that is wrong about the connector people test with is a warning they
+        # learn to skip.
+        print("  NOTE: model inference stays on this machine. Connector tool "
+              "calls need not: a real-account connector reaches its provider.")
         for warning in mcp_config.count_warnings(summary):
             print(f"  ! {warning}")
     if router:

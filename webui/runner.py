@@ -16,6 +16,7 @@ if PROJECT not in sys.path:
 from agents._shared.run_agent import validate_config  # noqa: E402
 from harness.agent import run_harness  # noqa: E402
 from harness.domain import load_domain  # noqa: E402
+from harness import chat  # noqa: E402
 from harness import mcp_bridge, mcp_config  # noqa: E402
 from harness.llm import LLM, OLLAMA_URL  # noqa: E402
 from harness.memory import MemoryStore  # noqa: E402
@@ -113,6 +114,17 @@ def main(argv=None):
         choices=("draft", "live", "read_only"),
     )
     parser.add_argument("--keep-office-tools", action="store_true")
+    parser.add_argument(
+        "--thread", default=None,
+        help="conversation this run belongs to; earlier turns are "
+             "read into the prompt. The server writes the turns, the "
+             "runner only reads them, so a CLI run without one behaves "
+             "exactly as it always did",
+    )
+    parser.add_argument(
+        "--model", default=None,
+        help="override the tag in the agent's config.json",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -124,6 +136,10 @@ def main(argv=None):
     ) as handle:
         config_data = json.load(handle)
     validate_config(config_data)
+    if args.model:
+        # The folder still owns the state paths; only the tag doing the work
+        # changes, so the run lands in the same workspace and memory.
+        config_data["model"] = args.model
     assert (
         "127.0.0.1" in OLLAMA_URL or "localhost" in OLLAMA_URL
     ), "refusing non-local endpoint"
@@ -196,6 +212,11 @@ def main(argv=None):
     registry = domain.registry
     mcp_effects = {}
     prompt_rules = domain.prompt_rules
+    # Earlier turns of this conversation, if the run belongs to one.
+    if args.thread:
+        history = chat.prompt_block(chat.messages(folder, args.thread))
+        if history:
+            prompt_rules += history
     connected = None
     if args.mcp:
         mcp_cfg = config_data.get("mcp") or {}

@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+### Agent Lab: real connectors and a domain-driven console
+
+- Wired the MCP bridge into the CLI and the run panel. The bridge and
+  `mcp/servers.json` already existed but nothing called `enable()`, so real
+  accounts were reachable only from tests. Adds `--mcp`, `--mcp-mode`,
+  `--mcp-list`, `--mcp-help` and `--keep-office-tools`, a `/api/mcp` endpoint,
+  and a connector picker. The existing confirmation channel already covers MCP
+  writes, so consent is not reimplemented.
+- Added multi-account brokering: a second server offering the same capability
+  joins the first behind one name with a required `account` argument, rather
+  than claiming a parallel set named after itself. Two Outlook mailboxes used
+  to register twenty tools for ten operations. The argument is required because
+  two accounts behind one name have no safe default.
+- Declared `simulates` on the office_demo connector specs, so a real inbox
+  replaces the fake one instead of sitting beside it. A drop-list derived from
+  what each tool declares, never an allow-list of survivors, so a tool added
+  later survives unless it opts in to being dropped.
+- Ported the Agent Lab console from the Final-Agent-8B line: conversation
+  threads, the model catalogue rail, the run-options menu and the installable
+  web-app shell.
+- Made the workspace panel domain-driven. It rendered `emails`/`events`/
+  `messages` as fixed top-level keys, which is the office world and nothing
+  else; it now renders whatever `sections` the domain's state contract returns,
+  and keeps the richer office renderers as presentation for shapes it
+  recognises. A pack that is not the office no longer shows a blank panel.
+- Added a domain selector to the console, which the upstream UI never had, and
+  scoped every state-reading endpoint call to it.
+- Kept the capability gate the upstream console does not have. Its `api()`
+  sends bare fetches; every call here carries the per-launch bearer token, and
+  the run stream uses fetch rather than `EventSource`, which cannot set a
+  request header.
+- Did not port the retired capabilities. The upstream run panel posts `root`,
+  `shell` and `yolo` on every run; those controls are absent here, per hard
+  rule 9.
+
 ### Strengthened successor program
 
 - Recorded the sealed v0.13.5 focused-follow-up execution as immutable

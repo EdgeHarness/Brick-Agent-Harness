@@ -37,6 +37,7 @@ DEFAULT_PORT = 8765
 
 from agents._shared.run_agent import validate_config  # noqa: E402
 from harness.domain import load_domain  # noqa: E402
+from harness import chat  # noqa: E402
 from harness import mcp_config  # noqa: E402
 from harness.storage import agent_runtime_paths  # noqa: E402
 from webui.control import (  # noqa: E402
@@ -137,6 +138,33 @@ def reject_removed_run_fields(body):
         raise ValueError(
             "unsupported Agent Lab fields: " + ", ".join(removed)
         )
+
+
+# Model facts from openrouter.ai, generated into model_catalog.json rather than
+# fetched. The product's whole claim is that nothing leaves the machine, so the
+# UI must not reach the network to describe a model.
+def _load_catalog():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "model_catalog.json")
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return json.load(handle).get("models", {})
+    except (OSError, ValueError):
+        return {}
+
+
+CATALOG = _load_catalog()
+
+
+def catalog_for(tag):
+    """Exact tag first, then the bare family, so llama3.1 matches llama3.1:8b."""
+    if tag in CATALOG:
+        return CATALOG[tag]
+    base = tag.split(":")[0]
+    for key, value in CATALOG.items():
+        if key.split(":")[0] == base:
+            return value
+    return {}
 
 
 MCP_MODES = ("draft", "live", "read_only")
@@ -265,14 +293,27 @@ def agent_list():
             "presets": list(domain.presets),
             "speed": speed,
             "blurb": blurb,
+            "catalog": catalog_for(cfg["model"]),
             "installed": tag_installed(cfg["model"], tags),
+            # What this agent connects to when a run does not say otherwise.
+            # Without it the options panel reads "Real accounts: none" while a
+            # config quietly enables a live mailbox for every run.
+            "mcp_default": list((cfg.get("mcp") or {}).get("enable") or []),
+            "mcp_default_mode": (cfg.get("mcp") or {}).get("mode") or "draft",
             "files": file_count,
             "runs": run_count,
             "memories": memory_count,
         })
     presets = out[0]["presets"] if out else []
+    # Models the catalog knows about that are not installed. The rail offers
+    # the pull command for them, so a machine with one model is not a dead end.
+    have = {a["model"] for a in out}
+    offered = [dict(value, tag=key) for key, value in CATALOG.items()
+               if key not in have and not tag_installed(key, tags)]
+    offered.sort(key=lambda m: m["tag"])
     return {"agents": out, "domains": available_domains(),
             "ollama": tags is not None, "presets": presets,
+            "available": offered, "installed_models": sorted(tags or {}),
             "project": PROJECT}
 
 
@@ -487,6 +528,10 @@ class Runs:
                 cmd += ["--deep", options["deep"]]
             if options.get("max_calls") is not None:
                 cmd += ["--max-calls", str(int(options["max_calls"]))]
+            if options.get("thread"):
+                cmd += ["--thread", options["thread"]]
+            if options.get("model"):
+                cmd += ["--model", options["model"]]
             if options.get("mcp"):
                 cmd += ["--mcp", ",".join(options["mcp"])]
                 if options.get("mcp_mode"):
@@ -543,6 +588,21 @@ class Runs:
                 )
                 sys.stderr.flush()
             run.add({"t": "error", "message": f"the run exited with code {code}"})
+        # The agent's reply to the conversation is its done() summary. Recorded
+        # here rather than in the runner so a crashed or stopped run still
+        # leaves an honest turn in the thread instead of a silent gap.
+        thread_id = run.options.get("thread")
+        if thread_id:
+            end = next((event for _, event in reversed(run.events.snapshot())
+                        if event.get("t") == "end"), None)
+            if end and end.get("summary"):
+                reply = end["summary"]
+            elif run.status == "stopped":
+                reply = "(stopped)"
+            else:
+                reply = "(the run ended without a summary)"
+            chat.append(agent_dir(run.agent), thread_id, "assistant", reply,
+                        run=run.id)
         run.add({"t": "closed", "status": run.status, "code": code})
 
     def with_idle(self, operation):
@@ -651,6 +711,15 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if path.startswith("/static/"):
                 self.exact_query(q)
                 return self.static_file(path[len("/static/"):])
+            # Both must be served from the root, not /static/: a service worker
+            # may only control pages at or below its own path, and the manifest
+            # is resolved relative to the document.
+            if path == "/sw.js":
+                self.exact_query(q)
+                return self.static_file("sw.js")
+            if path == "/manifest.webmanifest":
+                self.exact_query(q)
+                return self.static_file("manifest.webmanifest")
             if path == "/api/agents":
                 self.exact_query(q)
                 return self.send_json(agent_list())
@@ -703,6 +772,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 )
                 with open(log_path, encoding="utf-8") as f:
                     return self.send_json(json.load(f))
+            if path == "/api/threads":
+                return self.send_json(
+                    {"threads": chat.threads(agent_dir(q.get("agent", "")))})
+            if path == "/api/thread":
+                folder = agent_dir(q.get("agent", ""))
+                return self.send_json(
+                    {"id": q.get("id", ""),
+                     "messages": chat.messages(folder, q.get("id", ""))})
             if path == "/api/mcp":
                 # The registry, for the run panel's account picker. Setup notes
                 # come along so the UI can say what a server needs before it
@@ -731,13 +808,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.exact_query(query)
             self.authorize(path, mutation=True)
             body = read_json_object(self)
+            if path == "/api/thread/new":
+                body = exact_object(body, required=("agent",),
+                                    optional=("task",))
+                folder = agent_dir(require_string(body["agent"], "agent",
+                                                  maximum=128))
+                task = require_optional_string(body.get("task"), "task",
+                                               maximum=8_192) or ""
+                return self.send_json({"id": chat.create(folder, task)})
+            if path == "/api/thread/delete":
+                body = exact_object(body, required=("agent", "id"))
+                folder = agent_dir(require_string(body["agent"], "agent",
+                                                  maximum=128))
+                thread_id = require_string(body["id"], "id", maximum=128)
+                return self.send_json(
+                    {"deleted": chat.delete(folder, thread_id)})
             if path == "/api/run":
                 reject_removed_run_fields(body)
                 body = exact_object(
                     body,
                     required=("agent", "domain", "task", "tiers", "max_calls"),
                     optional=("small", "deep", "mcp", "mcp_mode",
-                              "keep_office_tools"),
+                              "keep_office_tools", "thread", "model"),
                 )
                 agent = require_string(body["agent"], "agent", maximum=128)
                 task = require_string(body["task"], "task").strip()
@@ -752,6 +844,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if not task:
                     raise RequestError(400, "give the agent a task first")
                 options = {
+                    "thread": require_optional_string(body.get("thread"),
+                                                      "thread", maximum=128),
+                    "model": require_optional_string(body.get("model"),
+                                                     "model", maximum=200),
                     "mcp": require_mcp_names(body.get("mcp")),
                     "mcp_mode": require_mcp_mode(body.get("mcp_mode")),
                     "keep_office_tools": require_bool(
@@ -763,6 +859,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "deep": require_optional_string(body.get("deep"), "deep"),
                     "max_calls": max_calls,
                 }
+                if options["thread"]:
+                    chat.append(agent_dir(agent), options["thread"],
+                                "user", task)
                 run = self.server.runs.start(agent, task, options)
                 return self.send_json({"run": run.id, "agent": agent})
             if path == "/api/stop":

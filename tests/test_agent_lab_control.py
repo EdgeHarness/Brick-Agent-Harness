@@ -410,6 +410,9 @@ def test_runner_stderr_is_not_relayed_to_browser(capsys):
         process_tree=SimpleNamespace(close=lambda: None),
         confirmations=SimpleNamespace(clear=lambda: None),
         status="running",
+        # A run outside any conversation, which is what a CLI-shaped run is.
+        # _pump reads options to decide whether to record a chat turn.
+        options={},
         add=lambda event: events.append(event),
     )
     lab.Runs()._pump(run)
@@ -504,3 +507,61 @@ def test_security_headers_are_on_static_and_api_responses(lab_server):
     assert headers["X-Frame-Options"] == "DENY"
     assert "frame-ancestors 'none'" in headers["Content-Security-Policy"]
     assert headers["Referrer-Policy"] == "no-referrer"
+
+
+def _pumped_run(events_out, *, thread, journal, code=0, status="running"):
+    """A Run shaped the way _pump reads one, without a subprocess."""
+    class FakeProcess:
+        stderr = io.StringIO("")
+        stdout = io.StringIO("")
+
+        @staticmethod
+        def wait():
+            return code
+
+    return SimpleNamespace(
+        id="run-t",
+        agent="1b",
+        proc=FakeProcess(),
+        process_tree=SimpleNamespace(close=lambda: None),
+        confirmations=SimpleNamespace(clear=lambda: None),
+        status=status,
+        options={"thread": thread},
+        events=SimpleNamespace(snapshot=lambda: list(enumerate(journal))),
+        add=lambda event: events_out.append(event),
+    )
+
+
+def test_a_conversation_records_the_agents_summary_as_its_reply(tmp_path, monkeypatch):
+    from harness import chat
+
+    monkeypatch.setattr(lab, "agent_dir", lambda agent: str(tmp_path))
+    tid = chat.create(str(tmp_path), "do the thing")
+    journal = [{"t": "end", "summary": "Drafted the reply."}]
+    lab.Runs()._pump(_pumped_run([], thread=tid, journal=journal))
+    said = [m["text"] for m in chat.messages(str(tmp_path), tid)
+            if m["role"] == "assistant"]
+    assert said == ["Drafted the reply."]
+
+
+def test_a_run_that_never_summarized_still_leaves_a_turn(tmp_path, monkeypatch):
+    """A silent gap in the transcript reads as the agent ignoring you. An
+    honest placeholder is the point of recording this in the server rather
+    than in the runner, which a crash never reaches."""
+    from harness import chat
+
+    monkeypatch.setattr(lab, "agent_dir", lambda agent: str(tmp_path))
+    tid = chat.create(str(tmp_path), "do the thing")
+    lab.Runs()._pump(_pumped_run([], thread=tid, journal=[], code=7))
+    said = [m["text"] for m in chat.messages(str(tmp_path), tid)
+            if m["role"] == "assistant"]
+    assert said == ["(the run ended without a summary)"]
+
+
+def test_a_run_outside_a_conversation_writes_no_turn(tmp_path, monkeypatch):
+    from harness import chat
+
+    monkeypatch.setattr(lab, "agent_dir", lambda agent: str(tmp_path))
+    tid = chat.create(str(tmp_path), "do the thing")
+    lab.Runs()._pump(_pumped_run([], thread=None, journal=[]))
+    assert chat.messages(str(tmp_path), tid) == []
