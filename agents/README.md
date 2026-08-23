@@ -35,8 +35,12 @@ selects another installed pack:
   `.pptx` and `.xlsx` files inside the agent workspace;
 - `counter_demo@0.1.0`: a structural wiring fixture.
 
-No real email is sent, reminder delivered, calendar reserved, or Brix system
-contacted. Generated Office files are real local artifacts.
+Without a connector, no real email is sent, reminder delivered, calendar
+reserved, or Brix system contacted. Generated Office files are real local
+artifacts.
+
+`--mcp` changes that: it attaches a real account, and in `--mcp-mode live` a
+send reaches a real recipient. Draft mode, the default, cannot.
 
 ## Requirements and launch
 

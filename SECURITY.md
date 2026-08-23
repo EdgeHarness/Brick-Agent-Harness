@@ -86,6 +86,12 @@ safe and does not claim lossless sudden-power-failure durability.
 
 Use only synthetic data. Supported surfaces expose domain-scoped simulated
 actions and attempt-owned artifacts, not arbitrary host paths or commands.
+
+The one exception is an MCP connector, which is off unless explicitly enabled
+and reaches a real account through a third-party server. Draft mode, the
+default, drops every tool that can transmit to a person; a world-changing call
+is refused unless an operator confirms it. Connect a throwaway account, never
+one holding real records. See the real-accounts section of the README.
 Any retained legacy overlay source is unreachable unsupported code and must not
 be reintroduced through a launcher, API, UI option, configuration, or domain
 composition path.

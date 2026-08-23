@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### The synthetic-only boundary now states what the code does
+
+- Amended `CLAUDE.md` hard rule 9, on the user's explicit instruction. It banned
+  provider credentials outright, which the connector layer contradicted the
+  moment it shipped. The three clauses that still hold are unchanged: synthetic
+  and fictional data only in this repository, no real client records, no general
+  filesystem or shell on a supported surface. The amendment permits credentials
+  held by a third-party MCP server for a throwaway account, and keeps the teeth:
+  off by default, covered by no evidence gate, and no gate result may depend on
+  one.
+- Corrected `SECURITY.md` and `agents/README.md`, which had become false rather
+  than merely incomplete. The first described every supported surface as
+  simulated; the second stated flatly that no real email is sent. With a
+  connector in live mode, one can be.
+
 ### Repository layout
 
 - Rewrote `README.md`: 1,868 words to 1,000. The cuts are duplication, not

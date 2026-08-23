@@ -36,8 +36,11 @@ per-session protocol. Read it before starting work.
 8. Keep the harness core free of domain-specific imports. Only the two named
    deprecation shims (`harness/world.py`, `harness/office.py`) may import a
    domain, and a test enforces this.
-9. Synthetic and fictional data only. No real client records, no provider
-   credentials, no general filesystem or shell capability on a supported surface.
+9. Synthetic and fictional data only in this repository. No real client records,
+   no general filesystem or shell capability on a supported surface. Real
+   provider credentials are held by third-party MCP servers, never by this
+   repository, and only for a throwaway account: a connector is off by default,
+   is covered by no evidence gate, and no gate result may depend on one.
 
 ## Current position
 
