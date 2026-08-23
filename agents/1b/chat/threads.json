@@ -1,0 +1,56 @@
+{
+ "threads": [
+  {
+   "id": "b24d15f5ea5c",
+   "title": "Call mail_draft_mail to draft a reply to message m1 saying …",
+   "created": 1787523892.7639308,
+   "updated": 1787524121.668582,
+   "messages": [
+    {
+     "role": "user",
+     "text": "Call mail_draft_mail to draft a reply to message m1 saying I will get back to them tomorrow.",
+     "ts": 1787523892.8112168,
+     "run": null
+    },
+    {
+     "role": "assistant",
+     "text": "(the run ended without a summary)",
+     "ts": 1787524031.349217,
+     "run": "XzcEC1o56L1r-VUUdW0cT_"
+    },
+    {
+     "role": "user",
+     "text": "Call mail_draft_mail to draft a reply to message m1 saying I will get back to them tomorrow.",
+     "ts": 1787524100.987715,
+     "run": null
+    },
+    {
+     "role": "assistant",
+     "text": "(the run ended without a summary)",
+     "ts": 1787524121.6685781,
+     "run": "IVdL-9YcJyCzYCtgnr0J9f"
+    }
+   ]
+  },
+  {
+   "id": "569442cfa282",
+   "title": "Call mail_list_mail to list my inbox, then tell me how many…",
+   "created": 1787524451.2351182,
+   "updated": 1787524459.409248,
+   "messages": [
+    {
+     "role": "user",
+     "text": "Call mail_list_mail to list my inbox, then tell me how many messages there are.",
+     "ts": 1787524451.244831,
+     "run": null
+    },
+    {
+     "role": "assistant",
+     "text": "(no summary) Steps completed: mail_list_mail.",
+     "ts": 1787524459.4092429,
+     "run": "dYBOFjP1lsmCnNG8pkiVad"
+    }
+   ]
+  }
+ ]
+}

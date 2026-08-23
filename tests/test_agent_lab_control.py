@@ -544,10 +544,28 @@ def test_a_conversation_records_the_agents_summary_as_its_reply(tmp_path, monkey
     assert said == ["Drafted the reply."]
 
 
-def test_a_run_that_never_summarized_still_leaves_a_turn(tmp_path, monkeypatch):
-    """A silent gap in the transcript reads as the agent ignoring you. An
-    honest placeholder is the point of recording this in the server rather
-    than in the runner, which a crash never reaches."""
+def test_a_run_that_never_summarized_reports_what_it_did(tmp_path, monkeypatch):
+    """A small model often never calls done(). Saying only "no summary" makes a
+    conversation where real work happened read as a row of shrugs, so the reply
+    names the steps that actually completed."""
+    from harness import chat
+
+    monkeypatch.setattr(lab, "agent_dir", lambda agent: str(tmp_path))
+    tid = chat.create(str(tmp_path), "do the thing")
+    journal = [{"t": "end", "summary": "", "actions": [
+        {"tool": "mail_list_mail", "ok": True},
+        {"tool": "mail_list_mail", "ok": True},
+        {"tool": "mail_draft_mail", "ok": True},
+        {"tool": "mail_draft_mail", "ok": False},
+    ]}]
+    lab.Runs()._pump(_pumped_run([], thread=tid, journal=journal, code=7))
+    said = [m["text"] for m in chat.messages(str(tmp_path), tid)
+            if m["role"] == "assistant"]
+    assert said == ["(no summary) Steps completed: mail_list_mail x2, "
+                    "mail_draft_mail."]
+
+
+def test_a_run_that_did_nothing_says_so(tmp_path, monkeypatch):
     from harness import chat
 
     monkeypatch.setattr(lab, "agent_dir", lambda agent: str(tmp_path))
@@ -555,7 +573,13 @@ def test_a_run_that_never_summarized_still_leaves_a_turn(tmp_path, monkeypatch):
     lab.Runs()._pump(_pumped_run([], thread=tid, journal=[], code=7))
     said = [m["text"] for m in chat.messages(str(tmp_path), tid)
             if m["role"] == "assistant"]
-    assert said == ["(the run ended without a summary)"]
+    assert said == ["(no summary, and no step completed)"]
+
+
+def test_a_failed_call_is_not_reported_as_a_completed_step():
+    assert lab.thread_reply(
+        {"actions": [{"tool": "mail_send_mail", "ok": False}]}, "failed"
+    ) == "(no summary, and no step completed)"
 
 
 def test_a_run_outside_a_conversation_writes_no_turn(tmp_path, monkeypatch):

@@ -1267,8 +1267,17 @@ function onConfirm(e) {
   const row = el('div', 'confirm-actions');
   const allow = el('button', 'allow', e.real && e.mode === 'live' ? 'Send it' : 'Allow');
   const deny = el('button', 'deny', 'Deny');
-  const answer = (ok) => {
-    post('/api/confirm', { id: e.id, allow: ok }).catch(() => {});
+  const answer = async (ok) => {
+    for (const button of row.querySelectorAll('button')) button.disabled = true;
+    try {
+      await post('/api/confirm', {
+        run_id: S.run, confirmation_id: e.confirmation_id,
+        nonce: e.nonce, decision: ok,
+      });
+    } catch (err) {
+      row.append(el('div', 'note', err.message));
+      return;
+    }
     box.classList.add('answered');
     row.textContent = '';
     row.append(el('div', 'note', ok ? 'you allowed it' : 'you declined it'));
@@ -1431,7 +1440,7 @@ function handle(e) {
     case 'note': return onNote(e);
     case 'tool': return onTool(e);
     case 'world': return renderTree({ ...S.ws, ...e, logs: (S.ws || {}).logs || [] });
-    case 'confirm': return onConfirm(e);
+    case 'confirmation': return onConfirm(e);
     case 'end': return onEnd(e);
     case 'error': return onError(e);
     case 'stdout': return void console.log('[runner]', e.text);

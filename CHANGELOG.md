@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### The confirmation prompt, found by actually running one
+
+- Fixed the operator confirmation in the run panel, which never appeared. The
+  ported console listened for a `confirm` event while the runner emits
+  `confirmation`, and answered with `{id, allow}` where this server requires a
+  decision bound to `(run_id, confirmation_id, nonce)`. The backend was correct
+  throughout: the call was classified `external_write`, the policy blocked it,
+  the event was emitted with its nonce. The run then sat waiting for a decision
+  the browser could not send. Only reachable by starting a real run.
+- The prompt now names the account. `ConfirmationChannel.confirm` takes `real`
+  and `mode`, and the runner maps each tool to the connector behind it, so a
+  call reaching a live mailbox no longer reads exactly like one writing a
+  scratch file.
+- A run that never calls `done()` reports the steps it completed instead of
+  only saying there was no summary. A small model rarely summarizes, so a
+  conversation in which real work happened was a row of shrugs.
+
 ### The synthetic-only boundary now states what the code does
 
 - Amended `CLAUDE.md` hard rule 9, on the user's explicit instruction. It banned

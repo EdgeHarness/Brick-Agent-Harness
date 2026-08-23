@@ -505,9 +505,19 @@ class ConfirmationChannel:
                 value = None
             self._responses.put(value)
 
-    def confirm(self, action, detail):
+    def confirm(self, action, detail, real=None, mode=None):
+        """Ask the operator. `real` names the connected account when the call
+        reaches one, and `mode` says whether that account can transmit.
+
+        Named fields rather than an open bag: this event is the security
+        prompt, and a call that empties a real mailbox must not look identical
+        to one that writes a scratch file."""
         confirmation_id = secrets.token_urlsafe(18)
         nonce = secrets.token_urlsafe(32)
+        extra = {}
+        if real:
+            extra["real"] = str(real)[:64]
+            extra["mode"] = str(mode or "draft")[:32]
         self._emit(
             "confirmation",
             run_id=self._run_id,
@@ -515,6 +525,7 @@ class ConfirmationChannel:
             nonce=nonce,
             action=str(action)[:256],
             detail=str(detail)[:4_096],
+            **extra,
         )
         try:
             value = self._responses.get(timeout=self._timeout)

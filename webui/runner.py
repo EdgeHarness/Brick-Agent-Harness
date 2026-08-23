@@ -229,13 +229,27 @@ def main(argv=None):
         registry = registry.merged(specs)
         prompt_rules += mcp_bridge.mail_rules(mcp_mode)
 
+    # Which connector backs which tool, so the prompt can name the account it
+    # is about to touch. A confirmation for a real mailbox that reads the same
+    # as one for a simulated one is the failure this exists to prevent.
+    tool_account = {name: server["id"]
+                    for server in (connected or [])
+                    for name in server["tools"]}
+
+    def confirm_action(action, detail):
+        return confirmation_channel.confirm(
+            action, detail,
+            real=tool_account.get(action),
+            mode=args.mcp_mode or "draft",
+        )
+
     attempt = AttemptContext(
         attempt_id=f"web:{domain.name}:{args.agent}:{time.time_ns()}",
         config=run_config,
         domain=domain,
         tools=registry,
         policy=domain.default_policy.with_effects(
-            mcp_effects, confirmer=confirmation_channel.confirm
+            mcp_effects, confirmer=confirm_action
         ),
         world=world,
         memory=memory,

@@ -446,6 +446,33 @@ def reveal(path):
 
 # -------------------------------------------------------------------- runs ----
 
+def thread_reply(end, status):
+    """What the agent says back in the conversation.
+
+    Its done() summary when there is one. A small model often never calls
+    done(), and the placeholder that used to stand in for that said only that
+    there was no summary, so a conversation where real work happened read as a
+    row of shrugs. Report the steps instead: the run drafted a mail, and the
+    transcript should say so."""
+    if end and end.get("summary"):
+        return end["summary"]
+    if status == "stopped":
+        return "(stopped before finishing)"
+    done = []
+    for action in (end or {}).get("actions") or []:
+        name = action.get("tool")
+        if not action.get("ok") or not name:
+            continue
+        if done and done[-1][0] == name:
+            done[-1][1] += 1
+        else:
+            done.append([name, 1])
+    if not done:
+        return "(no summary, and no step completed)"
+    steps = ", ".join(n if c == 1 else f"{n} x{c}" for n, c in done)
+    return f"(no summary) Steps completed: {steps}."
+
+
 class Run:
     """One agent subprocess, its event log, and everyone watching it."""
 
@@ -595,12 +622,7 @@ class Runs:
         if thread_id:
             end = next((event for _, event in reversed(run.events.snapshot())
                         if event.get("t") == "end"), None)
-            if end and end.get("summary"):
-                reply = end["summary"]
-            elif run.status == "stopped":
-                reply = "(stopped)"
-            else:
-                reply = "(the run ended without a summary)"
+            reply = thread_reply(end, run.status)
             chat.append(agent_dir(run.agent), thread_id, "assistant", reply,
                         run=run.id)
         run.add({"t": "closed", "status": run.status, "code": code})
