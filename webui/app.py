@@ -31,9 +31,12 @@ from webui import server as srv  # noqa: E402
 WINDOW = {"width": 1440, "height": 940, "min_size": (1060, 680)}
 
 
-def serve(port):
-    """The server, minus the console banner and the browser launch."""
-    srv.Server(("127.0.0.1", port), srv.Handler).serve_forever()
+def serve(server):
+    """The already-bound server, minus the console banner and the browser
+    launch. It is bound once by the caller and handed here, rather than bound
+    again from a port number: binding twice is the check-then-bind race
+    bind_server exists to avoid, and the second bind would lose."""
+    srv.serve_until_stopped(server)
 
 
 def wait_until_up(url, timeout=15):
@@ -50,21 +53,25 @@ def wait_until_up(url, timeout=15):
 
 
 def main():
-    port = srv.free_port(int(os.environ.get("AGENT_LAB_PORT", srv.DEFAULT_PORT)))
-    url = f"http://127.0.0.1:{port}"
-
     try:
         import webview
     except ImportError:
-        print("  pywebview not installed — opening in your browser instead.")
+        print("  pywebview not installed - opening in your browser instead.")
         print("  For a real app window:  pip install pywebview\n")
         os.environ.pop("AGENT_LAB_NO_BROWSER", None)
-        os.environ["AGENT_LAB_PORT"] = str(port)
         return srv.main()
 
-    threading.Thread(target=serve, args=(port,), daemon=True).start()
-    if not wait_until_up(url):
-        print(f"  server did not come up on {url}")
+    server = srv.bind_server(
+        int(os.environ.get("AGENT_LAB_PORT", srv.DEFAULT_PORT))
+    )
+    # The window has to carry the startup capability, exactly like the printed
+    # browser URL. Without it every API call is a 401 and the window renders
+    # the "capability missing" notice instead of the app.
+    url = server.origin + "/#capability=" + server.capability
+
+    threading.Thread(target=serve, args=(server,), daemon=True).start()
+    if not wait_until_up(server.origin):
+        print(f"  server did not come up on {server.origin}")
         return
 
     tags = srv.installed_tags()
