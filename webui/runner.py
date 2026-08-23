@@ -16,6 +16,7 @@ if PROJECT not in sys.path:
 from agents._shared.run_agent import validate_config  # noqa: E402
 from harness.agent import run_harness  # noqa: E402
 from harness.domain import load_domain  # noqa: E402
+from harness import mcp_bridge, mcp_config  # noqa: E402
 from harness.llm import LLM, OLLAMA_URL  # noqa: E402
 from harness.memory import MemoryStore  # noqa: E402
 from harness.model_router import (  # noqa: E402
@@ -106,6 +107,12 @@ def main(argv=None):
     parser.add_argument("--tiers", action="store_true")
     parser.add_argument("--small", default=None)
     parser.add_argument("--deep", default=None)
+    parser.add_argument("--mcp", default=None)
+    parser.add_argument(
+        "--mcp-mode", default=None,
+        choices=("draft", "live", "read_only"),
+    )
+    parser.add_argument("--keep-office-tools", action="store_true")
     args = parser.parse_args(argv)
 
     try:
@@ -182,20 +189,39 @@ def main(argv=None):
             **world_snapshot(domain, attempt_holder["attempt"]),
         )
 
+    # Real accounts, if the run panel asked for any. The confirmation channel
+    # already in place covers them: an MCP write is classified external_write
+    # and the loop confirms it through the same browser prompt a simulated
+    # write uses, so nothing here re-implements consent.
+    registry = domain.registry
+    mcp_effects = {}
+    prompt_rules = domain.prompt_rules
+    connected = None
+    if args.mcp:
+        mcp_cfg = config_data.get("mcp") or {}
+        mcp_mode = args.mcp_mode or mcp_cfg.get("mode") or "draft"
+        names = [n.strip() for n in args.mcp.split(",") if n.strip()]
+        servers = mcp_config.names_to_servers(names, mcp_cfg, mode=mcp_mode)
+        specs, mcp_effects, connected = mcp_bridge.enable(servers, mode=mcp_mode)
+        if not args.keep_office_tools:
+            registry = mcp_bridge.without_simulated(registry)
+        registry = registry.merged(specs)
+        prompt_rules += mcp_bridge.mail_rules(mcp_mode)
+
     attempt = AttemptContext(
         attempt_id=f"web:{domain.name}:{args.agent}:{time.time_ns()}",
         config=run_config,
         domain=domain,
-        tools=domain.registry,
+        tools=registry,
         policy=domain.default_policy.with_effects(
-            {}, confirmer=confirmation_channel.confirm
+            mcp_effects, confirmer=confirmation_channel.confirm
         ),
         world=world,
         memory=memory,
         workdir=workdir,
         artifact_dir=paths.artifacts,
         prompt_profile=domain.prompt_profile,
-        prompt_rules=domain.prompt_rules,
+        prompt_rules=prompt_rules,
         hooks=RunHooks(on_note=on_note, on_tool=on_tool),
     )
     attempt_holder["attempt"] = attempt
@@ -228,7 +254,10 @@ def main(argv=None):
         toolset=domain.name,
         tiers=tiers,
         today=run_config.today_human,
-        tools=list(domain.registry.names()),
+        tools=list(registry.names()),
+        mcp=({"mode": args.mcp_mode or "draft", "servers": connected,
+              "warnings": mcp_config.count_warnings(connected)}
+             if connected else None),
     )
     emit("world", **world_snapshot(domain, attempt))
 

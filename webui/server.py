@@ -37,6 +37,7 @@ DEFAULT_PORT = 8765
 
 from agents._shared.run_agent import validate_config  # noqa: E402
 from harness.domain import load_domain  # noqa: E402
+from harness import mcp_config  # noqa: E402
 from harness.storage import agent_runtime_paths  # noqa: E402
 from webui.control import (  # noqa: E402
     ConfirmationLedger,
@@ -136,6 +137,34 @@ def reject_removed_run_fields(body):
         raise ValueError(
             "unsupported Agent Lab fields: " + ", ".join(removed)
         )
+
+
+MCP_MODES = ("draft", "live", "read_only")
+
+
+def require_mcp_names(value):
+    """Connector names from the browser, checked against the registry.
+
+    This is a trust boundary: the names end up as runner argv. Only keys that
+    exist in mcp/servers.json get through, so a typo fails here with a clear
+    message rather than deep inside a subprocess."""
+    if not value:
+        return []
+    if not isinstance(value, list) or len(value) > 8:
+        raise RequestError(400, "mcp must be a list of at most 8 server names")
+    known = {name for name, _ in mcp_config.available()}
+    unknown = sorted({v for v in value if v not in known})
+    if unknown:
+        raise RequestError(400, "unknown MCP servers: " + ", ".join(unknown))
+    return sorted(set(value))
+
+
+def require_mcp_mode(value):
+    if value is None:
+        return None
+    if value not in MCP_MODES:
+        raise RequestError(400, "mcp_mode must be one of " + ", ".join(MCP_MODES))
+    return value
 
 
 def agent_dir(agent):
@@ -458,6 +487,12 @@ class Runs:
                 cmd += ["--deep", options["deep"]]
             if options.get("max_calls") is not None:
                 cmd += ["--max-calls", str(int(options["max_calls"]))]
+            if options.get("mcp"):
+                cmd += ["--mcp", ",".join(options["mcp"])]
+                if options.get("mcp_mode"):
+                    cmd += ["--mcp-mode", options["mcp_mode"]]
+                if options.get("keep_office_tools"):
+                    cmd.append("--keep-office-tools")
             env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
             process_tree = ProcessTree.start(
                 cmd, cwd=PROJECT, env=env, text=True,
@@ -668,6 +703,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 )
                 with open(log_path, encoding="utf-8") as f:
                     return self.send_json(json.load(f))
+            if path == "/api/mcp":
+                # The registry, for the run panel's account picker. Setup notes
+                # come along so the UI can say what a server needs before it
+                # works, rather than failing at connect time.
+                return self.send_json([
+                    {"name": name, "summary": summary,
+                     "setup": mcp_config.setup_notes(name)}
+                    for name, summary in mcp_config.available()])
             if path == "/api/status":
                 self.exact_query(q)
                 run = self.server.runs.current
@@ -693,7 +736,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 body = exact_object(
                     body,
                     required=("agent", "domain", "task", "tiers", "max_calls"),
-                    optional=("small", "deep"),
+                    optional=("small", "deep", "mcp", "mcp_mode",
+                              "keep_office_tools"),
                 )
                 agent = require_string(body["agent"], "agent", maximum=128)
                 task = require_string(body["task"], "task").strip()
@@ -708,6 +752,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 if not task:
                     raise RequestError(400, "give the agent a task first")
                 options = {
+                    "mcp": require_mcp_names(body.get("mcp")),
+                    "mcp_mode": require_mcp_mode(body.get("mcp_mode")),
+                    "keep_office_tools": require_bool(
+                        body.get("keep_office_tools") or False,
+                        "keep_office_tools"),
                     "domain": domain,
                     "tiers": tiers,
                     "small": require_optional_string(body.get("small"), "small"),

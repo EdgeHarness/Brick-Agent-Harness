@@ -647,6 +647,36 @@ function handle(e) {
   }
 }
 
+/* ------------------------------------------------------- real accounts --- */
+/* The picker is built from /api/mcp, which reads mcp/servers.json. Adding a
+   connector is a JSON entry, so nothing here needs touching for a new one. */
+
+async function loadConnectors() {
+  let servers;
+  try {
+    servers = await api('/api/mcp');
+  } catch (err) {
+    return;                       /* a broken registry must not block a run */
+  }
+  const box = $('opt-mcp');
+  box.textContent = '';
+  for (const s of servers) {
+    const row = el('label', 'check mcp-row');
+    const input = el('input');
+    input.type = 'checkbox';
+    input.value = s.name;
+    input.dataset.mcp = '1';
+    row.append(input, el('span', 'mcp-name', s.name));
+    row.append(el('span', 'mcp-summary', s.summary));
+    row.title = s.setup;          /* what it needs, before it fails to connect */
+    box.append(row);
+  }
+}
+
+const chosenConnectors = () =>
+  Array.from(document.querySelectorAll('#opt-mcp input[data-mcp]'))
+    .filter((n) => n.checked).map((n) => n.value);
+
 async function startRun() {
   if (!S.agent || S.locked) return;
   const task = $('task').value.trim();
@@ -657,6 +687,12 @@ async function startRun() {
     max_calls: Number.isNaN(parseInt($('opt-calls').value, 10))
       ? null : parseInt($('opt-calls').value, 10),
   };
+  const mcp = chosenConnectors();
+  if (mcp.length) {
+    body.mcp = mcp;
+    body.mcp_mode = $('opt-mcp-mode').value;
+    body.keep_office_tools = $('opt-keep-office').checked;
+  }
   clearStage();
   S.locked = true;
   S.runScope = { agent: S.agent, domain: S.domain };
@@ -758,5 +794,6 @@ if (!CAPABILITY) {
   document.body.textContent = 'Agent Lab capability missing. Launch Agent Lab again.';
 } else {
   loadAgents();
+  loadConnectors();
 }
 setInterval(() => { if (!S.run) loadAgents(true); }, 20000);

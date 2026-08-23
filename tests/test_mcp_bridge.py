@@ -205,3 +205,114 @@ def test_the_registry_carries_the_measured_ms365_hints():
     hints = reg["ms365"].get("arg_hints") or {}
     assert "create-draft-email" in hints
     assert reg["ms365"].get("hide_params")
+
+
+# ------------------------------------------------------- the service broker --
+#
+# Several providers of one capability behind a single name. ms365 and
+# ms365-personal ship the same outlook_ prefix and an identical allow list, so
+# connecting a work and a personal mailbox used to register twenty tools for ten
+# operations, the second set named after its server (mail_list_mail beside
+# personal_list_mail). Two selftest servers reproduce that exactly, over real
+# stdio, without credentials.
+
+
+@pytest.fixture(scope="module")
+def two_mailboxes():
+    base = mcp_config.names_to_servers(["selftest"])[0]
+    servers = [dict(base, id="work"), dict(base, id="personal")]
+    specs, effects, summary = mcp_bridge.enable(servers, mode="draft")
+    yield specs, effects, summary
+    mcp_bridge.shutdown()
+
+
+def test_a_second_provider_shares_the_name_instead_of_claiming_its_own(two_mailboxes):
+    specs, _, summary = two_mailboxes
+    assert "mail_list_mail" in specs
+    assert "personal_list_mail" not in specs
+    # Both servers report the same names, so the tool count is one server's.
+    assert summary[0]["tools"] == summary[1]["tools"]
+    assert len(specs) == len(summary[0]["tools"])
+
+
+def test_the_account_argument_is_required_and_names_both(two_mailboxes):
+    specs, _, _ = two_mailboxes
+    kind, required = specs["mail_list_mail"]["params"]["account"]
+    assert required, "two mailboxes have no safe default"
+    assert "work" in kind and "personal" in kind
+    assert specs["mail_list_mail"]["example"]["args"]["account"] == "personal"
+
+
+def test_either_account_is_reachable_over_real_stdio(two_mailboxes):
+    """Both names resolve and both round-trip. The two selftest servers hold
+    identical mailboxes, so which one answered is checked below with clients
+    that can be told apart."""
+    specs, _, _ = two_mailboxes
+    run = specs["mail_list_mail"]["run"]
+    for account in ("work", "personal"):
+        assert "jordan@example.com" in run(_StubAttempt(), {"account": account})
+
+
+def test_the_call_reaches_the_account_that_was_named():
+    """Two clients that answer differently, so routing is observable."""
+    class _Fake:
+        def __init__(self, cid, reply):
+            self.id, self._reply, self.calls = cid, reply, []
+
+        def call_tool(self, name, args):
+            self.calls.append((name, args))
+            return False, self._reply
+
+    work, personal = _Fake("work", "WORK INBOX"), _Fake("personal", "PERSONAL INBOX")
+    tool = {"name": "list_mail"}
+    providers = [mcp_bridge._adapt(c, tool, {}, "outlook_", True, set())[3]
+                 for c in (work, personal)]
+    run = mcp_bridge._to_broker(
+        mcp_bridge._adapt(work, tool, {}, "outlook_", True, set())[1],
+        providers)["run"]
+
+    assert run(_StubAttempt(), {"account": "personal"}) == "PERSONAL INBOX"
+    assert work.calls == [], "the other mailbox was touched"
+    assert run(_StubAttempt(), {"account": "work"}) == "WORK INBOX"
+    assert work.calls == [("list_mail", {})]
+
+
+def test_an_omitted_account_refuses_rather_than_picking_one(two_mailboxes):
+    """The whole safety argument for the broker. Silently choosing a mailbox is
+    merely confusing for a read and wrong for anything that leaves the machine."""
+    from harness.errors import ToolError
+
+    specs, _, _ = two_mailboxes
+    run = specs["mail_draft_mail"]["run"]
+    for args in ({}, {"account": "nonesuch"}):
+        with pytest.raises(ToolError) as caught:
+            run(_StubAttempt(), args)
+        assert "work" in str(caught.value) and "personal" in str(caught.value)
+
+
+def test_the_broker_keeps_the_effect_class_of_the_worst_provider(two_mailboxes):
+    specs, effects, _ = two_mailboxes
+    assert effects["mail_list_mail"] == "read"
+    assert effects["mail_draft_mail"] == "external_write"
+    assert effects["mail_modify_mail"] == "external_write"
+    assert set(effects) == set(specs)
+
+
+def test_a_clash_inside_one_server_still_qualifies_rather_than_brokering():
+    """Two tools of ONE server sanitizing to the same name are different
+    capabilities that happen to collide, not two accounts. Only a name an
+    EARLIER server already claimed may broker."""
+    class _Fake:
+        id = "srv"
+
+        def call_tool(self, name, args):
+            return False, name
+
+    fake = _Fake()
+    seen = set()
+    first = mcp_bridge._adapt(fake, {"name": "list-mail"}, {}, "", True, seen)
+    seen.add(first[0])
+    second = mcp_bridge._adapt(fake, {"name": "list_mail"}, {}, "", True, seen)
+    assert first[0] == "list_mail"
+    assert second[0] == "srv_list_mail"
+    assert "account" not in second[1]["params"]

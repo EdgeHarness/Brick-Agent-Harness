@@ -46,6 +46,23 @@
         <span>Call budget</span>
         <input type="number" id="opt-calls" min="2" max="80" placeholder="auto">
       </label>
+
+      <div class="opt" id="opt-mcp-block">
+        <span>Real accounts</span>
+        <p class="opt-note">Off unless you tick one. Model inference stays on
+          this machine; the tool calls reach the provider's cloud.</p>
+        <div id="opt-mcp" class="mcp-list"></div>
+        <label class="opt inline">
+          <span>Mode</span>
+          <select id="opt-mcp-mode">
+            <option value="draft">draft — never sends</option>
+            <option value="live">live — can send</option>
+            <option value="read_only">read only</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="opt-keep-office">
+          keep the simulated inbox too</label>
+      </div>
     </details>
   </aside>
 

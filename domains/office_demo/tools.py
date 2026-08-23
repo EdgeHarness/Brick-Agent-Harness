@@ -1,22 +1,33 @@
-"""Office-demo tool specifications."""
+"""Office-demo tool specifications.
+
+A spec carrying "simulates" is a stand-in for a real account surface. When a
+real MCP connector for that surface is attached, the wiring drops these so the
+model is not offered a fake inbox beside a real one: two list-mail tools is a
+coin flip for a small model. It is a declaration rather than a list kept
+elsewhere, so a tool added later survives unless it says it is standing in for
+something.
+"""
 from . import office_files
 
 
 def office_specs():
     return {
         "list_emails": {
+            "simulates": "mail",
             "desc": "List all emails in the inbox (id, from, date, subject). Newest first.",
             "params": {},
             "example": {"tool": "list_emails", "args": {}},
             "run": lambda c, a: c.world.list_emails(),
         },
         "read_email": {
+            "simulates": "mail",
             "desc": "Read the full body of one email by its id.",
             "params": {"id": ("string, an email id like 'e3'", True)},
             "example": {"tool": "read_email", "args": {"id": "e2"}},
             "run": lambda c, a: c.world.read_email(a["id"]),
         },
         "send_email": {
+            "simulates": "mail",
             "desc": "Send an email.",
             "params": {
                 "to": ("string, recipient address", True),
@@ -36,6 +47,7 @@ def office_specs():
             ),
         },
         "list_events": {
+            "simulates": "calendar",
             "desc": "List calendar events, optionally only for one date.",
             "params": {
                 "date": (
@@ -50,6 +62,7 @@ def office_specs():
             "run": lambda c, a: c.world.list_events(a.get("date")),
         },
         "add_event": {
+            "simulates": "calendar",
             "desc": "Add an event to the calendar.",
             "params": {
                 "title": ("string", True),
@@ -79,6 +92,7 @@ def office_specs():
             ),
         },
         "send_message": {
+            "simulates": "chat",
             "desc": "Send a chat/instant message to a person.",
             "params": {
                 "to": ("string, contact name", True),

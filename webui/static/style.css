@@ -149,6 +149,16 @@ button, input, textarea { font-family: inherit; color: inherit; }
 .check { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--ink-dim); margin-top: 7px; }
 .check input { accent-color: var(--accent); }
 
+/* real-account picker: one row per connector in mcp/servers.json */
+.mcp-list { margin-top: 4px; }
+.mcp-row { align-items: flex-start; flex-wrap: wrap; margin-top: 8px; }
+.mcp-row .mcp-name { flex: 1; margin: 0; color: var(--ink); }
+.mcp-row .mcp-summary {
+  flex-basis: 100%; margin: 2px 0 0 22px; font-size: 10.5px;
+  line-height: 1.45; color: var(--ink-faint);
+}
+#opt-mcp-block .opt.inline select { width: 150px; }
+
 /* -------------------------------------------------------------- stage --- */
 
 .stage { display: flex; flex-direction: column; min-height: 0; min-width: 0; }

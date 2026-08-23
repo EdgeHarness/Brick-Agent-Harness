@@ -386,8 +386,59 @@ def _make_executor(client, mcp_name, back):
     return run
 
 
-def _adapt(client, tool, server_cfg, prefix, draft_only, taken):
-    """One MCP tool -> (harness_name, spec, effect) or None if filtered out."""
+def _make_broker_executor(providers):
+    """Dispatch one call to whichever connected account the caller named.
+
+    Several providers of one capability coexist behind a single name and the
+    broker routes each request, instead of each provider claiming a name of its
+    own. Reuses _make_executor so the wire path is byte for byte the one a
+    single-provider tool gets; a broker must not become a second place where
+    argument mapping is written down."""
+    def run(attempt, args):
+        by_id = {a: (c, n, b) for a, c, n, b, _ in providers}
+        account = (args or {}).get("account")
+        if account not in by_id:
+            raise ToolError(
+                "'account' must be one of %s; got %r. More than one account is "
+                "connected, so there is no default."
+                % (", ".join(sorted(by_id)), account))
+        client, mcp_name, back = by_id[account]
+        rest = {k: v for k, v in (args or {}).items() if k != "account"}
+        return _make_executor(client, mcp_name, back)(attempt, rest)
+    return run
+
+
+def _to_broker(spec, providers):
+    """Rewrite an adapted spec so it serves every provider under its name.
+
+    Idempotent: a third provider rebuilds the same way a second did."""
+    accounts = sorted(a for a, _, _, _, _ in providers)
+    spec = dict(spec)
+
+    # The account list is named ONCE, on the parameter, which is where the model
+    # looks for allowed values. Repeating it in the description too cost real
+    # context for no information: measured, it ate most of what brokering saved.
+    params = dict(spec["params"])
+    params["account"] = ("string, one of: " + ", ".join(accounts), True)
+    spec["params"] = params
+
+    example = dict(spec.get("example") or {})
+    ex_args = dict(example.get("args") or {})
+    ex_args["account"] = accounts[0]
+    example["args"] = ex_args
+    spec["example"] = example
+
+    spec["run"] = _make_broker_executor(providers)
+    return spec
+
+
+def _adapt(client, tool, server_cfg, prefix, draft_only, seen):
+    """One MCP tool -> (harness_name, spec, effect, provider) or None.
+
+    `seen` is the names THIS server has already claimed. A name already taken by
+    an EARLIER server is not a clash, it is a second provider of the same
+    capability, and enable() brokers it. Only a collision inside one server
+    gets qualified away."""
     mcp_name = tool.get("name")
     if not mcp_name:
         return None
@@ -402,8 +453,8 @@ def _adapt(client, tool, server_cfg, prefix, draft_only, taken):
         return None
 
     harness_name = sanitize_name(f"{prefix}{mcp_name}" if prefix else mcp_name)
-    if harness_name in taken:
-        harness_name = sanitize_name(f"{client.id}_{mcp_name}")  # collision: qualify with server id
+    if harness_name in seen:
+        harness_name = sanitize_name(f"{client.id}_{mcp_name}")  # a real clash: qualify with server id
     schema = tool.get("inputSchema") or {}
     desc = str(tool.get("description", "")).strip().replace("\n", " ")
     tag = "[real, needs confirmation] " if is_write else "[real, read-only] "
@@ -416,7 +467,8 @@ def _adapt(client, tool, server_cfg, prefix, draft_only, taken):
         "example": _example_for(harness_name, schema, back, hint),
         "run": _make_executor(client, mcp_name, back),
     }
-    return harness_name, spec, ("external_write" if is_write else "read")
+    provider = (client.id, client, mcp_name, back, is_write)
+    return harness_name, spec, ("external_write" if is_write else "read"), provider
 
 
 # ---------------------------------------------------------------- enable ----
@@ -444,6 +496,7 @@ def enable(servers, mode="draft"):
     Nothing global is touched; the caller owns registry and policy composition.
     """
     specs, effects, summary = {}, {}, []
+    providers = {}          # tool name -> [(account, client, mcp_name, back, is_write)]
     for cfg in servers:
         sid = cfg.get("id") or cfg.get("command", "mcp")
         server_mode = cfg.get("mode", mode)
@@ -452,21 +505,54 @@ def enable(servers, mode="draft"):
         client = MCPClient(sid, cfg["command"], cfg.get("args"), cfg.get("env"), cfg.get("cwd"))
         _CLIENTS.append(client)
         prefix = cfg.get("prefix", "")
-        added, writes = [], []
+        added, writes, seen = [], [], set()
         for tool in client.list_tools():
             if read_only and _is_write(tool.get("name", ""), cfg):
                 continue
-            adapted = _adapt(client, tool, cfg, prefix, draft_only, specs.keys())
+            adapted = _adapt(client, tool, cfg, prefix, draft_only, seen)
             if not adapted:
                 continue
-            name, spec, effect = adapted
+            name, spec, effect, provider = adapted
+            providers.setdefault(name, []).append(provider)
+            if name in specs:
+                # A SECOND PROVIDER of the same capability, not a name clash.
+                # ms365 and ms365-personal share the outlook_ prefix and an
+                # identical allow list, so a work and a personal mailbox used to
+                # yield twenty tools for ten operations, the second set named
+                # asymmetrically after its server. One broker instead.
+                spec = _to_broker(specs[name], providers[name])
+                # The most dangerous provider sets the class. Two servers behind
+                # one name should agree, but if they ever disagree the policy
+                # must follow the worse one.
+                if effect == "external_write":
+                    effects[name] = "external_write"
+            else:
+                effects[name] = effect
             specs[name] = spec
-            effects[name] = effect
+            seen.add(name)
             added.append(name)
-            if effect == "external_write":
+            if effects[name] == "external_write":
                 writes.append(name)
         summary.append({"id": sid, "mode": server_mode, "tools": added, "writes": writes})
     return specs, effects, summary
+
+
+def without_simulated(registry, keep=()):
+    """The domain registry minus the tools a real account replaces.
+
+    A spec declares itself a stand-in with "simulates": the surface it fakes.
+    Offering list_emails beside a real Gmail list tool is a coin flip for a
+    small model, so the fake goes when the real one arrives.
+
+    A DROP-list derived from what each tool declares, never an allow-list of
+    survivors: an allow-list silently deletes every tool added afterwards. The
+    upstream bridge learned that by watching a model be told "unknown tool
+    list_files" in a real run. `keep` spares named tools anyway."""
+    keep = set(keep)
+    return registry.selected([
+        name for name in registry.names()
+        if name in keep or not (registry.get(name) or {}).get("simulates")
+    ])
 
 
 def mail_rules(mode="draft"):

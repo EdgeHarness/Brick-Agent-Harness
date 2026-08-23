@@ -15,6 +15,7 @@ from harness.agent import run_harness  # noqa: E402
 from harness.domain import load_domain  # noqa: E402
 from harness.llm import LLM, OLLAMA_URL  # noqa: E402
 from harness.memory import MemoryStore  # noqa: E402
+from harness import mcp_bridge, mcp_config  # noqa: E402
 from harness.model_router import (  # noqa: E402
     ModelRouter,
     adapters_note,
@@ -31,6 +32,7 @@ ALLOWED_CONFIG_KEYS = frozenset(
     {
         "domain",
         "max_calls",
+        "mcp",
         "model",
         "name",
         "note",
@@ -70,6 +72,29 @@ def parse_flags(argv):
     parser.add_argument("--small")
     parser.add_argument("--deep")
     parser.add_argument("--domain", dest="domain_name")
+    parser.add_argument(
+        "--mcp",
+        help="comma-separated MCP servers from mcp/servers.json, or "
+             "'none' to override a config that enables some",
+    )
+    parser.add_argument(
+        "--mcp-mode", choices=("draft", "live", "read_only")
+    )
+    parser.add_argument(
+        "--mcp-list",
+        action="store_true",
+        help="connect, print the tools each server would expose, and exit",
+    )
+    parser.add_argument(
+        "--mcp-help",
+        action="store_true",
+        help="print what each registered server needs, and exit",
+    )
+    parser.add_argument(
+        "--keep-office-tools",
+        action="store_true",
+        help="keep the simulated inbox and calendar alongside real ones",
+    )
     parser.add_argument("task", nargs="*")
     # Preserve the historical ability to put flags between unquoted task
     # words while retaining argparse's strict option validation.
@@ -80,6 +105,11 @@ def parse_flags(argv):
         "small": parsed.small,
         "deep": parsed.deep,
         "domain_name": parsed.domain_name,
+        "mcp": parsed.mcp,
+        "mcp_mode": parsed.mcp_mode,
+        "mcp_list": parsed.mcp_list,
+        "mcp_help": parsed.mcp_help,
+        "keep_office_tools": parsed.keep_office_tools,
     }
     return options, " ".join(parsed.task).strip()
 
@@ -130,12 +160,69 @@ def build_llm(config, options, log_dir, stream_hook=None):
     return router, router
 
 
+def _mcp_names(options, config_data):
+    """Which servers to connect: --mcp overrides the agent config entirely.
+
+    An explicit empty --mcp (or "none") means none, so a flag can switch a
+    config that enables connectors back off. Absent, the config decides.
+    """
+    cfg = config_data.get("mcp") or {}
+    if options["mcp"] is None:
+        return list(cfg.get("enable") or []), cfg
+    asked = [n.strip() for n in options["mcp"].split(",") if n.strip()]
+    return ([] if asked == ["none"] else asked), cfg
+
+
+def _terminal_confirmer(mode):
+    """Consent for a write that touches a real account.
+
+    ActionPolicy denies when there is no confirmer, so the CLI has to supply
+    one or every real write fails. A bare Enter is not consent."""
+    def confirm(action, detail):
+        print(f"\n  [{mode}] {action}: {detail}")
+        try:
+            return input("  allow this? [y/N] ").strip().lower() in ("y", "yes")
+        except EOFError:
+            return False
+    return confirm
+
+
+def _connect_mcp(options, config_data):
+    """Launch the requested servers and return (specs, effects, summary, mode).
+
+    Returns None when no connector was asked for, which is the default: without
+    --mcp nothing in mcp/ runs and the agent talks to the simulated office.
+    """
+    names, cfg = _mcp_names(options, config_data)
+    if not names:
+        return None
+    mode = options["mcp_mode"] or cfg.get("mode") or "draft"
+    servers = mcp_config.names_to_servers(names, cfg, mode=mode)
+    specs, effects, summary = mcp_bridge.enable(servers, mode=mode)
+    return specs, effects, summary, mode
+
+
+def _print_mcp_tools(summary, specs, effects):
+    for server in summary:
+        print(f"{server['id']}  ({server['mode']})")
+        for name in server["tools"]:
+            kind = "write" if effects[name] == "external_write" else "read"
+            print(f"    {kind:>5}  {name}")
+    for warning in mcp_config.count_warnings(summary):
+        print(f"  ! {warning}")
+
+
 def main(agent_dir=None, argv=None):
     if agent_dir is None:
         raise ValueError("agent_dir is required; invoke an agents/<size> shim")
     options, task = parse_flags(
         list(sys.argv[1:] if argv is None else argv)
     )
+    if options["mcp_help"]:
+        for name, _ in mcp_config.available():
+            print(mcp_config.setup_notes(name))
+            print()
+        return
     agent_dir = os.path.abspath(agent_dir)
     with open(
         os.path.join(agent_dir, "config.json"), encoding="utf-8-sig"
@@ -145,6 +232,15 @@ def main(agent_dir=None, argv=None):
     assert (
         "127.0.0.1" in OLLAMA_URL or "localhost" in OLLAMA_URL
     ), "refusing non-local endpoint"
+
+    connected = _connect_mcp(options, config_data)
+    if options["mcp_list"]:
+        if connected is None:
+            print("no MCP servers requested; pass --mcp <name> or --mcp-help")
+        else:
+            specs, effects, summary, _ = connected
+            _print_mcp_tools(summary, specs, effects)
+        return
 
     if not task:
         task = input("Task for the agent: ").strip()
@@ -157,6 +253,19 @@ def main(agent_dir=None, argv=None):
         or config_data.get("domain")
         or "office_demo"
     )
+    registry = domain.registry
+    policy = domain.default_policy
+    prompt_rules = domain.prompt_rules
+    if connected is not None:
+        specs, effects, summary, mcp_mode = connected
+        if not options["keep_office_tools"]:
+            registry = mcp_bridge.without_simulated(registry)
+        registry = registry.merged(specs)
+        policy = policy.with_effects(
+            effects, confirmer=_terminal_confirmer(mcp_mode)
+        )
+        prompt_rules += mcp_bridge.mail_rules(mcp_mode)
+
     paths = agent_runtime_paths(agent_dir, domain)
     max_calls = options["max_calls"]
     if max_calls is None:
@@ -178,14 +287,14 @@ def main(agent_dir=None, argv=None):
         attempt_id=f"{domain.name}:{Path(agent_dir).name}",
         config=run_config,
         domain=domain,
-        tools=domain.registry,
-        policy=domain.default_policy,
+        tools=registry,
+        policy=policy,
         world=world,
         memory=memory,
         workdir=workdir,
         artifact_dir=paths.artifacts,
         prompt_profile=domain.prompt_profile,
-        prompt_rules=domain.prompt_rules,
+        prompt_rules=prompt_rules,
     )
     llm, router = build_llm(
         config_data, options, str(paths.logs)
@@ -196,6 +305,18 @@ def main(agent_dir=None, argv=None):
         f"{OLLAMA_URL}"
     )
     print(f"  domain: {domain.name}@{domain.version}")
+    if connected is not None:
+        specs, effects, summary, mcp_mode = connected
+        print(f"  real accounts: "
+              + ", ".join(f"{x['id']} ({len(x['tools'])} tools)" for x in summary)
+              + f"  mode: {mcp_mode}")
+        # Inference is still local; the loopback assertion above still holds.
+        # It is the TOOLS that now reach Google and Microsoft. Say so, because
+        # "nothing leaves the machine" stops being true for the tool calls.
+        print("  NOTE: tool calls reach these providers' clouds. Model "
+              "inference stays on this machine.")
+        for warning in mcp_config.count_warnings(summary):
+            print(f"  ! {warning}")
     if router:
         print(
             "  model tiers: "
