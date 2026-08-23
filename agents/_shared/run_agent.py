@@ -28,6 +28,17 @@ from harness.runtime import (  # noqa: E402
 from harness.storage import agent_runtime_paths  # noqa: E402
 
 
+# LLM calls one interactive run may spend before the loop stops it. A ceiling,
+# not a target: an agent that finishes in four calls costs four, so headroom is
+# cheap while a tight number mostly buys premature cut-offs. Raised from 14,
+# which was too tight once a run had to look before it wrote and every listing
+# spent a call.
+#
+# NOT the benchmark budget. bench/run_bench.py keeps its own DEFAULT_MAX_CALLS,
+# because that number is part of a recorded experiment.
+DEFAULT_MAX_CALLS = 50
+
+
 ALLOWED_CONFIG_KEYS = frozenset(
     {
         "domain",
@@ -271,7 +282,7 @@ def main(agent_dir=None, argv=None):
     if max_calls is None:
         max_calls = config_data.get("max_calls")
     if max_calls is None:
-        max_calls = 14
+        max_calls = DEFAULT_MAX_CALLS
     run_config = RunConfig(
         condition="harness",
         max_calls=max_calls,

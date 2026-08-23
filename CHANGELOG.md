@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Interactive call budget raised to 50
+
+- `DEFAULT_MAX_CALLS` is 50 for the CLI and for Agent Lab, up from 14. A budget
+  is a ceiling, not a target: a run that finishes in four calls costs four, so
+  headroom is cheap while a tight number mostly buys premature cut-offs. 14 was
+  too tight once a run had to look before it wrote, since every listing spends a
+  call.
+- **`bench/run_bench.py` keeps its own `DEFAULT_MAX_CALLS` of 14, deliberately.**
+  That number is a parameter of a recorded experiment, and moving it would make
+  new runs incomparable to results already on disk. The two budgets are now
+  separate named constants so neither can be changed by reaching for the other.
+- Fixed a bound the console port introduced: the call field offered up to 200
+  while this server rejects anything above 80, so a run configured between the
+  two failed with a 400. The field now matches the server.
+
 ### The confirmation prompt, found by actually running one
 
 - Fixed the operator confirmation in the run panel, which never appeared. The

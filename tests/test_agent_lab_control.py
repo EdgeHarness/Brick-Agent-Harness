@@ -589,3 +589,27 @@ def test_a_run_outside_a_conversation_writes_no_turn(tmp_path, monkeypatch):
     tid = chat.create(str(tmp_path), "do the thing")
     lab.Runs()._pump(_pumped_run([], thread=None, journal=[]))
     assert chat.messages(str(tmp_path), tid) == []
+
+
+def test_the_interactive_budget_is_fifty_and_the_benchmark_is_not():
+    """The two are deliberately different numbers. An interactive run wants
+    headroom; the benchmark ceiling is part of a recorded experiment and moving
+    it would make new runs incomparable to the ones already on disk."""
+    from agents._shared import run_agent
+    from bench import run_bench
+
+    assert run_agent.DEFAULT_MAX_CALLS == 50
+    assert lab_runner.DEFAULT_MAX_CALLS == 50
+    assert run_bench.DEFAULT_MAX_CALLS == 14
+
+
+def test_the_call_field_cannot_offer_more_than_the_server_accepts():
+    """The number input is a hint to a browser; the API is the trust boundary.
+    Offering 200 in a field the server rejects above 80 is a guaranteed 400."""
+    root = Path(__file__).resolve().parents[1]
+    html = (root / "webui/static/index.html").read_text(encoding="utf-8")
+    source = (root / "webui/static/app.js").read_text(encoding="utf-8")
+    assert 'id="opt-calls" min="2" max="80"' in html
+    assert "Math.min(80, Math.max(2, n))" in source
+    assert 'max_calls", minimum=2, maximum=80' in (
+        root / "webui/server.py").read_text(encoding="utf-8")

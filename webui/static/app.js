@@ -1828,7 +1828,7 @@ function setCalls(raw) {
   const n = parseInt(raw, 10);
   // An out-of-range number is clamped and shown, not cleared: typing 5000 and
   // watching the field empty itself reads as a bug rather than as a limit.
-  const v = Number.isFinite(n) ? String(Math.min(200, Math.max(2, n))) : '';
+  const v = Number.isFinite(n) ? String(Math.min(80, Math.max(2, n))) : '';
   $('opt-calls').value = v;
   store('agentlab-calls', v || null);
   paintOptDots();
