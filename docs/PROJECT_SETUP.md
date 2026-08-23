@@ -84,7 +84,7 @@ nonterminal states fail closed.
 This is still the pinned synthetic Qwen3.5 4B `harness_full` versus
 `native_tools` comparison. It is not a bare-model test and does not evaluate the
 separate Llama 8B/llama.cpp Brix product. See
-[`bench/FOCUSED_RECOVERY_SUCCESSOR.md`](bench/FOCUSED_RECOVERY_SUCCESSOR.md) for
+[`bench/FOCUSED_RECOVERY_SUCCESSOR.md`](../bench/FOCUSED_RECOVERY_SUCCESSOR.md) for
 the pending command boundary.
 
 Release identity is authoritative in annotated Git tags and their bound
@@ -311,7 +311,7 @@ Run F0 from a clean, pushed candidate commit `C`. Use native ARM64 Python, start
 the native ARM64 Ollama server, connect AC power, select the recorded performance
 power mode, and leave Defender and indexing enabled. First-time host setup steps
 that satisfy these conditions, plus a failure-triage table, are in
-[`bench/README.md`](bench/README.md#preparing-the-lenovo-host). From an ARM64
+[`bench/README.md`](../bench/README.md#preparing-the-lenovo-host). From an ARM64
 PowerShell in the repository root:
 
 ```powershell

@@ -8,7 +8,7 @@ The latest release is `v0.11.1` (pre-D0 integrity repair), preceded by
 `v0.11.0` (S6C), `v0.10.0` (S6G), `v0.9.0` (S5W), `v0.8.0` (S5), `v0.7.0` (B0),
 `v0.6.0` (S1R), `v0.5.0` (S4), and `v0.4.0` (F0/Q0).
 Annotated tags and bound evidence are release-authoritative; see the
-`C`/`R`/`D` lifecycle in [`../PROJECT_SETUP.md`](../PROJECT_SETUP.md).
+`C`/`R`/`D` lifecycle in [`../docs/PROJECT_SETUP.md`](../docs/PROJECT_SETUP.md).
 
 The server binds to `127.0.0.1` and normally selects a port from 8765 through
 8784. It generates a new 256-bit capability on every start. Exact Host,

@@ -4,7 +4,7 @@ Last reconciled with the local project tree: 5 August 2026.
 
 The canonical execution plan is [`PROJECT_SETUP.md`](PROJECT_SETUP.md). This
 guide defines the durable evidence, architecture, and claim rules. Released
-history is recorded in [`CHANGELOG.md`](CHANGELOG.md).
+history is recorded in [`CHANGELOG.md`](../CHANGELOG.md).
 
 ## 1. Candidate status and release authority
 
@@ -166,7 +166,7 @@ with, or strengthen the old B1a lane.
 The scope remains fixed synthetic Qwen3.5 4B `harness_full` versus competent
 `native_tools`, not a bare model or the separately evolving Llama 8B Brix
 product. The operational boundary and pending commands are in
-[`bench/FOCUSED_RECOVERY_SUCCESSOR.md`](bench/FOCUSED_RECOVERY_SUCCESSOR.md).
+[`bench/FOCUSED_RECOVERY_SUCCESSOR.md`](../bench/FOCUSED_RECOVERY_SUCCESSOR.md).
 
 ## 4. Research question and scope
 

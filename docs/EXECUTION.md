@@ -3,7 +3,7 @@
 Operational layer for running the plan. [`PROJECT_SETUP.md`](PROJECT_SETUP.md)
 defines *what* to build and *what counts as evidence*; this file covers *how a
 work session runs*: current state, schedule, checkpoints, and what to cut when
-behind. [`CLAUDE.md`](CLAUDE.md) is the short orientation loaded automatically.
+behind. [`CLAUDE.md`](../CLAUDE.md) is the short orientation loaded automatically.
 
 If this file disagrees with `PROJECT_SETUP.md` or `PROJECT_GUIDE.md`, they win.
 If the dated state below disagrees with `git log` and the `[Unreleased]` section

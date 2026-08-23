@@ -1,6 +1,6 @@
 """Model-facing tools for the synthetic lead-follow-up slice (B0).
 
-Exactly six tools, matching what `PROJECT_SETUP.md` permits the model to do:
+Exactly six tools, matching what `docs/PROJECT_SETUP.md` permits the model to do:
 list due follow-ups, inspect an assigned lead, propose a follow-up, inspect its
 proposals, think, and finish.
 

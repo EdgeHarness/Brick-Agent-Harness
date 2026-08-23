@@ -5,11 +5,11 @@ improves tool-using local language models. Two parts: a domain-independent
 harness core, and versioned domain packs (`domains/office_demo`,
 `domains/counter_demo`) that plug into it.
 
-[`PROJECT_SETUP.md`](PROJECT_SETUP.md) is canonical for the plan, gates, and
-status. [`PROJECT_GUIDE.md`](PROJECT_GUIDE.md) is canonical for evidence
+[`docs/PROJECT_SETUP.md`](docs/PROJECT_SETUP.md) is canonical for the plan, gates, and
+status. [`docs/PROJECT_GUIDE.md`](docs/PROJECT_GUIDE.md) is canonical for evidence
 standards. If this file disagrees with either, they win.
 
-[`EXECUTION.md`](EXECUTION.md) is the operational handbook: current machine and
+[`docs/EXECUTION.md`](docs/EXECUTION.md) is the operational handbook: current machine and
 repository state, the schedule, hard checkpoints, cut order when behind, and the
 per-session protocol. Read it before starting work.
 
@@ -58,7 +58,7 @@ unknown option name — something Ollama never promised. That bundle
 (`f0-20260801T020325Z-5f948e97`) is retained unchanged as failed evidence; the
 gate was corrected and versioned rather than repaired. Two further reruns came
 from defects in the release procedure itself, not the gate. See
-[`EXECUTION.md`](EXECUTION.md) §2.
+[`docs/EXECUTION.md`](docs/EXECUTION.md) §2.
 
 The independent F0 verifier correction is commit `f12dd71`, pushed to `main`
 with required CI green. It strengthens option-recognition and runner-stability
@@ -192,7 +192,7 @@ real-time scanner and indexer holding handles.
   [`bench/README.md`](bench/README.md#preparing-the-lenovo-host)
 - Run and verify commands:
   [`bench/README.md`](bench/README.md#running-the-lenovo-f0-gate)
-- Full requirements and attestation: [`PROJECT_SETUP.md`](PROJECT_SETUP.md)
+- Full requirements and attestation: [`docs/PROJECT_SETUP.md`](docs/PROJECT_SETUP.md)
 
 A 4B *model* failure — no native tool transport, throughput below floor, memory
 over ceiling — stops the research design. A 2B or 9B failure removes only that
@@ -201,7 +201,7 @@ evidence store needs redesign before it is built.
 
 A **protocol-contract** failure is different and must not be read as a model
 result: it says the pinned runtime does not honour a contract Brick declared.
-Per `PROJECT_SETUP.md`, revise and version the candidate protocol and rerun all of
+Per `docs/PROJECT_SETUP.md`, revise and version the candidate protocol and rerun all of
 F0. Never lower a floor or drop a check to make an existing failed run pass —
 that waives a gate and produces a number nobody should believe. Failure codes
 carry a `domain` for exactly this reason.

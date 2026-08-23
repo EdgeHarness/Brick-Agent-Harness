@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Repository layout
+
+- Moved `ARCHITECTURE.md`, `EXECUTION.md`, `FIXES.md`, `PROJECT_GUIDE.md`,
+  `PROJECT_SETUP.md` and `BRIX_DISCOVERY.md` into `docs/`. The root keeps
+  `README.md`, `CHANGELOG.md`, `CLAUDE.md` and `SECURITY.md`, where the
+  conventions expect them. Inbound links, `.gitattributes` line-ending rules and
+  `CLAUDE.md`'s canonical pointers were updated with the move. No evidence
+  bundle cites these paths, so no retained evidence is affected. Historical
+  changelog entries keep their original wording: they describe where a file was
+  when the entry was written.
+- Added `tests/test_documentation_links.py`, which fails on a dead relative link
+  in any tracked markdown file and on a canonical document that has moved out
+  from under `CLAUDE.md`. The move above broke six links that nothing would
+  otherwise have caught.
+
 ### Agent Lab: real connectors and a domain-driven console
 
 - Wired the MCP bridge into the CLI and the run panel. The bridge and
@@ -145,7 +160,7 @@ internal Python interfaces. Nothing in this repository is a stable public API.
 
 **A released version is not gate acceptance.** Versions record repository
 changes only. The active gates and current status live in
-[`PROJECT_SETUP.md`](PROJECT_SETUP.md). No entry below should be read as evidence
+[`PROJECT_SETUP.md`](docs/PROJECT_SETUP.md). No entry below should be read as evidence
 that the research instrument is valid or that any measured effect exists.
 
 ## [Unreleased]

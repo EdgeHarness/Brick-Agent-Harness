@@ -20,7 +20,7 @@ The latest release is `v0.11.1` (pre-D0 integrity repair), preceded by
 The F0 feasibility gate passed and does not
 authorize training. Annotated tags and bound evidence are release-authoritative;
 see the `C`/`R`/`D` lifecycle in
-[`../PROJECT_SETUP.md`](../PROJECT_SETUP.md).
+[`../docs/PROJECT_SETUP.md`](../docs/PROJECT_SETUP.md).
 
 ## Blocking defects
 

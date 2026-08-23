@@ -2,7 +2,7 @@
 
 This directory contains the released **exploratory synthetic benchmark** and is
 being rebuilt into the instrument specified in
-[`../PROJECT_SETUP.md`](../PROJECT_SETUP.md).
+[`../docs/PROJECT_SETUP.md`](../docs/PROJECT_SETUP.md).
 
 The latest release is `v0.11.1` (pre-D0 integrity repair), preceded by
 `v0.11.0` (S6C fair-condition runtime and scheduler), `v0.10.0` (S6G),
@@ -19,7 +19,7 @@ harness improves a model.
 
 Annotated tags and bound evidence are release-authoritative; see the canonical
 `C`/`R`/`D` lifecycle in
-[`../PROJECT_SETUP.md`](../PROJECT_SETUP.md#native-windows-arm64-attestation).
+[`../docs/PROJECT_SETUP.md`](../docs/PROJECT_SETUP.md#native-windows-arm64-attestation).
 
 ## Confirmatory question
 
@@ -186,7 +186,7 @@ disk for forensic inspection.
 
 The complete schema, retry schedule, status derivation, projection shape, and
 cooperative-local-writer threat model are normative in
-[`../PROJECT_SETUP.md`](../PROJECT_SETUP.md#s4--marker-last-evidence-store).
+[`../docs/PROJECT_SETUP.md`](../docs/PROJECT_SETUP.md#s4--marker-last-evidence-store).
 
 ### Native Windows ARM64 S4 gate
 
@@ -349,7 +349,7 @@ runtime and model digests; S6 now binds its passed attestation hash, Ollama
 ## Preparing the Lenovo host
 
 For an operator or coding agent setting up the benchmark host for the first time.
-[`../PROJECT_SETUP.md`](../PROJECT_SETUP.md) states these same conditions as
+[`../docs/PROJECT_SETUP.md`](../docs/PROJECT_SETUP.md) states these same conditions as
 acceptance criteria; the steps below are how you satisfy them. The probe
 fail-closes on every one, so a missed step appears as a gate failure rather than
 a quietly wrong result.
@@ -522,7 +522,7 @@ python -m bench.f0_probe verify $extractedRun
 
 Both `$archive` and `$extractRoot` must be new paths.
 
-[`../PROJECT_SETUP.md`](../PROJECT_SETUP.md) defines the complete prerequisites,
+[`../docs/PROJECT_SETUP.md`](../docs/PROJECT_SETUP.md) defines the complete prerequisites,
 4B stop rule, allowed 2B/9B omissions, and the tested candidate `C` to
 metadata-only release descendant `R` attestation. A nonzero command, non-pass
 summary, dirty worktree, unverified archive, or behavioral change after `C`

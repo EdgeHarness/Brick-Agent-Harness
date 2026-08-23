@@ -58,20 +58,20 @@ changelog and current status after the tag; `D` is not part of `v0.5.0`.
 
 - [`CLAUDE.md`](CLAUDE.md) is the short orientation for a coding agent or new
   contributor: hard rules, current position, the F0 gate, and remaining stages.
-- [`EXECUTION.md`](EXECUTION.md) is the operational handbook: current state,
+- [`docs/EXECUTION.md`](docs/EXECUTION.md) is the operational handbook: current state,
   schedule, hard checkpoints, cut order, and the per-session protocol.
-- [`PROJECT_GUIDE.md`](PROJECT_GUIDE.md) defines the canonical evidence,
+- [`docs/PROJECT_GUIDE.md`](docs/PROJECT_GUIDE.md) defines the canonical evidence,
   research, product, and governance rules.
-- [`BRIX_DISCOVERY.md`](BRIX_DISCOVERY.md) records the non-sensitive Brix
+- [`docs/BRIX_DISCOVERY.md`](docs/BRIX_DISCOVERY.md) records the non-sensitive Brix
   discovery boundary and the relationship between the research and product
   repositories.
-- [`PROJECT_SETUP.md`](PROJECT_SETUP.md) is the canonical staged
+- [`docs/PROJECT_SETUP.md`](docs/PROJECT_SETUP.md) is the canonical staged
   implementation and research plan.
-- [`ARCHITECTURE.md`](ARCHITECTURE.md) describes what is implemented, what is
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) describes what is implemented, what is
   simulated, and the current trust boundaries.
 - [`bench/README.md`](bench/README.md) describes the benchmark and why current
   outputs are exploratory.
-- [`FIXES.md`](FIXES.md) is the code-level defect and remediation register mapped
+- [`docs/FIXES.md`](docs/FIXES.md) is the code-level defect and remediation register mapped
   to the canonical gates.
 - [`webui/README.md`](webui/README.md) describes the local Agent Lab demo.
 - [`training_scripts/README.md`](training_scripts/README.md) describes the
@@ -142,7 +142,7 @@ permits no such skip.
 
 The released F0 gate was a separate live-model operation. Its passing bundle is
 retained and bound to `v0.4.0` through the candidate/release attestation defined
-in [`PROJECT_SETUP.md`](PROJECT_SETUP.md). First-time host setup remains in
+in [`docs/PROJECT_SETUP.md`](docs/PROJECT_SETUP.md). First-time host setup remains in
 [`bench/README.md`](bench/README.md#preparing-the-lenovo-host), and the exact
 F0 commands remain in
 [`bench/README.md`](bench/README.md#running-the-lenovo-f0-gate). The current S4

@@ -24,7 +24,7 @@ The latest release is `v0.11.1` (pre-D0 integrity repair), preceded by
 The native Lenovo F0 feasibility gate passed;
 that records host feasibility only and is not a benchmark result. Annotated tags
 and bound evidence are release-authoritative; see the `C`/`R`/`D` lifecycle in
-[`../PROJECT_SETUP.md`](../PROJECT_SETUP.md).
+[`../docs/PROJECT_SETUP.md`](../docs/PROJECT_SETUP.md).
 
 ## What the development launchers run
 

@@ -94,5 +94,5 @@ Do not place real Brix member, employee, payment, agreement, email, policy,
 access-control, or other private data in the repository, model memory, logs,
 benchmark evidence, or Agent Lab.
 
-See [`PROJECT_SETUP.md`](PROJECT_SETUP.md) for the active release gates and
-[`FIXES.md`](FIXES.md) for the remaining implementation defects.
+See [`docs/PROJECT_SETUP.md`](docs/PROJECT_SETUP.md) for the active release gates and
+[`docs/FIXES.md`](docs/FIXES.md) for the remaining implementation defects.
