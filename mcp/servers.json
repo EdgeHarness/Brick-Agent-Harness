@@ -70,6 +70,41 @@
     ]
   },
 
+  "ms365-own": {
+    "summary": "Outlook mail and calendar, our own server. Fourteen tools, self-classifying.",
+    "docs": "https://github.com/sunnycho100/ms365-mcp",
+    "setup": [
+      "Our own first-party server, installed into this virtualenv:",
+      "  .venv/bin/pip install -e ../ms365-mcp",
+      "Sign-in is not built yet, so every tool answers 'not implemented'.",
+      "Listing it still works, which is the point: it is the one connector",
+      "whose effect classes come from the server's own MCP annotations",
+      "rather than from a guess about its tool names, so it needs no",
+      "read_tools or write_tools overrides below."
+    ],
+    "command": "${ROOT}/../ms365-mcp/.venv/bin/python",
+    "args": ["-m", "ms365_mcp"],
+    "prefix": "",
+    "notes": [
+      "Runs under the SERVER'S OWN interpreter, not this repository's.",
+      "That is not a preference. This repository already has a local package",
+      "called mcp/ (this registry, the selftest server), and the official MCP",
+      "SDK on PyPI is also called mcp, so installing the server here shadows",
+      "our own package and 'import mcp.selftest_server' stops resolving.",
+      "A separate process should own its dependencies anyway; the process",
+      "boundary is the whole point of MCP.",
+      "Development wiring: the path assumes the sibling checkout and a POSIX",
+      "venv layout. Publishing the package would replace this with uvx.",
+      "No prefix: the tool names are already ours and already unambiguous",
+      "(list_messages, create_draft), and prefixing them twice would make",
+      "them longer for a model that reads every character of the tool list.",
+      "No allow list: fourteen tools is already inside the budget, which is",
+      "the whole design of that server.",
+      "send_draft is the only tool that transmits, so draft mode drops it and",
+      "the model cannot reach a person without --mcp-mode live."
+    ]
+  },
+
   "ms365": {
     "summary": "Outlook mail + calendar via Microsoft Graph. Draft mode drops send-mail.",
     "docs": "https://github.com/softeria/ms-365-mcp-server",

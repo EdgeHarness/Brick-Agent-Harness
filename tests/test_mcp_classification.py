@@ -101,3 +101,44 @@ def test_a_fully_classified_connector_is_quiet():
         "writes": [], "classified_by": {"gmail_search_emails": "read verb"},
     }]
     assert classification_warnings(summary) == []
+
+
+# ------------------------------------------------------ draft-mode transmit --
+#
+# Draft mode drops any tool that could put something in front of a person.
+# Which tools those are is guessed from the name, because most servers say
+# nothing, and the guess has a false positive worth handling: a tool that
+# drafts a reply contains "reply" and transmits nothing.
+
+from harness.mcp_bridge import _transmits  # noqa: E402
+
+
+def test_a_sending_tool_transmits():
+    assert _transmits("send_draft") is True
+    assert _transmits("forward_message") is True
+    assert _transmits("reply_all") is True
+
+
+def test_an_ordinary_tool_does_not_transmit():
+    assert _transmits("list_messages") is False
+    assert _transmits("create_event") is False
+
+
+def test_declaring_non_destructive_rescues_a_drafting_tool():
+    # reply_draft writes a draft and sends nothing, but its name says "reply".
+    tool = {"name": "reply_draft", "annotations": {"destructiveHint": False}}
+    assert _transmits("reply_draft", tool) is False
+
+
+def test_a_declared_destructive_sender_still_transmits():
+    tool = {"name": "send_draft", "annotations": {"destructiveHint": True}}
+    assert _transmits("send_draft", tool) is True
+
+
+def test_silence_does_not_rescue_a_transmit_name():
+    # A server that says nothing cannot talk its way out of draft mode: only
+    # an explicit non-destructive claim counts, never a missing one.
+    for tool in ({"name": "send_mail"},
+                 {"name": "send_mail", "annotations": {}},
+                 {"name": "send_mail", "annotations": {"readOnlyHint": False}}):
+        assert _transmits("send_mail", tool) is True, tool

@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+### A first-party connector, and a draft-mode false positive it exposed
+
+`mcp/servers.json` gains `ms365-own`, our own Microsoft 365 server from
+github.com/sunnycho100/ms365-mcp. Its handlers are stubs today; the point of
+wiring it now is that it is the first connector whose effect classes come
+entirely from the server's own MCP annotations. All fourteen tools list as
+`declared` with no `read_tools` or `write_tools` overrides, which is the
+standard we started asking of third-party servers.
+
+Two things that only showed up by running it:
+
+- **`reply_draft` was dropped in draft mode.** The transmit test was a regex
+  over the tool name and `reply_draft` contains "reply", so drafting a reply,
+  a core workflow, was unavailable in the mode meant to encourage exactly
+  that. `_transmits()` now believes an explicit `destructiveHint: false`,
+  on the same rule the effect classifier uses: a declaration beats a guess
+  about a name. A missing annotation is not a claim and still drops, so a
+  server that says nothing cannot talk its way out of draft mode.
+- **The server runs under its own interpreter, not ours.** This repository
+  has a local package called `mcp/` and the official SDK on PyPI is also
+  called `mcp`, so installing the server into this virtualenv shadowed our
+  own package and broke `import mcp.selftest_server`. A separate process
+  should own its dependencies anyway.
+
+
 ### Console gains what only the CLI could do
 
 Three capabilities existed in the harness and had no way in through the

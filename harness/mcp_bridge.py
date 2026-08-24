@@ -439,6 +439,30 @@ def _is_write(name, server_cfg, tool=None):
     return classify(name, server_cfg, tool)[0]
 
 
+def _transmits(name, tool=None):
+    """Would this tool put something in front of another person?
+
+    Draft mode drops these, so a run cannot reach anyone. The test is the
+    tool's name, because most servers say nothing about it, and a name is all
+    we have.
+
+    A name is a blunt instrument though: "reply_draft" writes a draft reply
+    and transmits nothing, but it contains "reply". So a tool that explicitly
+    declares itself non-destructive is believed, on the same rule the effect
+    classifier uses - a declaration beats a guess about a name.
+
+    Only an explicit `destructiveHint: false` rescues a tool. A missing
+    annotation is not a claim, so it keeps the conservative drop; that way a
+    server that says nothing can never talk its way out of draft mode.
+    """
+    if not _TRANSMIT_RE.search(name):
+        return False
+    ann = (tool or {}).get("annotations") or {}
+    if isinstance(ann, dict) and ann.get("destructiveHint") is False:
+        return False
+    return True
+
+
 def _make_executor(client, mcp_name, back):
     """The registry 'run' callable: (attempt, args) -> observation text.
 
@@ -514,7 +538,7 @@ def _adapt(client, tool, server_cfg, prefix, draft_only, seen):
     if not mcp_name:
         return None
     is_write, why = classify(mcp_name, server_cfg, tool)
-    if draft_only and is_write and _TRANSMIT_RE.search(mcp_name) \
+    if draft_only and is_write and _transmits(mcp_name, tool) \
             and mcp_name.lower() not in {k.lower() for k in server_cfg.get("write_tools", [])}:
         return None  # draft mode: never expose a tool that transmits to a person
     if mcp_name.lower() in {d.lower() for d in server_cfg.get("drop", [])}:
