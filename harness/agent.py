@@ -129,9 +129,40 @@ class Episode:
                 pass
 
 
-def _obs(text, limit=2000):
+def _obs(text, limit=2000, keep_tail=0):
     text = str(text)
-    return text if len(text) <= limit else text[:limit] + " ...[truncated]"
+    if len(text) <= limit:
+        return text
+    if keep_tail and limit > keep_tail:
+        # Totals and verdicts live at the end of a result; keep both ends.
+        return (text[:limit - keep_tail] + " ...[middle truncated]... "
+                + text[-keep_tail:])
+    return text[:limit] + " ...[truncated]"
+
+
+def _shrink_context(messages, num_ctx, ep, keep_recent=6):
+    """Middle-prune OLD tool observations when the estimated prompt nears the
+    context window.
+
+    Without this, an overflowing prompt is truncated silently by the backend
+    from the FRONT, which eats the system prompt first - the worst possible
+    text to lose. chars/4 is a good-enough token estimate to drive the
+    decision; the newest keep_recent messages are never touched."""
+    est = sum(len(str(m.get("content", ""))) for m in messages) // 4
+    if est < int(num_ctx * 0.8):
+        return False
+    changed = False
+    for m in messages[1:max(1, len(messages) - keep_recent)]:
+        content = str(m.get("content", ""))
+        if m.get("role") == "user" and content.startswith("OBSERVATION:") \
+                and len(content) > 700:
+            m["content"] = (content[:400]
+                            + " ...[old result pruned to fit the context]... "
+                            + content[-200:])
+            changed = True
+    if changed:
+        ep.note("context", "pruned old tool results to stay inside the context window")
+    return changed
 
 
 def _execute_with_policy(attempt, name, args):
@@ -372,6 +403,8 @@ def run_harness(llm, task_text, attempt):
         last_reply = reply
 
     while llm.calls < config.max_calls:
+        if profile.prune_context:
+            _shrink_context(messages, profile.num_ctx, ep)
         reply = llm.chat(messages, force_json=True, role="driver",
                          num_predict=profile.num_predict)
         messages.append({"role": "assistant", "content": reply})
@@ -520,7 +553,7 @@ def run_harness(llm, task_text, attempt):
         seen_calls[sig] = (world_version, repeats + 1, ok)
         if not ok:
             ep.tool_errors += 1
-        obs = _obs(obs, config.observation_limit)
+        obs = _obs(obs, config.observation_limit, profile.observation_keep_tail)
         if think_streak >= profile.think_streak_cap:
             obs += " NOTE: stop thinking and take a concrete action now."
         messages.append({"role": "user", "content": f"OBSERVATION: {obs}"})

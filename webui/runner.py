@@ -91,6 +91,7 @@ def build_llm(config, args, log_dir, stream_hook):
                 config["model"],
                 num_ctx=config.get("num_ctx", 8192),
                 stream_hook=stream_hook,
+                retries=2,
             ),
             None,
         )

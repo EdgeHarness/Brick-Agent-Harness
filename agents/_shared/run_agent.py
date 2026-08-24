@@ -42,6 +42,7 @@ DEFAULT_MAX_CALLS = 50
 ALLOWED_CONFIG_KEYS = frozenset(
     {
         "domain",
+        "harness",
         "max_calls",
         "mcp",
         "model",
@@ -150,6 +151,7 @@ def build_llm(config, options, log_dir, stream_hook=None):
                 config["model"],
                 num_ctx=config.get("num_ctx", 8192),
                 stream_hook=stream_hook,
+                retries=2,
             ),
             None,
         )

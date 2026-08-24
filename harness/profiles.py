@@ -60,6 +60,19 @@ class Profile:
     # intact, longer lets strong models write full decks in one call
     num_predict: int = 700
 
+    # When an observation is clipped, keep this many characters of its TAIL
+    # as well as the head. 0 is the original head-only clip. Totals and
+    # verdicts tend to live at the end of a result (a spreadsheet's sum, an
+    # error's cause), and a head-only clip fed the model everything except
+    # the part it needed.
+    observation_keep_tail: int = 0
+
+    # Middle-prune old tool observations when the estimated prompt nears the
+    # context window. Off by default: the bench never prunes. Without it,
+    # Ollama truncates silently from the FRONT at overflow, which eats the
+    # system prompt first - the worst possible text to lose.
+    prune_context: bool = False
+
     # long-term memories auto-injected into the system prompt
     memory_k: int = 3
 
@@ -91,6 +104,7 @@ PROFILES = {
                   "kept short so the JSON stays intact, with extra calls to compensate.",
         plan=False, plan_max_steps=0, verify_rounds=0, loop_break=True,
         repeat_limit=2, think_streak_cap=1, num_predict=350, memory_k=2,
+        observation_keep_tail=300, prune_context=True,
         num_ctx=8192, max_calls=18),
 
     # --- Llama 3.2 3B -------------------------------------------------------
@@ -101,6 +115,7 @@ PROFILES = {
                   "aggressive loop-breaking; moderate output length.",
         plan=True, plan_max_steps=3, verify_rounds=1, loop_break=True,
         repeat_limit=2, think_streak_cap=2, num_predict=500, memory_k=3,
+        observation_keep_tail=300, prune_context=True,
         num_ctx=8192, max_calls=14),
 
     # --- Llama 3.1 8B -------------------------------------------------------
@@ -111,6 +126,7 @@ PROFILES = {
                   "budget and output length.",
         plan=True, plan_max_steps=5, verify_rounds=2, loop_break=True,
         repeat_limit=3, think_streak_cap=2, num_predict=700, memory_k=3,
+        observation_keep_tail=300, prune_context=True,
         num_ctx=8192, max_calls=50),
 
     # --- The Hexagon NPU, served by GenieX ----------------------------------
@@ -126,6 +142,7 @@ PROFILES = {
                   "comparison.",
         plan=True, plan_max_steps=5, verify_rounds=2, loop_break=True,
         repeat_limit=3, think_streak_cap=2, num_predict=700, memory_k=3,
+        observation_keep_tail=300, prune_context=True,
         num_ctx=8192, max_calls=50),
 
     "ai-hub-models/Qwen2.5-7B-Instruct": Profile(
@@ -135,6 +152,7 @@ PROFILES = {
                   "pays off as it does for the 8B.",
         plan=True, plan_max_steps=5, verify_rounds=2, loop_break=True,
         repeat_limit=3, think_streak_cap=2, num_predict=700, memory_k=3,
+        observation_keep_tail=300, prune_context=True,
         num_ctx=8192, max_calls=50),
 
     # --- Qwen 2.5 14B -------------------------------------------------------
@@ -146,6 +164,7 @@ PROFILES = {
                   "before it writes.",
         plan=True, plan_max_steps=6, verify_rounds=2, loop_break=True,
         repeat_limit=3, think_streak_cap=3, num_predict=900, memory_k=4,
+        observation_keep_tail=300, prune_context=True,
         num_ctx=12288, max_calls=14),
 
     # --- Qwen 2.5 32B -------------------------------------------------------
@@ -158,6 +177,7 @@ PROFILES = {
                   "calls beat more calls.",
         plan=True, plan_max_steps=6, verify_rounds=1, loop_break=True,
         repeat_limit=3, think_streak_cap=3, num_predict=1000, memory_k=4,
+        observation_keep_tail=300, prune_context=True,
         num_ctx=16384, max_calls=12),
 }
 

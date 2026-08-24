@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Second DeepSeek Harness pass: four mechanisms adopted
+
+`docs/DSH_GAP_ANALYSIS.md` records the sweep of the areas the first pass
+never opened. All four adoptions are bench-invisible (default-off, or in a
+path bench/ never runs), and two mechanisms previously believed missing turn
+out to be already present by construction (canonical argument keys, denied
+calls counting as repeats).
+
+- MCP child processes no longer inherit credential-shaped environment
+  variables; only what a server's own config declares reaches it.
+- `LLM(retries=N)` retries connection failures, timeouts and 5xx with
+  backoff; never 4xx, never a partially streamed reply. Default 0 keeps the
+  bench arm byte-identical; interactive callers pass 2.
+- Observation clipping can keep the tail of a result as well as the head
+  (`observation_keep_tail`); totals and verdicts live at the end.
+- A context pressure valve (`prune_context`) middle-prunes old observations
+  at 80% of the window, because the backend otherwise truncates silently
+  from the front, eating the system prompt first.
+- `harness` is now an accepted config.json key, as the profile override
+  block documented in harness/profiles.py.
+
+
 ### Quick wins: memory retrieval, and run stats in the end card
 
 - `harness/memory.py` retrieval now counts a token pair when one is a prefix

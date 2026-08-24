@@ -65,6 +65,25 @@ _WRITE_RE = re.compile(
 _TRANSMIT_RE = re.compile(r"(send|forward|reply)", re.I)
 
 
+# Credential-shaped environment variables never reach an MCP child process
+# unless the server's own config names them. Hard rule 9 says provider
+# credentials live with the third-party server, not here - so an unrelated
+# API key sitting in the user's shell must not leak into every connector
+# spawned. Everything else (PATH, HOME, locale) passes through, because
+# npx-style launchers need a working environment.
+_SENSITIVE_ENV_RE = re.compile(
+    r"(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH)", re.I)
+
+
+def _child_env(extra):
+    """The environment for one MCP child: the parent's, minus anything
+    credential-shaped, plus exactly what the server config declares."""
+    env = {k: v for k, v in os.environ.items()
+           if not _SENSITIVE_ENV_RE.search(k)}
+    env.update(extra or {})
+    return env
+
+
 # --------------------------------------------------------------- JSON-RPC ----
 
 class MCPClient:
@@ -80,8 +99,7 @@ class MCPClient:
         self._ids = itertools.count(1)
         self._inbox = queue.Queue()
         self._write_lock = threading.Lock()
-        full_env = dict(os.environ)
-        full_env.update(env or {})
+        full_env = _child_env(env)
         try:
             self.proc = subprocess.Popen(
                 [command, *(args or [])],

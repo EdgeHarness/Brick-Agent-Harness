@@ -17,15 +17,24 @@ OLLAMA_URL = "http://127.0.0.1:11434"
 
 class LLM:
     def __init__(self, model, num_ctx=8192, temperature=0.0, timeout=900,
-                 keep_alive="30m", stream_hook=None):
+                 keep_alive="30m", stream_hook=None, retries=0):
         if stream_hook is not None and not callable(stream_hook):
             raise TypeError("stream_hook must be callable or None")
+        if type(retries) is not int or retries < 0:
+            raise ValueError("retries must be a nonnegative integer")
         self.model = model
         self.num_ctx = num_ctx
         self.temperature = temperature
         self.timeout = timeout
         self.keep_alive = keep_alive  # "0" evicts the model right after the call
         self.stream_hook = stream_hook
+        # Transport-level retries with backoff. Default 0 so the benchmark's
+        # recorded behavior is byte-identical; interactive callers opt in.
+        # Retried: connection failures, timeouts, and 5xx (a local Ollama
+        # under memory pressure returns 500s that clear on their own).
+        # Never retried: 4xx, or a response that parses but is malformed -
+        # those reproduce identically.
+        self.retries = retries
         self.reset_usage()
 
     def reset_usage(self):
@@ -57,13 +66,7 @@ class LLM:
         if hook:
             hook("start", {"model": self.model, "role": role})
         t0 = time.time()
-        if hook:
-            content, data = self._chat_streamed(payload, hook)
-        else:
-            r = requests.post(f"{OLLAMA_URL}/api/chat", json=payload, timeout=self.timeout)
-            r.raise_for_status()
-            data = r.json()
-            content = data["message"]["content"]
+        content, data = self._attempt_with_retries(payload, hook)
         self.calls += 1
         self.wall += time.time() - t0
         self.prompt_tokens += data.get("prompt_eval_count", 0)
@@ -74,21 +77,51 @@ class LLM:
                          "ms": int((time.time() - t0) * 1000)})
         return content
 
+    def _attempt_with_retries(self, payload, hook):
+        attempt = 0
+        while True:
+            try:
+                return self._attempt(payload, hook)
+            except (requests.ConnectionError, requests.Timeout,
+                    requests.HTTPError) as e:
+                status = getattr(getattr(e, "response", None), "status_code", None)
+                transient = status is None or status >= 500
+                # A stream that already emitted tokens is not retried: the
+                # viewer would see the reply twice.
+                if getattr(e, "streamed_partial", False) \
+                        or not transient or attempt >= self.retries:
+                    raise
+                attempt += 1
+                time.sleep(min(0.5 * (2 ** (attempt - 1)), 4.0))
+
+    def _attempt(self, payload, hook):
+        if hook:
+            return self._chat_streamed(payload, hook)
+        r = requests.post(f"{OLLAMA_URL}/api/chat", json=payload, timeout=self.timeout)
+        r.raise_for_status()
+        data = r.json()
+        return data["message"]["content"], data
+
     def _chat_streamed(self, payload, hook):
         """Same request with stream=True: hand each chunk to the hook and
         return the joined reply plus the final chunk (which carries usage)."""
         parts, final = [], {}
-        with requests.post(f"{OLLAMA_URL}/api/chat", json=payload,
-                           timeout=self.timeout, stream=True) as r:
-            r.raise_for_status()
-            for line in r.iter_lines(decode_unicode=True):
-                if not line:
-                    continue
-                chunk = json.loads(line)
-                piece = chunk.get("message", {}).get("content", "")
-                if piece:
-                    parts.append(piece)
-                    hook("token", {"text": piece})
-                if chunk.get("done"):
-                    final = chunk
+        try:
+            with requests.post(f"{OLLAMA_URL}/api/chat", json=payload,
+                               timeout=self.timeout, stream=True) as r:
+                r.raise_for_status()
+                for line in r.iter_lines(decode_unicode=True):
+                    if not line:
+                        continue
+                    chunk = json.loads(line)
+                    piece = chunk.get("message", {}).get("content", "")
+                    if piece:
+                        parts.append(piece)
+                        hook("token", {"text": piece})
+                    if chunk.get("done"):
+                        final = chunk
+        except (requests.ConnectionError, requests.Timeout,
+                requests.HTTPError) as e:
+            e.streamed_partial = bool(parts)
+            raise
         return "".join(parts), final
