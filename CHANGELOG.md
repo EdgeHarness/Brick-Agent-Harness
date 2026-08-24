@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Phase 5: Final-Agent-8B retired to a shipping instance
+
+- Final-Agent-8B `b509b38` declares this repository the engine: its
+  `UPSTREAM.md` maps every ported subsystem to the Brick commit that
+  continues it, freezes its `harness/` and `webui/`, and names what
+  deliberately stays there (the OpenRouter shim, the filesystem tools, the
+  merged office world). No code was deleted; the lab machine runs from that
+  tree. The README here states the relationship in one line.
+
+
 ### Phase 4: backend shims
 
 - `npu/ollama_shim.py` (GenieX on the Hexagon NPU) and

@@ -8,7 +8,9 @@ result, training corpus, adapter or model weight is shipped here.
 This is not a production assistant and is not connected to Brix systems.
 
 Two parts: a domain-independent harness core, and versioned domain packs that
-plug into it.
+plug into it. This repository is the engine;
+[Final-Agent-8B](https://github.com/EdgeHarness/Final-Agent-8B) is its
+Snapdragon shipping instance and no longer develops the engine itself.
 
 | pack | what it is |
 |---|---|

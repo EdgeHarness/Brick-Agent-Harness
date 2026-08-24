@@ -119,7 +119,7 @@ B1b cells and the mandatory 240-cell B2 schedule on the Lenovo, under the
 frozen protocol, guards off. No interactive improvement above changes that
 number; keeping the two worlds separate is what makes both trustworthy.
 
-### 5. Phase 5: retire final-agent-8b to a shipping instance
+### 5. Phase 5: retire final-agent-8b to a shipping instance (DONE 2026-08-23)
 
 After phases 3 and 4, everything generic lives here. f8b keeps packaging and
 device-specific material and consumes brick as the base. Its `fs_tools.py`
