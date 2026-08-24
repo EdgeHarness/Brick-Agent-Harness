@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Phase 4: backend shims
+
+- `npu/ollama_shim.py` (GenieX on the Hexagon NPU) and
+  `llamacpp/ollama_shim.py` (llama-server), both stdlib-only, ported from the
+  Final-Agent-8B line with their operating notes (`docs/NPU_SERVING.md`,
+  `docs/LLAMACPP_BACKEND.md`, `docs/OLLAMA_SHIM.md`). Each impersonates
+  Ollama on 127.0.0.1:11434, so the harness needs zero changes; choosing a
+  backend is choosing which process is running.
+- The OpenRouter variant deliberately stays out of this repository (hard
+  rule 9: it carries a provider key).
+- `tests/test_backend_shims.py` pins the option mapping the harness depends
+  on: temperature/seed/num_predict forwarded, `format: json` mapped,
+  streaming asks for the usage tail, and `num_ctx` deliberately NOT
+  forwarded because upstream fixes context at model load.
+
+
 ### Second DeepSeek Harness pass: four mechanisms adopted
 
 `docs/DSH_GAP_ANALYSIS.md` records the sweep of the areas the first pass

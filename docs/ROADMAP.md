@@ -97,7 +97,7 @@ budget on plan/verify calls they cannot use, and the 14B/32B tiers get room.
 - Adopt escalation thresholds for `wrong_date` if it proves noisy in
   interactive use; the design note already records the shape.
 
-### 3. Phase 4: hardware layer
+### 3. Phase 4: hardware layer (DONE 2026-08-23)
 
 Copy `npu/ollama_shim.py` (270 lines) and `llamacpp/ollama_shim.py` (186
 lines), both stdlib-only, plus their operating notes. They impersonate Ollama
