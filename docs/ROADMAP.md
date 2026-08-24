@@ -87,13 +87,13 @@ budget on plan/verify calls they cannot use, and the 14B/32B tiers get room.
 
 ### 2. Quick wins alongside phase 3
 
-- Port f8b's `memory.py` retrieval (93 lines, drop-in): prefix overlap,
-  dedupe, torn-line tolerance.
-- Render what the runner already emits: `usage_by_role`, `prompt_tokens`, and
-  a tok/s figure in the Agent Lab end card.
-- Ship a `router` block in `agents/8b/config.json` so tiered routing (small
-  model for router/verifier roles) is on by default for the 8B agent instead
-  of opt-in per launch.
+- DONE: f8b's `memory.py` retrieval (prefix overlap, dedupe, torn-line
+  tolerance).
+- DONE: the Agent Lab end card renders `prompt_tokens`, tok/s, and per-role
+  usage when more than one role ran.
+- Deferred: a default `router` block in `agents/8b/config.json`. Turning
+  tiering on by default breaks the agent when the small model is not
+  installed, so it needs an installed-models check first.
 - Adopt escalation thresholds for `wrong_date` if it proves noisy in
   interactive use; the design note already records the shape.
 

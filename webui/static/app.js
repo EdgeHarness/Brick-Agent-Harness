@@ -1353,6 +1353,16 @@ function onEnd(e) {
                stat(e.output_tokens, 'tokens out'),
                stat(`${e.wall}s`, 'model time'),
                stat(e.actions.length, plural(e.actions.length, 'action')));
+  if (e.prompt_tokens) stats.append(stat(e.prompt_tokens, 'tokens in'));
+  if (e.wall > 0 && e.output_tokens) {
+    stats.append(stat((e.output_tokens / e.wall).toFixed(1), 'tok/s'));
+  }
+  if (e.usage_by_role && Object.keys(e.usage_by_role).length > 1) {
+    /* one compact line per role, only when more than one role actually ran */
+    for (const [role, u] of Object.entries(e.usage_by_role)) {
+      stats.append(stat(`${u.calls}c · ${u.output_tokens}t`, role));
+    }
+  }
   if (e.tool_errors) {
     stats.append(stat(e.tool_errors, plural(e.tool_errors, 'tool error'), true));
   }
@@ -1939,8 +1949,8 @@ if (!CAPABILITY) {
 } else {
   loadAgents();
   loadMcp();
+  $('new-chat').onclick = newChat;
 }
-$('new-chat').onclick = newChat;
 setInterval(() => { if (!S.run) loadAgents(true); }, 20000);
 
 /* Registering the worker is what makes the browser offer "Install app". Nothing

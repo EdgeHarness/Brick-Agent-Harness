@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Quick wins: memory retrieval, and run stats in the end card
+
+- `harness/memory.py` retrieval now counts a token pair when one is a prefix
+  of the other from four characters up, so "meeting preferences" finds a fact
+  saved as "prefer meetings". A duplicate fact is not saved twice (it would
+  crowd every memory_k slot with one fact), and a torn last line in the JSONL
+  is skipped instead of making the whole memory unloadable. The frozen study
+  never touches this module; the legacy exploratory runner starts each run
+  with an empty file.
+- The Agent Lab end card renders what the runner already emitted: prompt
+  tokens, tok/s, and per-role usage when more than one model role ran.
+- The missing-capability page no longer throws on load (the new-chat binding
+  ran after the body was replaced).
+
+
 ### Phase 3: per-model harness profiles
 
 - `harness/profiles.py`: a frozen `Profile` of the loop's tuning knobs (plan

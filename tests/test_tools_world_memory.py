@@ -124,10 +124,29 @@ def test_memory_append_reload_and_keyword_overlap(tmp_path):
     ]
 
 
-@pytest.mark.characterization
-def test_malformed_memory_row_prevents_store_loading(tmp_path):
+def test_malformed_memory_row_is_skipped_not_fatal(tmp_path):
+    # The agent appends mid-run, so a crash leaves a torn last line. One bad
+    # row must not make the whole memory unloadable for every future run.
     path = tmp_path / "memory.jsonl"
     path.write_text('{"fact": "valid"}\nnot-json\n', encoding="utf-8")
 
-    with pytest.raises(json.JSONDecodeError):
-        MemoryStore(str(path))
+    assert MemoryStore(str(path)).all() == ["valid"]
+
+
+def test_search_matches_plurals_by_prefix(tmp_path):
+    memory = MemoryStore(str(tmp_path / "memory.jsonl"))
+    memory.save("I prefer meetings after 14:00")
+
+    assert memory.search("meeting preferences", k=1) == [
+        "I prefer meetings after 14:00"
+    ]
+
+
+def test_duplicate_fact_is_not_saved_twice(tmp_path):
+    memory = MemoryStore(str(tmp_path / "memory.jsonl"))
+    memory.save("Dana owns the invoice")
+
+    assert memory.save("Dana owns the invoice") == (
+        "already in long-term memory: Dana owns the invoice"
+    )
+    assert memory.all() == ["Dana owns the invoice"]
