@@ -623,6 +623,31 @@ button.menu-row[aria-checked="true"] .tick { opacity: 1; }
 }
 .mcp-row .tick { margin-top: 1px; }
 
+/* "Check" under each connector row: what that server would expose, without
+   spending a run to find out. Indented to the label's text column so it reads
+   as belonging to the row above it. */
+.mcp-check { padding: 0 10px 8px 34px; }
+.mcp-check-btn {
+  font: inherit; font-size: var(--t-meta); color: var(--ink-dim);
+  background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: var(--r-xs); padding: 3px 10px; cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease;
+}
+.mcp-check-btn:hover:not(:disabled) { color: var(--ink); border-color: var(--ink-faint); }
+.mcp-check-btn:focus-visible { outline: 2px solid var(--ink-faint); outline-offset: 2px; }
+.mcp-check-btn:disabled { color: var(--ink-faint); cursor: default; }
+.mcp-check-out { margin-top: 7px; }
+.mcp-check-wait, .mcp-check-none, .mcp-check-head {
+  font-size: var(--t-meta); color: var(--ink-faint); line-height: var(--lh-read);
+}
+.mcp-check-head { font-family: var(--mono); margin-bottom: 5px; }
+
+/* A quiet run event: the harness trimmed context, or rewrote its plan. It is
+   the machine talking about itself, so it sits below the model's own voice. */
+.ev.sysline { padding: 2px 0; }
+.sysline-text { font-size: var(--t-meta); color: var(--ink-faint); font-style: italic; }
+.ev.sysline details { margin-top: 3px; }
+
 .mcp-mode {
   display: flex; align-items: center; justify-content: space-between;
   gap: 10px; margin-top: 10px; font-size: var(--t-sm); color: var(--ink);

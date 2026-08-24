@@ -38,7 +38,7 @@ DEFAULT_PORT = 8765
 from agents._shared.run_agent import validate_config  # noqa: E402
 from harness.domain import load_domain  # noqa: E402
 from harness import chat  # noqa: E402
-from harness import mcp_config  # noqa: E402
+from harness import mcp_bridge, mcp_config  # noqa: E402
 from harness.storage import agent_runtime_paths  # noqa: E402
 from webui.control import (  # noqa: E402
     ConfirmationLedger,
@@ -193,6 +193,61 @@ def require_mcp_mode(value):
     if value not in MCP_MODES:
         raise RequestError(400, "mcp_mode must be one of " + ", ".join(MCP_MODES))
     return value
+
+
+# One connector inspection at a time. mcp_bridge tracks its clients in a
+# module global and shuts them all down together, so two concurrent
+# inspections would close each other's processes. The server is threaded, so
+# this has to be said explicitly.
+_INSPECT_LOCK = threading.Lock()
+
+
+def inspect_connector(name, mode):
+    """Connect one server, report what it would expose, and disconnect.
+
+    The CLI has had this as --mcp-list since the bridge landed; the console
+    had no equivalent, so the only way to see a connector's tools was to
+    spend a real agent run looking at them. Wiring a connector is exactly the
+    moment you need the tool list, the effect classes, and the reasoning
+    behind them.
+
+    This launches the third-party server process the same way a run does, so
+    it can prompt for OAuth on a server that has never been authorised. That
+    is the same exposure the run path already has, at a cheaper moment.
+    """
+    if not _INSPECT_LOCK.acquire(blocking=False):
+        raise RequestError(409, "another connector check is already running")
+    try:
+        servers = mcp_config.names_to_servers([name], mode=mode)
+        specs, effects, summary = mcp_bridge.enable(servers, mode=mode)
+        server = summary[0] if summary else {}
+        classes = server.get("classified_by") or {}
+        return {
+            "name": name,
+            "mode": server.get("mode", mode),
+            "tools": [
+                {"name": tool,
+                 "effect": effects.get(tool, "read"),
+                 "why": classes.get(tool, "")}
+                for tool in server.get("tools", [])
+            ],
+            "warnings": (mcp_config.count_warnings(summary)
+                         + mcp_config.classification_warnings(summary)),
+        }
+    except mcp_config.ConfigError as exc:
+        # A missing executable or an unknown name is the operator's problem to
+        # fix and the message already says how, so it reaches the browser.
+        return {"name": name, "error": str(exc), "tools": [], "warnings": []}
+    except Exception as exc:
+        # Anything else came out of a third-party process. Report the type and
+        # a clipped message rather than a traceback that may quote credentials.
+        return {"name": name, "tools": [], "warnings": [],
+                "error": f"{type(exc).__name__}: {str(exc)[:300]}"}
+    finally:
+        try:
+            mcp_bridge.shutdown()
+        finally:
+            _INSPECT_LOCK.release()
 
 
 def agent_dir(agent):
@@ -830,6 +885,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.exact_query(query)
             self.authorize(path, mutation=True)
             body = read_json_object(self)
+            if path == "/api/mcp/inspect":
+                body = exact_object(body, required=("name",),
+                                    optional=("mode",))
+                name = require_string(body["name"], "name", maximum=64)
+                mode = require_mcp_mode(body.get("mode")) or "draft"
+                return self.send_json(inspect_connector(name, mode))
             if path == "/api/thread/new":
                 body = exact_object(body, required=("agent",),
                                     optional=("task",))

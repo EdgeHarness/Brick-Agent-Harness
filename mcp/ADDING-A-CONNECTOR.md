@@ -164,12 +164,17 @@ that tool rather than a list here.
 
 ## 7. Verify it, in this order
 
-**a. List the tools without running an agent.** This launches the server, prints
-what it exposes after filtering, and exits:
+**a. List the tools without running an agent.** Either open the Agent Lab, go
+to run options, Real accounts, and press **Check** under your connector, or
+use the CLI:
 
 ```bash
 python3 agents/8b/run_agent.py --mcp slack --mcp-list
 ```
+
+Both start the server, report what it exposes after filtering with each
+tool's effect class and the reason for it, and stop the server again. No
+model call either way.
 
 Check three things: the names are prefixed, the count is under budget, and every
 transmitting tool is absent in draft mode.

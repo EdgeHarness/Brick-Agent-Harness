@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+### Console gains what only the CLI could do
+
+Three capabilities existed in the harness and had no way in through the
+console, which is where connector work actually happens.
+
+- **Check a connector without running an agent.** `POST /api/mcp/inspect`
+  starts one server, reports every tool it would expose with its effect class
+  and the reason for that class, and stops it again. A **Check** button under
+  each connector in run options shows the result in place. This is the
+  console's `--mcp-list`, and it means wiring a new connector no longer costs
+  a real agent run just to see the tool names. One inspection at a time, since
+  the bridge shuts its clients down together.
+- **Context trimming is visible.** The `context` note has been emitted since
+  the pressure valve landed and the console dropped it, so a run that pruned
+  old tool results to stay inside the window looked identical to one that did
+  not.
+- **A guard's replan is visible.** Same for the `prompt` note: a cross-check
+  could spend an LLM call rewriting the plan and nothing appeared on screen.
+
+Both notes render as one dim system line, with the replan's prompt behind a
+disclosure.
+
+
 ### The connector audit reaches the console
 
 The runner had always emitted per-connector detail in the banner and the

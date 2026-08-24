@@ -1258,6 +1258,21 @@ function onNote(e) {
     push(ok ? 'made' : 'bad').append(d);
     return;
   }
+  /* Two notes the harness has always emitted and this console used to drop on
+     the floor, so work the run really did was invisible: it trimmed old tool
+     results to stay inside the context window, or it spent a call rewriting
+     its plan after a guard questioned a write. Both are quiet system events,
+     so they read as one dim line rather than a card. */
+  if (k === 'context') {
+    push('sysline').append(el('span', 'sysline-text', e.content));
+    return;
+  }
+  if (k === 'prompt') {
+    const n = push('sysline');
+    n.append(el('span', 'sysline-text', 'rewrote the plan after a cross-check'));
+    n.append(details('what it was asked', e.content));
+    return;
+  }
   /* Held, not drawn. The `done` note and the `end` event both carry a sentence
      about the same run, and rendering both produced two near-identical
      paragraphs in a row. They belong in one card. */
@@ -1825,8 +1840,88 @@ async function loadMcp() {
     tick.setAttribute('aria-hidden', 'true');
     row.append(cb, label, tick);
     box.append(row);
+    box.append(checkRow(s.name));
   }
   paintOptDots();
+}
+
+/* "Check" against one connector: start the server, read back the tools it
+   would expose and how each was classified, stop it again. No model call and
+   no run.
+
+   Wiring a connector is exactly when you need the tool list, and until now
+   the only way to see it was --mcp-list in a terminal or spending a real run
+   to look. The result lands under the row you clicked rather than in a
+   dialog, because it is an answer about that row and you are usually about
+   to tick the box next to it. */
+function checkRow(name) {
+  const wrap = el('div', 'mcp-check');
+  const btn = el('button', 'mcp-check-btn', 'Check');
+  btn.type = 'button';
+  btn.setAttribute('aria-label', `Check what ${name} exposes`);
+  const out = el('div', 'mcp-check-out');
+  out.hidden = true;
+  btn.onclick = async () => {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = 'Starting…';
+    out.hidden = false;
+    out.textContent = '';
+    out.append(el('div', 'mcp-check-wait',
+                  'Starting the server. First run can wait on a download or a sign-in.'));
+    try {
+      const r = await post('/api/mcp/inspect', {
+        name, mode: $('opt-mcp-mode').value,
+      });
+      out.textContent = '';
+      out.append(renderCheck(r));
+    } catch (err) {
+      out.textContent = '';
+      out.append(el('div', 'connector-warn', String(err.message || err)));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Check';
+    }
+  };
+  wrap.append(btn, out);
+  return wrap;
+}
+
+function renderCheck(r) {
+  const box = el('div');
+  if (r.error) {
+    box.append(el('div', 'connector-warn', r.error));
+    return box;
+  }
+  for (const w of r.warnings || []) box.append(el('div', 'connector-warn', w));
+  const tools = r.tools || [];
+  if (!tools.length) {
+    /* Reached the server and it offered nothing usable: in draft mode that is
+       the expected answer for a transmit-only surface, so say which mode
+       produced it rather than leaving a blank panel. */
+    box.append(el('div', 'mcp-check-none',
+                  `Connected, but no tool survives ${r.mode} mode.`));
+    return box;
+  }
+  const writes = tools.filter((t) => t.effect !== 'read').length;
+  box.append(el('div', 'mcp-check-head',
+                `${tools.length} tools · ${writes} can change something`));
+  const list = el('div', 'connector-tools');
+  for (const t of tools) {
+    const isWrite = t.effect !== 'read';
+    const row = el('div', 'connector-tool');
+    row.append(el('span', 'tool-kind ' + (isWrite ? 'is-write' : 'is-read'),
+                  isWrite ? 'write' : 'read'),
+               el('span', 'tool-name', t.name));
+    if (t.why) {
+      row.append(el('span',
+                    'tool-why' + (t.why === 'unclassified' ? ' guessed' : ''),
+                    t.why));
+    }
+    list.append(row);
+  }
+  box.append(list);
+  return box;
 }
 
 function mcpSelected() {

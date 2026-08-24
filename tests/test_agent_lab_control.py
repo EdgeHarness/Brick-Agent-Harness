@@ -613,3 +613,71 @@ def test_the_call_field_cannot_offer_more_than_the_server_accepts():
     assert "Math.min(80, Math.max(2, n))" in source
     assert 'max_calls", minimum=2, maximum=80' in (
         root / "webui/server.py").read_text(encoding="utf-8")
+
+
+# ------------------------------------------------ connector inspection ----
+#
+# The console can start one connector, read back what it would expose, and
+# stop it, without spending a model call. These cover the trust boundary and
+# the failure shapes; the happy path against a real server is exercised by
+# tests/test_mcp_bridge.py and by running the selftest connector.
+
+def test_connector_inspection_requires_the_capability(lab_server):
+    status, _, _ = request(
+        lab_server, "POST", "/api/mcp/inspect",
+        body={"name": "selftest"},
+        headers={"Content-Type": "application/json"},
+    )
+    assert status == 401
+
+
+def test_connector_inspection_rejects_an_unknown_field(lab_server):
+    status, _, _ = request(
+        lab_server, "POST", "/api/mcp/inspect",
+        body={"name": "selftest", "command": "rm -rf /"},
+        headers=authorized(lab_server, origin=True, content_type=True),
+    )
+    assert status == 400
+
+
+def test_connector_inspection_rejects_an_unknown_mode(lab_server):
+    status, _, _ = request(
+        lab_server, "POST", "/api/mcp/inspect",
+        body={"name": "selftest", "mode": "yolo"},
+        headers=authorized(lab_server, origin=True, content_type=True),
+    )
+    assert status == 400
+
+
+def test_connector_inspection_reports_an_unknown_server_without_raising(lab_server):
+    # A name that is not in the registry is the operator's typo, and the
+    # message names the known servers, so it belongs in the response body
+    # rather than in a 500.
+    status, _, body = request(
+        lab_server, "POST", "/api/mcp/inspect",
+        body={"name": "not-a-real-connector"},
+        headers=authorized(lab_server, origin=True, content_type=True),
+    )
+    assert status == 200
+    payload = json.loads(body)
+    assert payload["tools"] == []
+    assert "unknown MCP server" in payload["error"]
+
+
+def test_connector_inspection_lists_tools_with_their_effect_and_reason(lab_server):
+    # selftest is a stdlib MCP server in this repo: no credentials, no network.
+    status, _, body = request(
+        lab_server, "POST", "/api/mcp/inspect",
+        body={"name": "selftest", "mode": "draft"},
+        headers=authorized(lab_server, origin=True, content_type=True),
+    )
+    assert status == 200
+    payload = json.loads(body)
+    by_name = {t["name"]: t for t in payload["tools"]}
+    assert by_name["mail_list_mail"]["effect"] == "read"
+    assert by_name["mail_list_mail"]["why"] == "read verb"
+    # classified by the registry's write_tools override, not by its name
+    assert by_name["mail_modify_mail"]["effect"] == "external_write"
+    assert by_name["mail_modify_mail"]["why"] == "override"
+    # draft mode never exposes a tool that transmits to a person
+    assert not [n for n in by_name if "send" in n]
