@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### As-is analysis and to-be roadmap
+
+- `docs/ROADMAP.md`: what is proven (F0 feasibility, S4 gate, 1,097 offline
+  tests) versus what is not (no harness efficacy number exists), the run-cost
+  knobs `run_harness` currently hardcodes against final-agent-8b's per-model
+  profiles, and the ordered plan: phase 3 profiles, quick wins (memory
+  retrieval, surfacing emitted token/role stats, default 8B tiering), phase 4
+  backend shims, the v0.13.6 lane as the only route to a claimable number, and
+  phase 5 retiring final-agent-8b to a shipping instance.
+
+
 ### Phase 2 steps 3 and 4: the five guards, ported and wired
 
 Advisory cross-checks that question a suspicious tool call once and never
