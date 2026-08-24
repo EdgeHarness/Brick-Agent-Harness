@@ -1,0 +1,218 @@
+{
+  "schema_version": "brick.connectors/1",
+  "limits": {
+    "max_connector_tools": 8,
+    "max_total_tools": 25
+  },
+  "providers": {
+    "hubspot": {
+      "summary": "HubSpot CRM through HubSpot's official remote MCP server.",
+      "transport": "mcp_streamable_http",
+      "setup": [
+        "Requires Python 3.10+, the connectors optional dependency, and an operator OAuth login.",
+        "Run authenticated discovery against a HubSpot developer or sandbox portal before binding tools.",
+        "No dynamic HubSpot tool is exposed directly to the model."
+      ],
+      "tools": [
+        {
+          "name": "hs_find_contact",
+          "binding_key": "find_contact",
+          "description": "Find HubSpot contacts by a supplied name or email fragment.",
+          "params": {
+            "query": {"type": "string", "required": true},
+            "limit": {"type": "integer from 1 to 20", "required": false}
+          },
+          "example": {"query": "alex@example.com", "limit": 5},
+          "normalized_schema_sha256": "7879af2e548f20e9d3595b4e44b762fe77425948f8f800d6b4ca7c91f2e9e5d6",
+          "effect": "read",
+          "transmits": false,
+          "invites": false,
+          "modes": ["read_only", "draft", "live"],
+          "idempotent": true,
+          "retry": "safe",
+          "rate_limit_bucket": "hubspot"
+        },
+        {
+          "name": "hs_get_contact",
+          "binding_key": "get_contact",
+          "description": "Read one HubSpot contact using an identifier returned by HubSpot.",
+          "params": {
+            "contact_id": {"type": "string", "required": true}
+          },
+          "example": {"contact_id": "contact_123"},
+          "normalized_schema_sha256": "6c74b7420329c6be5bd1c1bfa5ca1c78c3e725bd8873526844a44b5638fb6d8a",
+          "effect": "read",
+          "transmits": false,
+          "invites": false,
+          "modes": ["read_only", "draft", "live"],
+          "idempotent": true,
+          "retry": "safe",
+          "rate_limit_bucket": "hubspot"
+        },
+        {
+          "name": "hs_recent_activity",
+          "binding_key": "recent_activity",
+          "description": "Read recent CRM activity associated with one HubSpot contact.",
+          "params": {
+            "contact_id": {"type": "string", "required": true},
+            "limit": {"type": "integer from 1 to 20", "required": false}
+          },
+          "example": {"contact_id": "contact_123", "limit": 10},
+          "normalized_schema_sha256": "6bcee63e77359c2aa0d801a2b229166c84c0c8a3285ef2fa82b88ec02cb68b90",
+          "effect": "read",
+          "transmits": false,
+          "invites": false,
+          "modes": ["read_only", "draft", "live"],
+          "idempotent": true,
+          "retry": "safe",
+          "rate_limit_bucket": "hubspot"
+        },
+        {
+          "name": "hs_open_followups",
+          "binding_key": "open_followups",
+          "description": "Read open HubSpot follow-up activities for one owner through a due date.",
+          "params": {
+            "owner_id": {"type": "string", "required": true},
+            "due_before": {"type": "ISO 8601 date", "required": true},
+            "limit": {"type": "integer from 1 to 20", "required": false}
+          },
+          "example": {"owner_id": "owner_123", "due_before": "2026-08-31", "limit": 10},
+          "normalized_schema_sha256": "f69c962167cfac9a43baa09812ba3aacf275c636c37587c97fc189c792dbdc06",
+          "effect": "read",
+          "transmits": false,
+          "invites": false,
+          "modes": ["read_only", "draft", "live"],
+          "idempotent": true,
+          "retry": "safe",
+          "rate_limit_bucket": "hubspot"
+        },
+        {
+          "name": "hs_log_note",
+          "binding_key": "log_note",
+          "description": "Add one internal note to a specific HubSpot contact after operator confirmation.",
+          "params": {
+            "contact_id": {"type": "string", "required": true},
+            "body": {"type": "string", "required": true}
+          },
+          "example": {"contact_id": "contact_123", "body": "Left a voicemail and will follow up Tuesday."},
+          "normalized_schema_sha256": "e267b3734ca52f337e43aa3231b3aadaae65caaa70b1031810b93cc863ed211d",
+          "effect": "external_write",
+          "transmits": false,
+          "invites": false,
+          "modes": ["live"],
+          "idempotent": false,
+          "retry": "never",
+          "rate_limit_bucket": "hubspot"
+        }
+      ]
+    },
+    "optix": {
+      "summary": "Optix workspace operations through fixed, reviewed GraphQL documents.",
+      "transport": "graphql",
+      "setup": [
+        "Requires Brix's Optix plan to include developer API access and an operator-managed token.",
+        "Run authenticated schema discovery in a sandbox before binding any operation.",
+        "The model is never given an arbitrary GraphQL query surface."
+      ],
+      "tools": [
+        {
+          "name": "optix_find_member",
+          "binding_key": "find_member",
+          "description": "Find Optix members using a supplied name or email fragment.",
+          "params": {
+            "query": {"type": "string", "required": true},
+            "limit": {"type": "integer from 1 to 20", "required": false}
+          },
+          "example": {"query": "alex@example.com", "limit": 5},
+          "normalized_schema_sha256": "5c1648ba269a87d38efca432e8dd3c3f14d4f42201856ebb8a2dfa616679822e",
+          "effect": "read",
+          "transmits": false,
+          "invites": false,
+          "modes": ["read_only", "draft", "live"],
+          "idempotent": true,
+          "retry": "safe",
+          "rate_limit_bucket": "optix"
+        },
+        {
+          "name": "optix_list_rooms",
+          "binding_key": "list_rooms",
+          "description": "List bookable Optix room resources, optionally within one location.",
+          "params": {
+            "location_id": {"type": "string", "required": false}
+          },
+          "example": {"location_id": "downtown"},
+          "normalized_schema_sha256": "33f8fa333af5f13874b826bf9e6496b59b1bf06035d6a587d3be683760de763d",
+          "effect": "read",
+          "transmits": false,
+          "invites": false,
+          "modes": ["read_only", "draft", "live"],
+          "idempotent": true,
+          "retry": "safe",
+          "rate_limit_bucket": "optix"
+        },
+        {
+          "name": "optix_room_availability",
+          "binding_key": "room_availability",
+          "description": "Check one Optix room for availability during an exact time range.",
+          "params": {
+            "room_id": {"type": "string", "required": true},
+            "start": {"type": "ISO 8601 date-time with offset", "required": true},
+            "end": {"type": "ISO 8601 date-time with offset", "required": true}
+          },
+          "example": {"room_id": "room_3", "start": "2026-08-25T10:00:00-05:00", "end": "2026-08-25T11:00:00-05:00"},
+          "normalized_schema_sha256": "56e5c783e4528a993799d5175130868d20406065af36ac40399f7635155c4c32",
+          "effect": "read",
+          "transmits": false,
+          "invites": false,
+          "modes": ["read_only", "draft", "live"],
+          "idempotent": true,
+          "retry": "safe",
+          "rate_limit_bucket": "optix"
+        },
+        {
+          "name": "optix_draft_booking",
+          "binding_key": "draft_booking",
+          "description": "Validate an Optix booking request without assuming that it is non-persistent.",
+          "params": {
+            "member_id": {"type": "string", "required": true},
+            "owner_user_id": {"type": "string", "required": true},
+            "room_id": {"type": "string", "required": true},
+            "start": {"type": "ISO 8601 date-time with offset", "required": true},
+            "end": {"type": "ISO 8601 date-time with offset", "required": true}
+          },
+          "example": {"member_id": "member_123", "owner_user_id": "user_123", "room_id": "room_3", "start": "2026-08-25T10:00:00-05:00", "end": "2026-08-25T11:00:00-05:00"},
+          "normalized_schema_sha256": "9dd2f10a85d8a808537c6dfbf8f03865e47f653bd7c4f9b06b7790983b25e4b8",
+          "effect": "external_write",
+          "transmits": false,
+          "invites": false,
+          "modes": ["draft", "live"],
+          "idempotent": false,
+          "retry": "never",
+          "rate_limit_bucket": "optix"
+        },
+        {
+          "name": "optix_commit_booking",
+          "binding_key": "commit_booking",
+          "description": "Commit one previously validated Optix booking using the same reviewed inputs after operator confirmation.",
+          "params": {
+            "booking_session_id": {"type": "string", "required": true},
+            "member_id": {"type": "string", "required": true},
+            "owner_user_id": {"type": "string", "required": true},
+            "room_id": {"type": "string", "required": true},
+            "start": {"type": "ISO 8601 date-time with offset", "required": true},
+            "end": {"type": "ISO 8601 date-time with offset", "required": true}
+          },
+          "example": {"booking_session_id": "session_123", "member_id": "member_123", "owner_user_id": "user_123", "room_id": "room_3", "start": "2026-08-25T10:00:00-05:00", "end": "2026-08-25T11:00:00-05:00"},
+          "normalized_schema_sha256": "556507dcc6ddb63428ffdcca8f857db1dcfb63fdc1fc58e9e3f8344960e1f274",
+          "effect": "external_write",
+          "transmits": true,
+          "invites": true,
+          "modes": ["live"],
+          "idempotent": false,
+          "retry": "never",
+          "rate_limit_bucket": "optix"
+        }
+      ]
+    }
+  }
+}

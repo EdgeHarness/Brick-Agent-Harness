@@ -89,6 +89,23 @@ direction. `mcp_bridge.classify()` replaces the single name regex:
 Registry overrides still win over everything and are unchanged.
 `mcp/ADDING-A-CONNECTOR.md` sections 3 and 4 rewritten to match.
 
+### Normalized Brix connector boundary
+
+- Added an isolated `connectors/` package that exposes fixed Brick schemas over
+  HubSpot's official remote MCP server and fixed Optix GraphQL documents. Both
+  checked-in providers remain unbound until authenticated sandbox discovery and
+  review.
+- Added explicit account/catalog/schema binding, read-only/draft/live mode
+  enforcement, pre-write catalog revalidation, one-shot confirmation summaries,
+  fixed tool ceilings, non-idempotent operation ledgering, Optix rate limiting,
+  uncertain-write reconciliation, and deterministic client shutdown.
+- Added OS-keyring credential storage and official MCP SDK OAuth 2.1/PKCE wiring
+  for Python 3.10+. Core Python 3.9 support is unchanged.
+- Real-account runs now use run-only memory and minimal audit logs instead of
+  persisting tasks, transcripts, provider observations, answers, or chat turns.
+- Hardened the older MCP subprocess bridge with optional exact tool policies,
+  narrowed agent overrides, an explicit child environment, structured
+  observations, catalog-change write blocking, and bounded external tool sets.
 
 ### Phase 5: Final-Agent-8B retired to a shipping instance
 

@@ -1,67 +1,74 @@
-# Adding a connector
+# Adding an audited MCP subprocess
 
-How to give the agent a new real-account capability (Slack, Notion, Jira, a
-first-party server you wrote) so it appears in the Agent Lab run panel and its
-tools land in a task's registry.
+This registry is for off-the-shelf stdio MCP servers such as Gmail, Google
+Calendar, and Microsoft 365. HubSpot and Optix use the stricter normalized layer
+in [`../connectors/README.md`](../connectors/README.md).
 
-**The short version: you add one JSON object to `servers.json`. No harness code.**
+Adding an entry does not make its dynamic catalog safe. Discover the actual
+server surface and narrow it before use. Exact `tool_policies` are preferred;
+when a generic server cannot supply them, the conservative classifier and the
+Agent Lab inspection view make every assumption visible.
 
-The registry is data, not code. `webui/server.py` builds the connector picker
-from `mcp_config.available()`, which reads this file, so a new entry shows up in
-the picker on the next restart with nothing else touched.
-
----
-
-## 1. The minimal entry
-
-Open [servers.json](servers.json) and add a key. This is the smallest thing
-that works:
+## Required registry entry
 
 ```json
 "slack": {
-  "summary": "Slack, read channels and post messages.",
+  "summary": "Slack sandbox reads and reviewed drafts.",
   "command": "npx",
-  "args": ["-y", "@some/slack-mcp-server"],
-  "prefix": "slack_"
+  "args": ["-y", "@reviewed/slack-mcp-server"],
+  "prefix": "slack_",
+  "allow": ["list_channels", "read_messages", "create_draft"],
+  "tool_policies": {
+    "list_channels": {
+      "effect": "read",
+      "transmits": false,
+      "invites": false
+    },
+    "read_messages": {
+      "effect": "read",
+      "transmits": false,
+      "invites": false
+    },
+    "create_draft": {
+      "effect": "external_write",
+      "transmits": false,
+      "invites": false
+    }
+  },
+  "setup": ["Complete OAuth outside the model run."],
+  "docs": "https://provider.example/docs"
 }
 ```
 
-That is enough to launch, list, and adapt. Everything below is refinement.
+When `tool_policies` is present, there is no name-based fallback: an absent
+allow list, missing policy, unknown field, or policy outside the allow list
+prevents launch. Generic entries without `tool_policies` retain the separately
+audited annotation/name classifier described below. Normalized HubSpot tools do
+not use this generic fallback.
 
-`prefix` is not optional in practice. Without it, a server whose tool is called
-`search` claims the bare name `search` in a registry it shares with the domain's
-own tools. Prefix everything.
+## Execution fields
 
----
-
-## 2. What each field does
-
-**Fields the bridge acts on** (anything else is documentation and is stripped
-before launch, see `_BRIDGE_KEYS` in [../harness/mcp_config.py](../harness/mcp_config.py)):
-
-| field | purpose |
+| field | rule |
 |---|---|
-| `command`, `args` | how to launch the server. Run with `subprocess.Popen`, no shell |
-| `env`, `cwd` | passed through. `~` and `${VARS}` are expanded, so credential paths are not machine specific. `${ROOT}` is this repository |
-| `prefix` | prepended to every tool name. Use it |
-| `allow` | whitelist of MCP tool names to expose. Everything else is dropped |
-| `drop` | blacklist, for when a whitelist is overkill |
-| `read_tools`, `write_tools` | override the write classifier. **Read section 4** |
-| `arg_hints`, `hide_params` | reshape a tool's parameters for a small model |
-| `mode` | `draft` / `live` / `read_only`, overriding the run's mode for this server only |
+| `command`, `args` | fixed registry-owned launcher, no shell |
+| `env`, `cwd` | fixed registry-owned values; agent configs cannot replace them |
+| `prefix` | stable Brick prefix for discovered tool names |
+| `allow` | reviewed provider tool list; required with `tool_policies` |
+| `drop` | additional registry-owned removals |
+| `tool_policies` | optional strict path: exact `effect`, `transmits`, and `invites` for every allowed tool |
+| `arg_hints`, `hide_params` | reviewed rendering adjustments for a small local model |
+| `mode` | optional fixed `read_only`, `draft`, or `live` restriction |
 
-**Documentation-only fields**, which the UI does surface to the user:
+Agent configuration may only narrow `allow`, add names to `drop`, or choose a
+valid mode. It cannot change a command, executable arguments, environment,
+working directory, policy, prefix, or schema hint.
 
-| field | purpose |
-|---|---|
-| `summary` | one line, shown next to the checkbox in the run panel |
-| `setup` | list of strings, shown as setup steps. Put the OAuth dance here |
-| `docs` | upstream URL |
-| `notes` | why any override above exists. Future you will need this |
+The child receives a small platform environment needed to start (`PATH`, temp,
+home, and Windows system variables) plus exactly the values declared by its
+registry entry. Credential-shaped variables from the parent shell are not
+inherited accidentally.
 
----
-
-## 3. Effect classes are assigned for you, safe side first
+## Policy classification
 
 `enable()` returns an effect per tool alongside the specs, and `ActionPolicy`
 is what reads it. An MCP tool gets one of two of this harness's four classes:
@@ -71,31 +78,44 @@ is what reads it. An MCP tool gets one of two of this harness's four classes:
 
 | order | source | shown in `--mcp-list` as |
 |---|---|---|
-| 1 | your `read_tools` / `write_tools` in this file | `override` |
-| 2 | the server's MCP annotations (`readOnlyHint`, `destructiveHint`) | `declared` |
-| 3 | a read verb leading the name (`list_`, `get_`, `search_`, ...) | `read verb` |
-| 4 | a write verb anywhere in the name | `write verb` |
-| 5 | nothing matched | `unclassified`, **treated as a write** |
+| 1 | exact `tool_policies` entry | `policy` |
+| 2 | `read_tools` / `write_tools` override | `override` |
+| 3 | server MCP annotations (`readOnlyHint`, `destructiveHint`) | `declared` |
+| 4 | a read verb leading the name (`list_`, `get_`, `search_`, ...) | `read verb` |
+| 5 | a write verb anywhere in the name | `write verb` |
+| 6 | nothing matched | `unclassified`, **treated as a write** |
 
-Step 5 is the important one. A name with no verb this harness recognises
+The final step is the important one. A name with no verb this harness recognises
 (`upsert_contact`, `merge_records`, `execute_workflow`) is a write until you
 say otherwise, and the run prints those names so you can confirm them. It used
 to fall through to `read`, which published them with no confirmation.
 
-Note what is missing: an MCP tool is **never** classified `state_write`. From a
-name alone we cannot tell whether a write reaches another person, and a calendar
-invite does. Guessing the recoverable class would be guessing in the one
-direction that costs something.
+An entry that supplies `tool_policies` opts into the stricter path. Every
+allowed tool then declares:
 
-In `draft` mode, any tool whose name matches send / forward / reply is dropped
-entirely and never reaches the model.
+- `effect`: `read` or `external_write`;
+- `transmits`: whether it can put content in front of another person or system;
+- `invites`: whether it can create or change an invitation.
 
-Confirmation is not configured here and is not implemented in the executor. The
-loop confirms every mutating call through `ActionPolicy`, deny-by-default: with
-no confirmer wired, an `external_write` is refused rather than run. Classifying
-the tool correctly is the whole of your job.
+`read_only` exposes only `read`. `draft` removes every `transmits` or `invites`
+tool even if an agent config asks for it. `live` may expose a reviewed write,
+but `ActionPolicy` still requires one explicit operator confirmation. Missing or
+declined confirmation denies the call.
 
----
+A calendar operation with attendees is both transmitting and invitation-capable.
+A draft stored in a provider is still an external write even if it does not send.
+
+## Catalog and result safety
+
+The bridge adapts only allowed names. An MCP
+`notifications/tools/list_changed` event marks the catalog stale and blocks all
+later writes until a fresh connection is reviewed. Structured MCP results stay
+structured and are bounded/redacted before entering an observation.
+
+Transport and subprocess failures are environment failures. A provider's
+explicit tool-result error remains model-visible so the model can correct bad
+arguments. Credentials and credential-shaped diagnostics are redacted before
+stderr, browser events, transcripts, or logs.
 
 ## 4. Your one manual job: resolve the `unclassified` list
 
@@ -130,18 +150,45 @@ Two conveniences worth knowing:
 Write a `notes` entry saying why each override exists. Future you needs the
 reason, not the list.
 
----
+## Tool limits
 
-## 5. Watch the tool count
+One run may expose at most 8 external connector tools and 25 tools total,
+including the domain registry. This is a hard refusal, not a warning. Use the
+server's own preset and then a narrow `allow` list. Do not expose a broad dynamic
+catalog to a small model.
 
-A small model at `num_ctx 8192` carries the entire tool list in its system
-prompt. A server that injects 60 tools does not fail loudly, it quietly makes
-the agent stupid, because the model starts picking tools at random.
+When two reviewed accounts provide the same prefixed capability, the bridge
+uses one brokered tool with a required `account` argument. There is no default
+account.
 
-`TOOL_BUDGET_WARN` is 25 and `count_warnings()` flags a run before it starts.
+## Simulated tools
+
+By default, attaching a real account drops domain tools that declare
+`simulates`, avoiding a fake inbox beside a real one. `--keep-office-tools`
+keeps them only when the operator intentionally wants both.
+
+Real-account runs use run-only memory and do not persist their task, transcript,
+observations, answer, or normal chat turn.
+
+## Verification order
+
+1. Discover the real server catalog outside a model run.
+2. Add the smallest reviewed allow list and exact policies.
+3. List the adapted surface with no inference:
+
+   ```powershell
+   python agents\8b\run_agent.py --mcp selftest --mcp-list
+   ```
+
+4. Run offline boundary tests:
+
+   ```powershell
+   python -m pytest -q tests/test_mcp_bridge.py tests/test_connectors.py
+   ```
 
 Measured, not guessed: the ms365 server returns **69 tools** even with
-`--preset mail,calendar`. That is why its entry has a ten-name `allow` list.
+`--preset mail,calendar`. That is why its reviewed entry has a narrow `allow`
+list.
 
 Use the server's own preset flag first, then `allow` to cut the rest. Derive the
 list from real `--mcp-list` output, never from the upstream docs.
@@ -240,16 +287,20 @@ the shapes off a live `--mcp-list`, not the vendor docs, because they disagree.
 
 - [ ] entry added to `servers.json` with `summary`, `command`, `args`, `prefix`
 - [ ] `setup` steps written, including any OAuth dance
-- [ ] tool count under 25 after `allow`, verified with `--mcp-list`
-- [ ] no tool left `unclassified` in `--mcp-list`, each resolved into
-      `read_tools` or `write_tools`
-- [ ] `notes` explaining each override
+- [ ] nonempty allow list derived from authenticated discovery when exact
+      `tool_policies` are used
+- [ ] every exact-policy tool declares effect, transmission, and invitation
+- [ ] otherwise, no tool is left `unclassified`; resolve each into
+      `read_tools` or `write_tools` and explain the override in `notes`
+- [ ] at most 8 external tools and 25 total tools in an actual agent run
 - [ ] `--mcp-list` shows no transmitting tools in draft mode
+- [ ] structured result and catalog-change behavior tested
+- [ ] credentials remain outside the repository and model context
 - [ ] `python3 -m pytest tests/test_mcp_bridge.py -q` passes
 - [ ] `python3 -m pytest -q` passes
 - [ ] connector visible in the Agent Lab run options panel
+- [ ] no write enabled before sandbox confirmation
 
-## Related
-
-- [../harness/mcp_bridge.py](../harness/mcp_bridge.py), whose module docstring
-  records what this port deliberately does not do and why.
+The self-test server at [`selftest_server.py`](selftest_server.py) is the offline
+protocol fixture. The production adapter is
+[`../harness/mcp_bridge.py`](../harness/mcp_bridge.py).

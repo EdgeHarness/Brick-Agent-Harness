@@ -7,6 +7,7 @@ import re
 from types import MappingProxyType
 
 from .errors import ToolError
+from . import faults
 
 _TOOL_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -117,6 +118,19 @@ def _validate_spec(name, spec):
         raise TypeError(
             f"tool {name!r} suppress_identical_repeats must be bool"
         )
+    confirmation = spec.get("confirmation")
+    if confirmation is not None:
+        if not callable(confirmation):
+            raise TypeError(f"tool {name!r} confirmation must be callable")
+        try:
+            inspect.signature(confirmation).bind({})
+        except (TypeError, ValueError) as exc:
+            raise TypeError(
+                f"tool {name!r} confirmation must accept args"
+            ) from exc
+    propagate = spec.get("propagate_faults", False)
+    if type(propagate) is not bool:
+        raise TypeError(f"tool {name!r} propagate_faults must be bool")
     # What a tool declares about its relationship to files. Cross-checks read
     # these rather than a list of tool names kept elsewhere, so a tool added to
     # a pack later is covered by whatever declares itself, and a pack that has
@@ -302,14 +316,35 @@ class ToolRegistry:
             obs = _fmt(result)
             attempt.record_action(name, args, True, obs)
             ok = True
+        except faults.ModelInputFault as error:
+            if spec.get("propagate_faults"):
+                attempt.record_action(name, args, False, str(error))
+                ok, obs = False, f"ERROR: {error}"
+            else:
+                # Preserve the historical generic-exception observation for
+                # every existing simulated/benchmark tool.
+                attempt.record_action(name, args, False, repr(error))
+                ok, obs = False, f"ERROR: {type(error).__name__}: {error}"
+        except faults.BrickFault as error:
+            if spec.get("propagate_faults"):
+                attempt.record_action(name, args, False, str(error))
+                raise
+            attempt.record_action(name, args, False, repr(error))
+            ok, obs = False, f"ERROR: {type(error).__name__}: {error}"
         except ToolError as error:
             attempt.record_action(name, args, False, str(error))
             ok, obs = False, f"ERROR: {error}"
         except KeyError as error:
+            if spec.get("propagate_faults"):
+                attempt.record_action(name, args, False, "connector execution failed")
+                raise faults.RunnerFault("connector execution failed") from error
             msg = f"missing required parameter {error.args[0]!r}"
             attempt.record_action(name, args, False, msg)
             ok, obs = False, f"ERROR: {msg}"
         except Exception as error:  # preserve current keep-the-episode-alive behavior
+            if spec.get("propagate_faults"):
+                attempt.record_action(name, args, False, "connector execution failed")
+                raise faults.RunnerFault("connector execution failed") from error
             attempt.record_action(name, args, False, repr(error))
             ok, obs = False, f"ERROR: {type(error).__name__}: {error}"
         if attempt.hooks.on_tool:

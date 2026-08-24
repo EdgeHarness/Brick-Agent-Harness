@@ -26,6 +26,9 @@ from harness.runtime import (  # noqa: E402
     RunConfig,
 )
 from harness.storage import agent_runtime_paths  # noqa: E402
+from connectors import config as connector_config  # noqa: E402
+from connectors import runtime as connector_runtime  # noqa: E402
+from connectors.privacy import EphemeralMemoryStore, EphemeralRunStorage  # noqa: E402
 
 
 # LLM calls one interactive run may spend before the loop stops it. A ceiling,
@@ -43,6 +46,7 @@ ALLOWED_CONFIG_KEYS = frozenset(
     {
         "domain",
         "harness",
+        "connectors",
         "max_calls",
         "mcp",
         "model",
@@ -103,6 +107,24 @@ def parse_flags(argv):
         help="print what each registered server needs, and exit",
     )
     parser.add_argument(
+        "--connector",
+        help="comma-separated normalized business connectors (hubspot,optix), "
+             "or 'none' to override an agent config",
+    )
+    parser.add_argument(
+        "--connector-mode", choices=("draft", "live", "read_only")
+    )
+    parser.add_argument(
+        "--connector-list",
+        action="store_true",
+        help="connect, print reviewed normalized tools, and exit",
+    )
+    parser.add_argument(
+        "--connector-help",
+        action="store_true",
+        help="print normalized connector setup requirements and exit",
+    )
+    parser.add_argument(
         "--keep-office-tools",
         action="store_true",
         help="keep the simulated inbox and calendar alongside real ones",
@@ -121,6 +143,10 @@ def parse_flags(argv):
         "mcp_mode": parsed.mcp_mode,
         "mcp_list": parsed.mcp_list,
         "mcp_help": parsed.mcp_help,
+        "connector": parsed.connector,
+        "connector_mode": parsed.connector_mode,
+        "connector_list": parsed.connector_list,
+        "connector_help": parsed.connector_help,
         "keep_office_tools": parsed.keep_office_tools,
     }
     return options, " ".join(parsed.task).strip()
@@ -142,7 +168,7 @@ def validate_config(config):
             )
 
 
-def build_llm(config, options, log_dir, stream_hook=None):
+def build_llm(config, options, log_dir, stream_hook=None, persist_log=True):
     """Construct one LLM/router for this active attempt."""
     use_router = options["tiers"] or bool(config.get("router"))
     if not use_router:
@@ -162,8 +188,10 @@ def build_llm(config, options, log_dir, stream_hook=None):
         deep=options["deep"]
         or router_config.get("deep", "qwen2.5:14b"),
     )
-    log_path = os.path.join(log_dir, "model_calls.jsonl")
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    log_path = None
+    if persist_log:
+        log_path = os.path.join(log_dir, "model_calls.jsonl")
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
     router = ModelRouter(
         roles=roles,
         num_ctx=config.get("num_ctx", 8192),
@@ -186,12 +214,25 @@ def _mcp_names(options, config_data):
     return ([] if asked == ["none"] else asked), cfg
 
 
-def _terminal_confirmer(mode):
+def _connector_names(options, config_data):
+    cfg = config_data.get("connectors") or {}
+    if not isinstance(cfg, dict) or set(cfg) - {"enable", "mode"}:
+        raise ValueError("configured-agent connectors may contain only enable and mode")
+    if options["connector"] is None:
+        names = list(cfg.get("enable") or [])
+    else:
+        asked = [n.strip() for n in options["connector"].split(",") if n.strip()]
+        names = [] if asked == ["none"] else asked
+    return names, cfg
+
+
+def _terminal_confirmer(mode_by_tool):
     """Consent for a write that touches a real account.
 
     ActionPolicy denies when there is no confirmer, so the CLI has to supply
     one or every real write fails. A bare Enter is not consent."""
     def confirm(action, detail):
+        mode = mode_by_tool.get(action, "real account")
         print(f"\n  [{mode}] {action}: {detail}")
         try:
             return input("  allow this? [y/N] ").strip().lower() in ("y", "yes")
@@ -215,6 +256,20 @@ def _connect_mcp(options, config_data):
     return specs, effects, summary, mode
 
 
+def _connect_normalized(options, config_data):
+    names, cfg = _connector_names(options, config_data)
+    if not names:
+        return None
+    mode = options["connector_mode"] or cfg.get("mode") or "draft"
+    specs, effects, summary = connector_runtime.enable(names, mode=mode)
+    return specs, effects, summary, mode
+
+
+def _shutdown_connectors():
+    connector_runtime.shutdown()
+    mcp_bridge.shutdown()
+
+
 def _print_mcp_tools(summary, specs, effects):
     for server in summary:
         print(f"{server['id']}  ({server['mode']})")
@@ -233,6 +288,17 @@ def _print_mcp_tools(summary, specs, effects):
         print(f"  ! {warning}")
 
 
+def _print_connector_tools(summary, specs, effects):
+    del specs
+    for provider in summary:
+        print(
+            f"{provider['id']}  ({provider['mode']}, account {provider['account']})"
+        )
+        for name in provider["tools"]:
+            kind = "write" if effects[name] == "external_write" else "read"
+            print(f"    {kind:>5}  {name}")
+
+
 def main(agent_dir=None, argv=None):
     if agent_dir is None:
         raise ValueError("agent_dir is required; invoke an agents/<size> shim")
@@ -242,6 +308,11 @@ def main(agent_dir=None, argv=None):
     if options["mcp_help"]:
         for name, _ in mcp_config.available():
             print(mcp_config.setup_notes(name))
+            print()
+        return
+    if options["connector_help"]:
+        for name, _, _ in connector_config.available():
+            print(connector_config.setup_notes(name))
             print()
         return
     agent_dir = os.path.abspath(agent_dir)
@@ -254,89 +325,163 @@ def main(agent_dir=None, argv=None):
         "127.0.0.1" in OLLAMA_URL or "localhost" in OLLAMA_URL
     ), "refusing non-local endpoint"
 
-    connected = _connect_mcp(options, config_data)
-    if options["mcp_list"]:
-        if connected is None:
+    normalized_names, _ = _connector_names(options, config_data)
+    if normalized_names and not options["connector_list"]:
+        # This is an interface-only check: it performs no model or provider call.
+        connector_runtime.preflight_backend(
+            LLM(config_data["model"], num_ctx=config_data.get("num_ctx", 8192))
+        )
+
+    mcp_connected = _connect_mcp(options, config_data)
+    try:
+        normalized_connected = _connect_normalized(options, config_data)
+    except BaseException:
+        mcp_bridge.shutdown()
+        raise
+    if options["mcp_list"] or options["connector_list"]:
+        if options["mcp_list"] and mcp_connected is None:
             print("no MCP servers requested; pass --mcp <name> or --mcp-help")
-        else:
-            specs, effects, summary, _ = connected
+        elif options["mcp_list"]:
+            specs, effects, summary, _ = mcp_connected
             _print_mcp_tools(summary, specs, effects)
+        if options["connector_list"] and normalized_connected is None:
+            print(
+                "no normalized connectors requested; pass --connector <name> "
+                "or --connector-help"
+            )
+        elif options["connector_list"]:
+            specs, effects, summary, _ = normalized_connected
+            _print_connector_tools(summary, specs, effects)
+        _shutdown_connectors()
         return
 
     if not task:
         task = input("Task for the agent: ").strip()
     if not task:
         print("No task given.")
+        _shutdown_connectors()
         return
 
-    domain = load_domain(
-        options["domain_name"]
-        or config_data.get("domain")
-        or "office_demo"
-    )
+    try:
+        domain = load_domain(
+            options["domain_name"]
+            or config_data.get("domain")
+            or "office_demo"
+        )
+    except BaseException:
+        _shutdown_connectors()
+        raise
     registry = domain.registry
     policy = domain.default_policy
     prompt_rules = domain.prompt_rules
-    if connected is not None:
-        specs, effects, summary, mcp_mode = connected
-        if not options["keep_office_tools"]:
-            registry = mcp_bridge.without_simulated(registry)
-        registry = registry.merged(specs)
+    external_specs, external_effects = {}, {}
+    modes_by_tool = {}
+    summaries = []
+    for connected in (mcp_connected, normalized_connected):
+        if connected is None:
+            continue
+        specs, effects, summary, mode = connected
+        overlap = set(external_specs) & set(specs)
+        if overlap:
+            _shutdown_connectors()
+            raise ValueError(
+                "duplicate real-account tool names: " + ", ".join(sorted(overlap))
+            )
+        external_specs.update(specs)
+        external_effects.update(effects)
+        modes_by_tool.update({name: mode for name in specs})
+        summaries.extend(summary)
+    if external_specs:
+        try:
+            if not options["keep_office_tools"]:
+                registry = mcp_bridge.without_simulated(registry)
+            normalized_specs = normalized_connected[0] if normalized_connected else {}
+            mcp_specs = mcp_connected[0] if mcp_connected else {}
+            connector_runtime.enforce_total_tools(
+                registry,
+                normalized_specs,
+                other_external_specs=mcp_specs,
+            )
+            registry = registry.merged(external_specs)
+        except BaseException:
+            _shutdown_connectors()
+            raise
         policy = policy.with_effects(
-            effects, confirmer=_terminal_confirmer(mcp_mode)
+            external_effects,
+            confirmer=_terminal_confirmer(modes_by_tool),
         )
-        prompt_rules += mcp_bridge.mail_rules(mcp_mode)
+        if mcp_connected:
+            prompt_rules += mcp_bridge.mail_rules(mcp_connected[3])
+        if normalized_connected:
+            prompt_rules += connector_runtime.prompt_rules(normalized_connected[3])
 
-    paths = agent_runtime_paths(agent_dir, domain)
-    profile = profiles.for_model(
-        config_data["model"], config_data.get("harness")
-    )
-    max_calls = options["max_calls"]
-    if max_calls is None:
-        max_calls = config_data.get("max_calls")
-    if max_calls is None:
-        max_calls = profile.max_calls
-    run_config = RunConfig(
-        condition="harness",
-        max_calls=max_calls,
-        today=domain.default_today,
-        verifier_rounds=profile.verify_rounds,
-        guards=True,
-        profile=profile,
-    )
+    try:
+        paths = agent_runtime_paths(agent_dir, domain)
+        profile = profiles.for_model(
+            config_data["model"], config_data.get("harness")
+        )
+        max_calls = options["max_calls"]
+        if max_calls is None:
+            max_calls = config_data.get("max_calls")
+        if max_calls is None:
+            max_calls = profile.max_calls
+        run_config = RunConfig(
+            condition="harness",
+            max_calls=max_calls,
+            today=domain.default_today,
+            verifier_rounds=profile.verify_rounds,
+            guards=True,
+            profile=profile,
+        )
 
-    workdir = paths.workspace
-    world = domain.make_world(workdir, persistent=True)
-    memory = MemoryStore(
-        str(paths.memory)
-    )
-    attempt = AttemptContext(
-        attempt_id=f"{domain.name}:{Path(agent_dir).name}",
-        config=run_config,
-        domain=domain,
-        tools=registry,
-        policy=policy,
-        world=world,
-        memory=memory,
-        workdir=workdir,
-        artifact_dir=paths.artifacts,
-        prompt_profile=domain.prompt_profile,
-        prompt_rules=prompt_rules,
-    )
-    llm, router = build_llm(
-        config_data, options, str(paths.logs)
-    )
+        run_storage = EphemeralRunStorage() if external_specs else None
+        workdir = run_storage.workspace if run_storage else paths.workspace
+        artifact_dir = run_storage.artifacts if run_storage else paths.artifacts
+        world = domain.make_world(workdir, persistent=not bool(run_storage))
+        memory = (
+            EphemeralMemoryStore()
+            if external_specs
+            else MemoryStore(str(paths.memory))
+        )
+        attempt = AttemptContext(
+            attempt_id=f"{domain.name}:{Path(agent_dir).name}",
+            config=run_config,
+            domain=domain,
+            tools=registry,
+            policy=policy,
+            world=world,
+            memory=memory,
+            workdir=workdir,
+            artifact_dir=artifact_dir,
+            prompt_profile=domain.prompt_profile,
+            prompt_rules=prompt_rules,
+        )
+    except BaseException:
+        if "run_storage" in locals() and run_storage is not None:
+            run_storage.cleanup()
+        _shutdown_connectors()
+        raise
+    try:
+        llm, router = build_llm(
+            config_data, options, str(paths.logs),
+            persist_log=not bool(external_specs),
+        )
+        if normalized_connected:
+            connector_runtime.preflight_backend(llm)
+    except BaseException:
+        if run_storage is not None:
+            run_storage.cleanup()
+        _shutdown_connectors()
+        raise
 
     print(
         f"[{config_data['name']}] configured for local Ollama endpoint "
         f"{OLLAMA_URL}"
     )
     print(f"  domain: {domain.name}@{domain.version}")
-    if connected is not None:
-        specs, effects, summary, mcp_mode = connected
+    if external_specs:
         print(f"  real accounts: "
-              + ", ".join(f"{x['id']} ({len(x['tools'])} tools)" for x in summary)
-              + f"  mode: {mcp_mode}")
+              + ", ".join(f"{x['id']} ({len(x['tools'])} tools)" for x in summaries))
         # Inference is still local; the loopback assertion above still holds.
         # It is the TOOLS that can now leave. Say so, because "nothing leaves
         # the machine" stops being true for the tool calls. Worded without
@@ -345,8 +490,9 @@ def main(agent_dir=None, argv=None):
         # learn to skip.
         print("  NOTE: model inference stays on this machine. Connector tool "
               "calls need not: a real-account connector reaches its provider.")
-        for warning in mcp_config.count_warnings(summary):
-            print(f"  ! {warning}")
+        if mcp_connected:
+            for warning in mcp_config.count_warnings(mcp_connected[2]):
+                print(f"  ! {warning}")
     if router:
         print(
             "  model tiers: "
@@ -365,8 +511,14 @@ def main(agent_dir=None, argv=None):
         print(f"  model: {config_data['model']}")
     print(f"  profile: {profile.label}")
     print(f"  budget: {run_config.max_calls} LLM calls")
-    episode = run_harness(llm, task, attempt)
-
+    try:
+        episode = run_harness(llm, task, attempt)
+    except BaseException:
+        if run_storage is not None:
+            run_storage.cleanup()
+        raise
+    finally:
+        _shutdown_connectors()
     print("\n--- run finished ---")
     print(
         f"finished cleanly: {episode.finished}   llm calls: {llm.calls}   "
@@ -393,27 +545,42 @@ def main(agent_dir=None, argv=None):
                 f"{json.dumps(action['args'], ensure_ascii=False, default=str)[:120]})"
                 f" -> {'ok' if action['ok'] else 'ERROR'}"
             )
-    print(f"files: {attempt.artifact_dir}")
+    print(
+        "files: run-only workspace (removed after this command)"
+        if run_storage is not None
+        else f"files: {attempt.artifact_dir}"
+    )
     log_dir = str(paths.logs)
     os.makedirs(log_dir, exist_ok=True)
     log_path = os.path.join(
         log_dir, f"run_{len(os.listdir(log_dir)) + 1:03d}.json"
     )
+    log_payload = (
+        {
+            "connector_run": True,
+            "domain": domain.name,
+            "domain_version": domain.version,
+            "finished": episode.finished,
+            "providers": [
+                {"id": item["id"], "mode": item["mode"]}
+                for item in summaries
+            ],
+        }
+        if external_specs
+        else {
+            "task": task,
+            "domain": domain.name,
+            "domain_version": domain.version,
+            "transcript": episode.transcript,
+            "finished": episode.finished,
+            "summary": episode.done_summary,
+        }
+    )
     with open(log_path, "w", encoding="utf-8") as handle:
-        json.dump(
-            {
-                "task": task,
-                "domain": domain.name,
-                "domain_version": domain.version,
-                "transcript": episode.transcript,
-                "finished": episode.finished,
-                "summary": episode.done_summary,
-            },
-            handle,
-            indent=1,
-            ensure_ascii=False,
-        )
+        json.dump(log_payload, handle, indent=1, ensure_ascii=False)
     print(f"transcript: {log_path}")
+    if run_storage is not None:
+        run_storage.cleanup()
 
 
 if __name__ == "__main__":

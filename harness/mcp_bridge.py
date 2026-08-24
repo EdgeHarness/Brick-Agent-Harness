@@ -19,12 +19,12 @@ them:
     (DomainPack.registry_for / ToolRegistry.selected), so there is no global
     to prune: build the task's registry from the specs you want.
 
-SAFETY, unchanged from upstream:
+SAFETY:
   - mode="draft" (default) never exposes a tool that transmits to a person
     (send/forward/reply). The model composes; a human sends.
   - mode="read_only" drops every world-changing tool.
-  - per-server allow/drop lists and read_tools/write_tools overrides correct
-    the name-based classifier where a server's naming defeats it.
+  - every exposed operation has an explicit effect/transmission/invitation
+    declaration; a tool name never determines whether it is safe.
 
 Schema rendering is kept in step with the upstream bridge: local $refs are
 dereferenced (ms365 hides every recipient behind $defs), nested shapes and
@@ -47,6 +47,8 @@ import threading
 import time
 
 from .errors import ToolError
+from . import faults
+from .privacy import redact, redact_text
 
 PROTOCOL_VERSION = "2025-06-18"   # sent; we accept whatever the server negotiates back
 CLIENT_INFO = {"name": "brick-harness", "version": "0.1"}
@@ -54,7 +56,13 @@ CALL_TIMEOUT = 120                # seconds to wait for one tools/call result
 INIT_TIMEOUT = 60                 # seconds to wait for the initialize handshake
 OBS_CLIP = 4000                   # clip a tool result before it enters the transcript
 
-_CLIENTS = []                     # live MCPClient processes, terminated on shutdown
+_CLIENTS = []                     # one active run's clients, terminated on shutdown
+MCP_MODES = frozenset(("draft", "live", "read_only"))
+_MODE_RANK = {"read_only": 0, "draft": 1, "live": 2}
+# Generic MCP catalogs may be inspected with more than the normalized connector
+# budget.  Actual agent runs enforce eight external tools and 25 total through
+# connectors.runtime.enforce_total_tools().
+MAX_MCP_TOOLS = 25
 
 # A world-changing verb anywhere in the tool name. Heuristic; overridable per server.
 _WRITE_RE = re.compile(
@@ -72,7 +80,6 @@ _READ_RE = re.compile(
     r"|^(list|get|read|search|find|fetch|query|show|describe|check|count|view)[_\-]",
     re.I)
 
-
 # Credential-shaped environment variables never reach an MCP child process
 # unless the server's own config names them. Hard rule 9 says provider
 # credentials live with the third-party server, not here - so an unrelated
@@ -81,14 +88,34 @@ _READ_RE = re.compile(
 # npx-style launchers need a working environment.
 _SENSITIVE_ENV_RE = re.compile(
     r"(KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH)", re.I)
+_SAFE_CHILD_ENV = frozenset(
+    (
+        "APPDATA", "COMSPEC", "HOME", "HOMEDRIVE", "HOMEPATH", "LANG",
+        "LC_ALL", "LOCALAPPDATA", "PATH", "PATHEXT", "SYSTEMROOT", "TEMP",
+        "TMP", "USERPROFILE", "WINDIR",
+    )
+)
+
+
+class BridgeConfigError(ValueError):
+    """An unsafe or incomplete MCP declaration."""
+
+
+class MCPTransportFault(faults.EnvironmentFault):
+    """The connector process or protocol failed outside model control."""
 
 
 def _child_env(extra):
-    """The environment for one MCP child: the parent's, minus anything
-    credential-shaped, plus exactly what the server config declares."""
-    env = {k: v for k, v in os.environ.items()
-           if not _SENSITIVE_ENV_RE.search(k)}
-    env.update(extra or {})
+    """A minimal launcher environment plus exactly declared server values."""
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key.upper() in _SAFE_CHILD_ENV and not _SENSITIVE_ENV_RE.search(key)
+    }
+    for key, value in (extra or {}).items():
+        if not isinstance(key, str) or not isinstance(value, str):
+            raise BridgeConfigError("MCP env declarations must map strings to strings")
+        env[key] = value
     return env
 
 
@@ -107,6 +134,7 @@ class MCPClient:
         self._ids = itertools.count(1)
         self._inbox = queue.Queue()
         self._write_lock = threading.Lock()
+        self.catalog_stale = threading.Event()
         full_env = _child_env(env)
         try:
             self.proc = subprocess.Popen(
@@ -115,8 +143,10 @@ class MCPClient:
                 errors="replace", bufsize=1,
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         except FileNotFoundError:
-            raise ToolError(f"MCP server {server_id!r}: command {command!r} not found. "
-                            f"Is it installed / on PATH?")
+            raise MCPTransportFault(
+                f"MCP server {server_id!r}: command {command!r} not found. "
+                "Is it installed / on PATH?"
+            )
         self._stderr_tail = []
         threading.Thread(target=self._read_stdout, daemon=True).start()
         threading.Thread(target=self._drain_stderr, daemon=True).start()
@@ -128,21 +158,29 @@ class MCPClient:
             if not line:
                 continue
             try:
-                self._inbox.put(json.loads(line))
+                message = json.loads(line)
+                if message.get("method") == "notifications/tools/list_changed":
+                    self.catalog_stale.set()
+                    continue
+                if "id" not in message:
+                    continue
+                self._inbox.put(message)
             except ValueError:
                 pass  # non-JSON banner/log line on stdout - ignore, not our protocol
         self._inbox.put({"__eof__": True})
 
     def _drain_stderr(self):
         for line in self.proc.stderr:
-            self._stderr_tail.append(line)
+            self._stderr_tail.append(redact_text(line, limit=4_096))
             del self._stderr_tail[:-40]  # keep only the last 40 lines for error context
 
     def _send(self, msg):
         with self._write_lock:
             if self.proc.poll() is not None:
-                raise ToolError(f"MCP server {self.id!r} has exited "
-                                f"({''.join(self._stderr_tail)[-400:].strip()})")
+                raise MCPTransportFault(
+                    f"MCP server {self.id!r} has exited "
+                    f"({redact_text(''.join(self._stderr_tail)[-400:]).strip()})"
+                )
             self.proc.stdin.write(json.dumps(msg) + "\n")
             self.proc.stdin.flush()
 
@@ -153,19 +191,28 @@ class MCPClient:
         while True:
             remaining = end - time.time()
             if remaining <= 0:
-                raise ToolError(f"MCP server {self.id!r}: no response to {method} within {timeout}s")
+                raise MCPTransportFault(
+                    f"MCP server {self.id!r}: no response to {method} within {timeout}s"
+                )
             try:
                 msg = self._inbox.get(timeout=remaining)
             except queue.Empty:
-                raise ToolError(f"MCP server {self.id!r}: no response to {method} within {timeout}s")
+                raise MCPTransportFault(
+                    f"MCP server {self.id!r}: no response to {method} within {timeout}s"
+                )
             if msg.get("__eof__"):
-                raise ToolError(f"MCP server {self.id!r} closed the connection "
-                                f"({''.join(self._stderr_tail)[-400:].strip()})")
+                raise MCPTransportFault(
+                    f"MCP server {self.id!r} closed the connection "
+                    f"({redact_text(''.join(self._stderr_tail)[-400:]).strip()})"
+                )
             if msg.get("id") != rid:
                 continue  # a notification or an out-of-order reply - not ours
             if "error" in msg:
                 err = msg["error"]
-                raise ToolError(f"{method} failed: {err.get('message', err)}")
+                message = f"{method} failed: {redact_text(err.get('message', err))}"
+                if method == "tools/call":
+                    raise ToolError(message)
+                raise MCPTransportFault(message)
             return msg.get("result", {})
 
     def _notify(self, method, params=None):
@@ -190,7 +237,7 @@ class MCPClient:
                 return tools
 
     def call_tool(self, name, arguments):
-        """Return (is_error, text). Text is the joined text content blocks."""
+        """Return (is_error, bounded structured result or text)."""
         result = self._request("tools/call", {"name": name, "arguments": arguments or {}},
                                timeout=CALL_TIMEOUT)
         blocks = result.get("content", [])
@@ -200,9 +247,14 @@ class MCPClient:
                 if b.get("type") == "text":
                     parts.append(b.get("text", ""))
                 else:
-                    parts.append(json.dumps(b, ensure_ascii=False, default=str))
+                    parts.append(f"[MCP content block: {b.get('type', 'unknown')}]")
         text = "\n".join(p for p in parts if p) or "(no content)"
-        return bool(result.get("isError")), text
+        structured = result.get("structuredContent")
+        if structured is not None:
+            payload = {"data": redact(structured), "message": redact_text(text)}
+        else:
+            payload = redact_text(text)
+        return bool(result.get("isError")), payload
 
     def close(self):
         try:
@@ -386,18 +438,51 @@ def _example_for(harness_name, schema, back, hint=None):
     return {"tool": harness_name, "args": args}
 
 
+def _tool_policy(name, server_cfg, required=False):
+    """Return a reviewed policy when this generic MCP entry declares one.
+
+    Normalized business connectors never call this bridge; their declarations
+    are always explicit in connectors/.  Generic MCP entries may instead rely
+    on protocol annotations or the conservative classifier below.  Once an
+    entry opts into ``tool_policies``, however, every exposed tool must have an
+    exact declaration and malformed or partial policy fails closed.
+    """
+    policies = server_cfg.get("tool_policies")
+    if policies is None:
+        if required:
+            raise BridgeConfigError(
+                f"MCP tool {server_cfg.get('id', 'server')}.{name} has no exact policy"
+            )
+        return None
+    policy = policies.get(name) if isinstance(policies, dict) else None
+    if not isinstance(policy, dict) or set(policy) != {
+        "effect", "transmits", "invites"
+    }:
+        raise BridgeConfigError(
+            f"MCP tool {server_cfg.get('id', 'server')}.{name} has no exact policy"
+        )
+    if policy["effect"] not in ("read", "external_write"):
+        raise BridgeConfigError(f"MCP tool {name!r} has an invalid real-account effect")
+    if type(policy["transmits"]) is not bool or type(policy["invites"]) is not bool:
+        raise BridgeConfigError(f"MCP tool {name!r} policy flags must be bool")
+    if policy["effect"] == "read" and (policy["transmits"] or policy["invites"]):
+        raise BridgeConfigError(f"MCP tool {name!r} cannot transmit while classified read")
+    return policy
+
+
 def classify(name, server_cfg, tool=None):
     """Is this MCP tool a write? Returns (is_write, why).
 
     Resolved in falling order of authority, because guessing from a name is
     the weakest evidence available and used to be the only evidence used:
 
-      1. the registry entry's explicit read_tools / write_tools override
-      2. the server's own MCP annotations (readOnlyHint, destructiveHint) -
+      1. the registry entry's exact tool_policies declaration
+      2. the registry entry's explicit read_tools / write_tools override
+      3. the server's own MCP annotations (readOnlyHint, destructiveHint) -
          the protocol carries the answer and we were throwing it away
-      3. a read verb leading the name (list_, get_, search_, ...)
-      4. a write verb anywhere in the name (_WRITE_RE)
-      5. UNKNOWN, which counts as a write
+      4. a read verb leading the name (list_, get_, search_, ...)
+      5. a write verb anywhere in the name (_WRITE_RE)
+      6. UNKNOWN, which counts as a write
 
     Step 5 is the change that matters. This used to fall through to "read",
     so a tool whose name held no verb the regex knew - upsert_contact,
@@ -411,6 +496,10 @@ def classify(name, server_cfg, tool=None):
     reads. `why` exists so `--mcp-list` can show which tools were guessed at,
     making that a two-second fix in the registry rather than a mystery.
     """
+    policy = _tool_policy(name, server_cfg)
+    if policy is not None:
+        return policy["effect"] != "read", "policy"
+
     n = name.lower()
     if n in {k.lower() for k in server_cfg.get("write_tools", [])}:
         return True, "override"
@@ -463,18 +552,33 @@ def _transmits(name, tool=None):
     return True
 
 
-def _make_executor(client, mcp_name, back):
+def _bounded_result(value):
+    if isinstance(value, str):
+        return _clip(redact_text(value))
+    clean = redact(value)
+    encoded = json.dumps(clean, ensure_ascii=False, sort_keys=True, default=str)
+    if len(encoded) <= OBS_CLIP:
+        return clean
+    return _clip(encoded)
+
+
+def _make_executor(client, mcp_name, back, is_write=False):
     """The registry 'run' callable: (attempt, args) -> observation text.
 
     No confirmation here. Brick's loop confirms every mutating call through
     ActionPolicy before execution, deny-by-default, so an executor that asked
     again would double-prompt the operator."""
     def run(attempt, args):
+        stale = getattr(client, "catalog_stale", None)
+        if is_write and stale is not None and stale.is_set():
+            raise faults.EnvironmentFault(
+                "MCP tool catalog changed during this run; reconnect before writing"
+            )
         wire_args = {back.get(k, k): v for k, v in (args or {}).items()}
-        is_error, text = client.call_tool(mcp_name, wire_args)
+        is_error, result = client.call_tool(mcp_name, wire_args)
         if is_error:
-            raise ToolError(_clip(text))
-        return _clip(text)
+            raise ToolError(_clip(redact_text(result)))
+        return _bounded_result(result)
     return run
 
 
@@ -496,7 +600,8 @@ def _make_broker_executor(providers):
                 % (", ".join(sorted(by_id)), account))
         client, mcp_name, back = by_id[account]
         rest = {k: v for k, v in (args or {}).items() if k != "account"}
-        return _make_executor(client, mcp_name, back)(attempt, rest)
+        is_write = next(p[4] for p in providers if p[0] == account)
+        return _make_executor(client, mcp_name, back, is_write)(attempt, rest)
     return run
 
 
@@ -524,11 +629,32 @@ def _to_broker(spec, providers):
     return spec
 
 
-def _adapt(client, tool, server_cfg, prefix, draft_only, seen):
+def _confirmation_for(server_id, mcp_name):
+    priority = (
+        "account", "id", "contact_id", "room", "resource", "start", "end",
+        "date", "time", "recipient", "recipients", "attendees", "subject",
+    )
+
+    def render(args):
+        args = dict(args or {})
+        important = {key: args[key] for key in priority if key in args}
+        remaining = {key: value for key, value in args.items() if key not in important}
+        payload = {
+            "provider": server_id,
+            "operation": mcp_name,
+            "important": redact(important),
+            "other_args": redact(remaining),
+        }
+        return json.dumps(payload, ensure_ascii=False, sort_keys=False, default=str)
+
+    return render
+
+
+def _adapt(client, tool, server_cfg, prefix, mode, seen):
     """One MCP tool -> (harness_name, spec, effect, provider, why) or None.
 
-    `why` is how the effect was decided (see classify); enable() carries it
-    into the summary so a developer can audit a new connector's classes.
+    ``why`` records the reviewed policy or conservative generic-classification
+    source so the CLI and Agent Lab can audit the exact exposed surface.
 
     `seen` is the names THIS server has already claimed. A name already taken by
     an EARLIER server is not a clash, it is a second provider of the same
@@ -537,14 +663,20 @@ def _adapt(client, tool, server_cfg, prefix, draft_only, seen):
     mcp_name = tool.get("name")
     if not mcp_name:
         return None
-    is_write, why = classify(mcp_name, server_cfg, tool)
-    if draft_only and is_write and _transmits(mcp_name, tool) \
-            and mcp_name.lower() not in {k.lower() for k in server_cfg.get("write_tools", [])}:
-        return None  # draft mode: never expose a tool that transmits to a person
     if mcp_name.lower() in {d.lower() for d in server_cfg.get("drop", [])}:
         return None
     allow = server_cfg.get("allow")
     if allow and mcp_name.lower() not in {a.lower() for a in allow}:
+        return None
+    policy = _tool_policy(mcp_name, server_cfg)
+    is_write, why = classify(mcp_name, server_cfg, tool)
+    transmits = policy["transmits"] if policy is not None else _transmits(
+        mcp_name, tool
+    )
+    invites = policy["invites"] if policy is not None else False
+    if mode == "read_only" and is_write:
+        return None
+    if mode == "draft" and (transmits or invites):
         return None
 
     harness_name = sanitize_name(f"{prefix}{mcp_name}" if prefix else mcp_name)
@@ -560,7 +692,9 @@ def _adapt(client, tool, server_cfg, prefix, draft_only, seen):
         "desc": tag + (desc or mcp_name),
         "params": params,
         "example": _example_for(harness_name, schema, back, hint),
-        "run": _make_executor(client, mcp_name, back),
+        "run": _make_executor(client, mcp_name, back, is_write),
+        "confirmation": _confirmation_for(client.id, mcp_name),
+        "propagate_faults": True,
     }
     provider = (client.id, client, mcp_name, back, is_write)
     return harness_name, spec, ("external_write" if is_write else "read"), provider, why
@@ -574,9 +708,9 @@ def enable(servers, mode="draft"):
     servers: list of dicts (see mcp_config.names_to_servers):
         {"id": "gmail", "command": "npx", "args": [...], "env": {...},
          "cwd": "...", "prefix": "gmail_",         # optional name prefix
-         "allow": [...], "drop": [...],            # optional tool filters
-         "read_tools": [...], "write_tools": [...],# override the write classifier
-         "mode": "draft"|"live"|"read_only"}       # per-server, overrides the arg
+         "allow": [...], "drop": [...],            # reviewed tool filters
+         "tool_policies": {...},                    # required exact policies
+        "mode": "draft"|"live"|"read_only"}       # per-server, narrows the run
 
     mode:
         "draft"     (default) real reads + draft/tentative writes; transmit tools dropped
@@ -590,48 +724,76 @@ def enable(servers, mode="draft"):
 
     Nothing global is touched; the caller owns registry and policy composition.
     """
+    if mode not in MCP_MODES:
+        raise BridgeConfigError(
+            "MCP mode must be one of " + ", ".join(sorted(MCP_MODES))
+        )
+    shutdown()
     specs, effects, summary = {}, {}, []
     providers = {}          # tool name -> [(account, client, mcp_name, back, is_write)]
-    for cfg in servers:
-        sid = cfg.get("id") or cfg.get("command", "mcp")
-        server_mode = cfg.get("mode", mode)
-        draft_only = server_mode == "draft"
-        read_only = server_mode == "read_only"
-        client = MCPClient(sid, cfg["command"], cfg.get("args"), cfg.get("env"), cfg.get("cwd"))
-        _CLIENTS.append(client)
-        prefix = cfg.get("prefix", "")
-        added, writes, seen = [], [], set()
-        classes = {}
-        for tool in client.list_tools():
-            if read_only and _is_write(tool.get("name", ""), cfg, tool):
-                continue
-            adapted = _adapt(client, tool, cfg, prefix, draft_only, seen)
-            if not adapted:
-                continue
-            name, spec, effect, provider, why = adapted
-            classes[name] = why
-            providers.setdefault(name, []).append(provider)
-            if name in specs:
+    try:
+        for cfg in servers:
+            sid = cfg.get("id") or cfg.get("command", "mcp")
+            declared_mode = cfg.get("mode", mode)
+            if declared_mode not in MCP_MODES:
+                raise BridgeConfigError(
+                    f"MCP server {sid!r} has invalid mode {declared_mode!r}"
+                )
+            # A server declaration or per-agent override may narrow the run,
+            # but it may never widen it.  In particular, a global draft run
+            # must keep transmitting/invitation tools absent even if a stale
+            # local override says "live".
+            server_mode = min(
+                (mode, declared_mode), key=lambda candidate: _MODE_RANK[candidate]
+            )
+            client = MCPClient(
+                sid, cfg["command"], cfg.get("args"), cfg.get("env"), cfg.get("cwd")
+            )
+            _CLIENTS.append(client)
+            prefix = cfg.get("prefix", "")
+            added, writes, seen = [], [], set()
+            classes = {}
+            for tool in client.list_tools():
+                adapted = _adapt(client, tool, cfg, prefix, server_mode, seen)
+                if not adapted:
+                    continue
+                name, spec, effect, provider, why = adapted
+                classes[name] = why
+                providers.setdefault(name, []).append(provider)
+                if name in specs:
                 # A SECOND PROVIDER of the same capability, not a name clash.
                 # ms365 and ms365-personal share the outlook_ prefix and an
                 # identical allow list, so a work and a personal mailbox used to
                 # yield twenty tools for ten operations, the second set named
                 # asymmetrically after its server. One broker instead.
-                spec = _to_broker(specs[name], providers[name])
+                    spec = _to_broker(specs[name], providers[name])
                 # The most dangerous provider sets the class. Two servers behind
                 # one name should agree, but if they ever disagree the policy
                 # must follow the worse one.
-                if effect == "external_write":
-                    effects[name] = "external_write"
-            else:
-                effects[name] = effect
-            specs[name] = spec
-            seen.add(name)
-            added.append(name)
-            if effects[name] == "external_write":
-                writes.append(name)
-        summary.append({"id": sid, "mode": server_mode, "tools": added,
-                        "writes": writes, "classified_by": classes})
+                    if effect == "external_write":
+                        effects[name] = "external_write"
+                else:
+                    effects[name] = effect
+                specs[name] = spec
+                seen.add(name)
+                added.append(name)
+                if effects[name] == "external_write":
+                    writes.append(name)
+            summary.append({
+                "id": sid,
+                "mode": server_mode,
+                "tools": added,
+                "writes": writes,
+                "classified_by": classes,
+                "catalog_stale": False,
+            })
+        if len(specs) > MAX_MCP_TOOLS:
+            raise BridgeConfigError(
+                f"{len(specs)} MCP tools exceed the hard limit of {MAX_MCP_TOOLS}"
+            )
+    except BaseException:
+        shutdown()
+        raise
     return specs, effects, summary
 
 
@@ -662,9 +824,8 @@ def mail_rules(mode="draft"):
             "- Use the exact addresses, dates and times the task gives you; never invent recipients.\n"
             "- A write tool asks the user to confirm. If a call is declined, do not retry it.")
     if mode == "draft":
-        base += ("\n- You are in DRAFT mode: create email DRAFTS and TENTATIVE calendar events. "
-                 "You cannot send mail or send invitations - a human reviews and sends. "
-                 "Creating the draft/tentative event IS completing the task.")
+        base += ("\n- You are in DRAFT mode: transmitting and invitation-capable tools are absent. "
+                 "Use only the draft operations that are actually listed; a human reviews them.")
     return base
 
 

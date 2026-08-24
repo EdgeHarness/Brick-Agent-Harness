@@ -37,10 +37,11 @@ per-session protocol. Read it before starting work.
    deprecation shims (`harness/world.py`, `harness/office.py`) may import a
    domain, and a test enforces this.
 9. Synthetic and fictional data only in this repository. No real client records,
-   no general filesystem or shell capability on a supported surface. Real
-   provider credentials are held by third-party MCP servers, never by this
-   repository, and only for a throwaway account: a connector is off by default,
-   is covered by no evidence gate, and no gate result may depend on one.
+   no general filesystem or shell capability on a supported surface. Legacy MCP
+   servers hold their own credentials; normalized HubSpot/Optix credentials are
+   operator-managed in the OS keyring. No credential may enter repository files,
+   prompts, argv, transcripts, or logs. Connectors are off and unbound by default,
+   covered by no benchmark evidence gate, and no gate result may depend on one.
 
 ## Current position
 

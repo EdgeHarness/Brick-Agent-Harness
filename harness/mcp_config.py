@@ -5,9 +5,9 @@ be told *which* servers to start. This module is that missing half:
 
     names_to_servers(["gmail", "ms365"])  ->  [{...}, {...}]  for mcp_bridge.enable()
 
-The registry itself is data, not code - mcp/servers.json - so adding a provider
-never means touching the harness. An agent folder can override any field of any
-server through a "mcp" block in its config.json:
+The registry itself is data, not code - mcp/servers.json. An agent folder may
+only narrow a reviewed allow list, add drops, or select a valid mode through a
+"mcp" block in its config.json:
 
     "mcp": {
       "enable": ["gmail", "ms365"],
@@ -26,8 +26,8 @@ Three things this does that a plain json.load would not:
   - Expansion. ~ and ${VARS} in env values and cwd, so credential paths in the
     registry are not machine-specific.
   - A tool-count guard. An 8B at num_ctx 8192 has the whole tool list in its
-    system prompt; a server that injects 300 tools does not fail loudly, it just
-    quietly makes the agent stupid. count_warnings() flags that before the run.
+    system prompt; actual runs additionally enforce the normalized connector
+    layer's eight-external/25-total boundary.
 """
 import json
 import os
@@ -42,15 +42,23 @@ REGISTRY_PATH = os.path.join(ROOT, "mcp", "servers.json")
 # at a server that ships in this repo without hard-coding anyone's checkout.
 _VARS = {"${ROOT}": ROOT}
 
-# Above this many injected tools, an 8B's system prompt is mostly tool spec and
-# the model starts picking tools at random. Tune with the registry's allow list
-# or the server's own --preset flag.
+# Above this many injected tools, a small model's system prompt is mostly tool
+# specification. Generic catalog inspection may reach this ceiling; actual
+# runs have the stricter eight-external limit in connectors.runtime.
 TOOL_BUDGET_WARN = 25
+MAX_MCP_SERVERS = 8
+MCP_MODES = frozenset(("draft", "live", "read_only"))
+MCP_EFFECTS = frozenset(("read", "external_write"))
 
 # Keys mcp_bridge.enable() understands. Everything else in a registry entry is
 # documentation and is stripped before launch.
-_BRIDGE_KEYS = {"id", "command", "args", "env", "cwd", "prefix", "allow", "drop",
-                "read_tools", "write_tools", "mode", "arg_hints", "hide_params"}
+_BRIDGE_KEYS = {
+    "id", "command", "args", "env", "cwd", "prefix", "allow", "drop",
+    "read_tools", "write_tools", "mode", "arg_hints", "hide_params",
+    "tool_policies",
+}
+_AGENT_OVERRIDE_KEYS = frozenset(("allow", "drop", "mode"))
+_TOOL_POLICY_KEYS = frozenset(("effect", "transmits", "invites"))
 
 
 class ConfigError(Exception):
@@ -101,9 +109,88 @@ def _resolve_command(command, server_id):
 
 
 def _merge(base, override):
+    """Apply only narrowing, non-executable per-agent overrides."""
     out = dict(base)
-    out.update(override or {})
+    override = override or {}
+    if not isinstance(override, dict):
+        raise ConfigError("MCP server override must be an object")
+    unknown = set(override) - _AGENT_OVERRIDE_KEYS
+    if unknown:
+        raise ConfigError(
+            "MCP server override cannot change: " + ", ".join(sorted(unknown))
+        )
+    if "allow" in override:
+        asked = override["allow"]
+        if not isinstance(asked, list) or any(not isinstance(x, str) for x in asked):
+            raise ConfigError("MCP allow override must be a string list")
+        declared = set(base.get("allow") or ())
+        if not set(asked) <= declared:
+            raise ConfigError("MCP allow override may only narrow the audited allow list")
+        out["allow"] = list(asked)
+    if "drop" in override:
+        dropped = override["drop"]
+        if not isinstance(dropped, list) or any(not isinstance(x, str) for x in dropped):
+            raise ConfigError("MCP drop override must be a string list")
+        out["drop"] = sorted(set(base.get("drop") or ()) | set(dropped))
+    if "mode" in override:
+        out["mode"] = override["mode"]
     return out
+
+
+def require_mode(mode):
+    if mode not in MCP_MODES:
+        raise ConfigError(
+            "MCP mode must be one of " + ", ".join(sorted(MCP_MODES))
+        )
+    return mode
+
+
+def _validate_tool_policies(cfg, server_id):
+    allow = cfg.get("allow")
+    policies = cfg.get("tool_policies")
+    # Generic MCP servers retain the conservative annotation/name classifier.
+    # Supplying tool_policies opts the entry into the exact reviewed boundary.
+    if policies is None:
+        return
+    if not isinstance(allow, list) or not allow or any(
+        not isinstance(name, str) or not name for name in allow
+    ):
+        raise ConfigError(
+            f"MCP server {server_id!r} has no audited nonempty allow list"
+        )
+    if len(allow) != len(set(name.casefold() for name in allow)):
+        raise ConfigError(f"MCP server {server_id!r} allow list contains duplicates")
+    if not isinstance(policies, dict):
+        raise ConfigError(
+            f"MCP server {server_id!r} has no explicit tool_policies"
+        )
+    for name in allow:
+        policy = policies.get(name)
+        if not isinstance(policy, dict) or set(policy) != _TOOL_POLICY_KEYS:
+            raise ConfigError(
+                f"MCP tool {server_id}.{name} must declare exactly "
+                "effect, transmits, and invites"
+            )
+        if policy["effect"] not in MCP_EFFECTS:
+            raise ConfigError(
+                f"MCP tool {server_id}.{name} has invalid effect"
+            )
+        if type(policy["transmits"]) is not bool or type(policy["invites"]) is not bool:
+            raise ConfigError(
+                f"MCP tool {server_id}.{name} transmit/invite flags must be bool"
+            )
+        if policy["effect"] == "read" and (
+            policy["transmits"] or policy["invites"]
+        ):
+            raise ConfigError(
+                f"MCP tool {server_id}.{name} cannot transmit while classified read"
+            )
+    undeclared = set(policies) - set(allow)
+    if undeclared:
+        raise ConfigError(
+            f"MCP server {server_id!r} policies are outside its allow list: "
+            + ", ".join(sorted(undeclared))
+        )
 
 
 def names_to_servers(names, agent_cfg=None, mode=None, registry_path=None):
@@ -117,8 +204,29 @@ def names_to_servers(names, agent_cfg=None, mode=None, registry_path=None):
     Raises ConfigError on an unknown name or a missing executable - both are
     worth failing loudly at startup rather than half-way through a run.
     """
+    if not isinstance(names, (list, tuple)) or not names:
+        raise ConfigError("MCP server names must be a nonempty list")
+    if len(names) > MAX_MCP_SERVERS:
+        raise ConfigError(f"at most {MAX_MCP_SERVERS} MCP servers may be enabled")
+    if any(not isinstance(name, str) or not name for name in names):
+        raise ConfigError("MCP server names must be nonempty strings")
+    if len(names) != len(set(names)):
+        raise ConfigError("MCP server names must be unique")
+    if mode is not None:
+        require_mode(mode)
     reg = load_registry(registry_path)
-    overrides = (agent_cfg or {}).get("servers", {})
+    agent_cfg = agent_cfg or {}
+    if not isinstance(agent_cfg, dict):
+        raise ConfigError("MCP agent config must be an object")
+    overrides = agent_cfg.get("servers", {})
+    if not isinstance(overrides, dict):
+        raise ConfigError("MCP agent server overrides must be an object")
+    unknown_overrides = set(overrides) - set(names)
+    if unknown_overrides:
+        raise ConfigError(
+            "MCP overrides name servers that are not enabled: "
+            + ", ".join(sorted(unknown_overrides))
+        )
     out = []
     for name in names:
         if name not in reg:
@@ -127,14 +235,26 @@ def names_to_servers(names, agent_cfg=None, mode=None, registry_path=None):
         cfg = _merge(reg[name], overrides.get(name))
         cfg = {k: v for k, v in cfg.items() if k in _BRIDGE_KEYS}
         cfg["id"] = cfg.get("id", name)
+        _validate_tool_policies(cfg, name)
         cfg["command"] = _resolve_command(_expand(cfg["command"]), name)
         for key in ("args", "env", "cwd"):
             if key in cfg:
                 cfg[key] = _expand(cfg[key])
-        if mode and "mode" not in cfg:
+        if "mode" not in cfg and mode is not None:
             cfg["mode"] = mode
+        if "mode" in cfg:
+            require_mode(cfg["mode"])
         out.append(cfg)
     return out
+
+
+def enforce_tool_budget(summary, budget=TOOL_BUDGET_WARN):
+    total = sum(len(item.get("tools") or ()) for item in summary)
+    if total > budget:
+        raise ConfigError(
+            f"{total} MCP tools exceed the hard limit of {budget}; narrow the allow lists"
+        )
+    return total
 
 
 def setup_notes(name, registry_path=None):

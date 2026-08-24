@@ -1,0 +1,25 @@
+{
+  "schema_version": "brick.connector-bindings/1",
+  "providers": {
+    "hubspot": {
+      "status": "unbound",
+      "endpoint": "https://mcp.hubspot.com/",
+      "account_alias": null,
+      "account_fingerprint_sha256": null,
+      "catalog_sha256": null,
+      "oauth_scope": null,
+      "identity": null,
+      "tools": {}
+    },
+    "optix": {
+      "status": "unbound",
+      "endpoint": null,
+      "account_alias": null,
+      "account_fingerprint_sha256": null,
+      "catalog_sha256": null,
+      "oauth_scope": null,
+      "identity": null,
+      "tools": {}
+    }
+  }
+}

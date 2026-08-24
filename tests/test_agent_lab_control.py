@@ -675,9 +675,9 @@ def test_connector_inspection_lists_tools_with_their_effect_and_reason(lab_serve
     payload = json.loads(body)
     by_name = {t["name"]: t for t in payload["tools"]}
     assert by_name["mail_list_mail"]["effect"] == "read"
-    assert by_name["mail_list_mail"]["why"] == "read verb"
-    # classified by the registry's write_tools override, not by its name
+    assert by_name["mail_list_mail"]["why"] == "policy"
+    # The self-test opts into exact reviewed policies for every exposed tool.
     assert by_name["mail_modify_mail"]["effect"] == "external_write"
-    assert by_name["mail_modify_mail"]["why"] == "override"
+    assert by_name["mail_modify_mail"]["why"] == "policy"
     # draft mode never exposes a tool that transmits to a person
     assert not [n for n in by_name if "send" in n]

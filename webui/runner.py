@@ -33,6 +33,8 @@ from harness.runtime import (  # noqa: E402
 )
 from harness.storage import agent_runtime_paths  # noqa: E402
 from webui.control import ConfirmationChannel, prune_logs, redact  # noqa: E402
+from connectors import runtime as connector_runtime  # noqa: E402
+from connectors.privacy import EphemeralMemoryStore, EphemeralRunStorage  # noqa: E402
 
 
 AGENTS_DIR = os.path.join(PROJECT, "agents")
@@ -52,7 +54,7 @@ DEFAULT_MAX_CALLS = 50
 
 def emit(event, **fields):
     line = json.dumps(
-        {"t": event, "ts": round(time.time(), 3), **fields},
+        redact({"t": event, "ts": round(time.time(), 3), **fields}),
         ensure_ascii=False,
         default=str,
     )
@@ -83,7 +85,7 @@ def world_snapshot(domain, attempt):
     return domain.present(attempt)
 
 
-def build_llm(config, args, log_dir, stream_hook):
+def build_llm(config, args, log_dir, stream_hook, persist_log=True):
     use_router = args.tiers or bool(config.get("router"))
     if not use_router:
         return (
@@ -101,11 +103,14 @@ def build_llm(config, args, log_dir, stream_hook):
         small=args.small or router_config.get("small"),
         deep=args.deep or router_config.get("deep", "qwen2.5:14b"),
     )
-    os.makedirs(log_dir, exist_ok=True)
+    log_path = None
+    if persist_log:
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, "model_calls.jsonl")
     router = ModelRouter(
         roles=roles,
         num_ctx=config.get("num_ctx", 8192),
-        log_path=os.path.join(log_dir, "model_calls.jsonl"),
+        log_path=log_path,
         stream_hook=stream_hook,
     )
     return router, router
@@ -124,6 +129,11 @@ def main(argv=None):
     parser.add_argument("--mcp", default=None)
     parser.add_argument(
         "--mcp-mode", default=None,
+        choices=("draft", "live", "read_only"),
+    )
+    parser.add_argument("--connector", default=None)
+    parser.add_argument(
+        "--connector-mode", default=None,
         choices=("draft", "live", "read_only"),
     )
     parser.add_argument("--keep-office-tools", action="store_true")
@@ -156,6 +166,10 @@ def main(argv=None):
     assert (
         "127.0.0.1" in OLLAMA_URL or "localhost" in OLLAMA_URL
     ), "refusing non-local endpoint"
+    if args.connector:
+        connector_runtime.preflight_backend(
+            LLM(config_data["model"], num_ctx=config_data.get("num_ctx", 8192))
+        )
 
     domain = load_domain(
         args.domain or config_data.get("domain") or "office_demo"
@@ -200,11 +214,8 @@ def main(argv=None):
                 output_tokens=payload.get("output_tokens", 0),
             )
 
-    workdir = paths.workspace
-    world = domain.make_world(workdir, persistent=True)
-    memory = MemoryStore(
-        str(paths.memory)
-    )
+    workdir = None
+    world = None
     attempt_holder = {}
     confirmation_channel = ConfirmationChannel(sys.stdin, emit, args.run_id)
 
@@ -229,7 +240,8 @@ def main(argv=None):
     # and the loop confirms it through the same browser prompt a simulated
     # write uses, so nothing here re-implements consent.
     registry = domain.registry
-    mcp_effects = {}
+    external_effects = {}
+    external_specs = {}
     prompt_rules = domain.prompt_rules
     # Earlier turns of this conversation, if the run belongs to one.
     if args.thread:
@@ -237,53 +249,121 @@ def main(argv=None):
         if history:
             prompt_rules += history
             run_config = dataclasses.replace(run_config, history=history)
-    connected = None
+    mcp_connected = None
+    connector_connected = None
     if args.mcp:
         mcp_cfg = config_data.get("mcp") or {}
         mcp_mode = args.mcp_mode or mcp_cfg.get("mode") or "draft"
         names = [n.strip() for n in args.mcp.split(",") if n.strip()]
         servers = mcp_config.names_to_servers(names, mcp_cfg, mode=mcp_mode)
-        specs, mcp_effects, connected = mcp_bridge.enable(servers, mode=mcp_mode)
-        if not args.keep_office_tools:
-            registry = mcp_bridge.without_simulated(registry)
-        registry = registry.merged(specs)
+        specs, effects, mcp_connected = mcp_bridge.enable(servers, mode=mcp_mode)
+        external_specs.update(specs)
+        external_effects.update(effects)
         prompt_rules += mcp_bridge.mail_rules(mcp_mode)
+    if args.connector:
+        connector_mode = args.connector_mode or "draft"
+        names = [n.strip() for n in args.connector.split(",") if n.strip()]
+        try:
+            specs, effects, connector_connected = connector_runtime.enable(
+                names, mode=connector_mode
+            )
+        except BaseException:
+            mcp_bridge.shutdown()
+            raise
+        overlap = set(external_specs) & set(specs)
+        if overlap:
+            connector_runtime.shutdown()
+            mcp_bridge.shutdown()
+            raise ValueError(
+                "duplicate real-account tool names: " + ", ".join(sorted(overlap))
+            )
+        external_specs.update(specs)
+        external_effects.update(effects)
+        prompt_rules += connector_runtime.prompt_rules(connector_mode)
+    if external_specs:
+        try:
+            if not args.keep_office_tools:
+                registry = mcp_bridge.without_simulated(registry)
+            connector_runtime.enforce_total_tools(
+                registry,
+                (connector_connected and {
+                    name: external_specs[name]
+                    for provider in connector_connected
+                    for name in provider["tools"]
+                }) or {},
+                other_external_specs=(mcp_connected and {
+                    name: external_specs[name]
+                    for server in mcp_connected
+                    for name in server["tools"]
+                }) or {},
+            )
+            registry = registry.merged(external_specs)
+        except BaseException:
+            connector_runtime.shutdown()
+            mcp_bridge.shutdown()
+            raise
 
     # Which connector backs which tool, so the prompt can name the account it
     # is about to touch. A confirmation for a real mailbox that reads the same
     # as one for a simulated one is the failure this exists to prevent.
-    tool_account = {name: server["id"]
-                    for server in (connected or [])
-                    for name in server["tools"]}
+    tool_account = {
+        name: server["id"]
+        for server in (mcp_connected or []) + (connector_connected or [])
+        for name in server["tools"]
+    }
+    tool_mode = {
+        name: server["mode"]
+        for server in (mcp_connected or []) + (connector_connected or [])
+        for name in server["tools"]
+    }
 
     def confirm_action(action, detail):
         return confirmation_channel.confirm(
             action, detail,
             real=tool_account.get(action),
-            mode=args.mcp_mode or "draft",
+            mode=tool_mode.get(action, "draft"),
         )
 
-    attempt = AttemptContext(
-        attempt_id=f"web:{domain.name}:{args.agent}:{time.time_ns()}",
-        config=run_config,
-        domain=domain,
-        tools=registry,
-        policy=domain.default_policy.with_effects(
-            mcp_effects, confirmer=confirm_action
-        ),
-        world=world,
-        memory=memory,
-        workdir=workdir,
-        artifact_dir=paths.artifacts,
-        prompt_profile=domain.prompt_profile,
-        prompt_rules=prompt_rules,
-        hooks=RunHooks(on_note=on_note, on_tool=on_tool),
+    run_storage = EphemeralRunStorage() if external_specs else None
+    workdir = run_storage.workspace if run_storage else paths.workspace
+    artifact_dir = run_storage.artifacts if run_storage else paths.artifacts
+    world = domain.make_world(workdir, persistent=not bool(run_storage))
+    memory = (
+        EphemeralMemoryStore()
+        if external_specs
+        else MemoryStore(str(paths.memory))
     )
-    attempt_holder["attempt"] = attempt
-    log_dir = str(paths.logs)
-    llm, router = build_llm(
-        config_data, args, log_dir, stream_hook=on_stream
-    )
+    try:
+        attempt = AttemptContext(
+            attempt_id=f"web:{domain.name}:{args.agent}:{time.time_ns()}",
+            config=run_config,
+            domain=domain,
+            tools=registry,
+            policy=domain.default_policy.with_effects(
+                external_effects, confirmer=confirm_action
+            ),
+            world=world,
+            memory=memory,
+            workdir=workdir,
+            artifact_dir=artifact_dir,
+            prompt_profile=domain.prompt_profile,
+            prompt_rules=prompt_rules,
+            hooks=RunHooks(on_note=on_note, on_tool=on_tool),
+        )
+        attempt_holder["attempt"] = attempt
+        log_dir = str(paths.logs)
+        llm, router = build_llm(
+            config_data, args, log_dir, stream_hook=on_stream,
+            persist_log=not bool(external_specs),
+        )
+        if connector_connected:
+            connector_runtime.preflight_backend(llm)
+    except BaseException:
+        if run_storage is not None:
+            run_storage.cleanup()
+        connector_runtime.shutdown()
+        mcp_bridge.shutdown()
+        raise
 
     tiers = None
     if router:
@@ -295,29 +375,48 @@ def main(argv=None):
             "retained_hints": router.retained_model_hints(),
             "note": adapters_note(),
         }
-    emit(
-        "banner",
-        agent=args.agent,
-        name=config_data["name"],
-        model=config_data["model"],
-        note=config_data.get("note", ""),
-        domain=domain.name,
-        domain_version=domain.version,
-        budget=run_config.max_calls,
-        profile=profile.to_dict(),
-        task=args.task,
-        endpoint=OLLAMA_URL,
-        toolset=domain.name,
-        tiers=tiers,
-        today=run_config.today_human,
-        tools=list(registry.names()),
-        mcp=({"mode": args.mcp_mode or "draft", "servers": connected,
-              "warnings": (mcp_config.count_warnings(connected)
-                           + mcp_config.classification_warnings(connected)),
-              "effects": {name: effect for name, effect in mcp_effects.items()}}
-             if connected else None),
-    )
-    emit("world", **world_snapshot(domain, attempt))
+    try:
+        emit(
+            "banner",
+            agent=args.agent,
+            name=config_data["name"],
+            model=config_data["model"],
+            note=config_data.get("note", ""),
+            domain=domain.name,
+            domain_version=domain.version,
+            budget=run_config.max_calls,
+            profile=profile.to_dict(),
+            task=args.task,
+            endpoint=OLLAMA_URL,
+            toolset=domain.name,
+            tiers=tiers,
+            today=run_config.today_human,
+            tools=list(registry.names()),
+            mcp=({"mode": args.mcp_mode or "draft", "servers": mcp_connected,
+                  "warnings": (mcp_config.count_warnings(mcp_connected)
+                               + mcp_config.classification_warnings(mcp_connected)),
+                  "effects": {
+                      name: external_effects[name]
+                      for server in mcp_connected
+                      for name in server["tools"]
+                  }}
+                 if mcp_connected else None),
+            connectors=({"mode": args.connector_mode or "draft",
+                         "providers": connector_connected,
+                         "effects": {
+                             name: external_effects[name]
+                             for provider in connector_connected
+                             for name in provider["tools"]
+                         }}
+                        if connector_connected else None),
+        )
+        emit("world", **world_snapshot(domain, attempt))
+    except BaseException:
+        if run_storage is not None:
+            run_storage.cleanup()
+        connector_runtime.shutdown()
+        mcp_bridge.shutdown()
+        raise
 
     try:
         episode = run_harness(llm, args.task, attempt)
@@ -325,22 +424,43 @@ def main(argv=None):
         # Detailed diagnostics stay on the local terminal.  The stdout JSONL
         # stream is browser-visible and therefore carries only a generic error.
         emit_run_failure()
+        if run_storage is not None:
+            run_storage.cleanup()
         raise SystemExit(1)
+    finally:
+        connector_runtime.shutdown()
+        mcp_bridge.shutdown()
 
     os.makedirs(log_dir, exist_ok=True)
     log_path = os.path.join(log_dir, f"run_{time.time_ns()}.json")
     payload = redact(
-        {
-            "task": args.task,
-            "agent": args.agent,
-            "model": config_data["model"],
-            "domain": domain.name,
-            "domain_version": domain.version,
-            "via": "webui",
-            "transcript": episode.transcript,
-            "finished": episode.finished,
-            "summary": episode.done_summary,
-        }
+        (
+            {
+                "connector_run": True,
+                "agent": args.agent,
+                "model": config_data["model"],
+                "domain": domain.name,
+                "domain_version": domain.version,
+                "via": "webui",
+                "finished": episode.finished,
+                "providers": [
+                    {"id": item["id"], "mode": item["mode"]}
+                    for item in (mcp_connected or []) + (connector_connected or [])
+                ],
+            }
+            if external_specs
+            else {
+                "task": args.task,
+                "agent": args.agent,
+                "model": config_data["model"],
+                "domain": domain.name,
+                "domain_version": domain.version,
+                "via": "webui",
+                "transcript": episode.transcript,
+                "finished": episode.finished,
+                "summary": episode.done_summary,
+            }
+        )
     )
     encoded = json.dumps(payload, indent=1, ensure_ascii=False).encode("utf-8")
     if len(encoded) > 4 * 1024 * 1024:
@@ -379,6 +499,8 @@ def main(argv=None):
         usage_by_role=router.usage_by_role() if router else None,
         log=os.path.relpath(log_path, PROJECT),
     )
+    if run_storage is not None:
+        run_storage.cleanup()
 
 
 if __name__ == "__main__":

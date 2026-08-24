@@ -18,11 +18,19 @@
       "Draft mode should expose list/read/draft/modify and DROP send/reply/login."
     ],
     "command": "python3",
-    "args": ["-m", "mcp.selftest_server"],
+    "args": ["${ROOT}/mcp/selftest_server.py"],
     "cwd": "${ROOT}",
     "prefix": "mail_",
     "drop": ["login"],
-    "write_tools": ["modify_mail"]
+    "allow": ["list_mail", "read_mail", "draft_mail", "modify_mail", "send_mail", "reply_mail"],
+    "tool_policies": {
+      "list_mail": {"effect": "read", "transmits": false, "invites": false},
+      "read_mail": {"effect": "read", "transmits": false, "invites": false},
+      "draft_mail": {"effect": "external_write", "transmits": false, "invites": false},
+      "modify_mail": {"effect": "external_write", "transmits": false, "invites": false},
+      "send_mail": {"effect": "external_write", "transmits": true, "invites": false},
+      "reply_mail": {"effect": "external_write", "transmits": true, "invites": false}
+    }
   },
 
   "gmail": {
@@ -43,12 +51,16 @@
       "search_emails", "read_email", "draft_email", "list_email_labels",
       "modify_email"
     ],
-    "write_tools": ["modify_email", "batch_modify_emails", "download_attachment"],
+    "tool_policies": {
+      "search_emails": {"effect": "read", "transmits": false, "invites": false},
+      "read_email": {"effect": "read", "transmits": false, "invites": false},
+      "draft_email": {"effect": "external_write", "transmits": false, "invites": false},
+      "list_email_labels": {"effect": "read", "transmits": false, "invites": false},
+      "modify_email": {"effect": "external_write", "transmits": false, "invites": false}
+    },
     "notes": [
-      "write_tools exists because the bridge's name-based classifier misses",
-      "'modify_*' — it has no write verb in _WRITE_RE, so without this override",
-      "modify_email would be exposed as read-only and skip confirmation.",
-      "download_attachment writes to local disk, so it is a write too."
+      "Every exposed operation is explicitly classified in tool_policies.",
+      "download_attachment remains outside the allow list because it writes a local file."
     ]
   },
 
@@ -67,7 +79,15 @@
     "allow": [
       "list-calendars", "list-events", "search-events", "get-freebusy",
       "create-event", "update-event"
-    ]
+    ],
+    "tool_policies": {
+      "list-calendars": {"effect": "read", "transmits": false, "invites": false},
+      "list-events": {"effect": "read", "transmits": false, "invites": false},
+      "search-events": {"effect": "read", "transmits": false, "invites": false},
+      "get-freebusy": {"effect": "read", "transmits": false, "invites": false},
+      "create-event": {"effect": "external_write", "transmits": true, "invites": true},
+      "update-event": {"effect": "external_write", "transmits": true, "invites": true}
+    }
   },
 
   "ms365-own": {
@@ -120,14 +140,20 @@
     "prefix": "outlook_",
     "drop": ["login", "logout", "verify-login"],
     "allow": [
-      "list-mail-messages", "get-mail-message", "list-mail-folders",
-      "list-mail-folder-messages", "create-draft-email",
+      "list-mail-messages", "get-mail-message", "create-draft-email",
       "list-calendars", "list-calendar-events", "get-calendar-event",
       "get-calendar-view", "create-calendar-event"
     ],
-    "write_tools": ["copy-mail-message", "dismiss-calendar-event-reminder",
-                    "snooze-calendar-event-reminder"],
-    "read_tools": ["get-mailbox-settings"],
+    "tool_policies": {
+      "list-mail-messages": {"effect": "read", "transmits": false, "invites": false},
+      "get-mail-message": {"effect": "read", "transmits": false, "invites": false},
+      "create-draft-email": {"effect": "external_write", "transmits": false, "invites": false},
+      "list-calendars": {"effect": "read", "transmits": false, "invites": false},
+      "list-calendar-events": {"effect": "read", "transmits": false, "invites": false},
+      "get-calendar-event": {"effect": "read", "transmits": false, "invites": false},
+      "get-calendar-view": {"effect": "read", "transmits": false, "invites": false},
+      "create-calendar-event": {"effect": "external_write", "transmits": true, "invites": true}
+    },
     "hide_params": ["includeHeaders", "excludeResponse", "confirm"],
     "arg_hints": {
       "create-draft-email": {
@@ -156,15 +182,11 @@
       "shapes above were read off the live server's inputSchema, not the docs.",
       "Measured, not guessed: `--mcp ms365 --mcp-list` against the real server",
       "returns 69 tools even with --preset mail,calendar. That is far past what",
-      "an 8B can hold in an 8k context, so the allow list above cuts it to ten.",
+      "an 8B can hold in an 8k context, so the allow list above cuts it to eight.",
       "Widen it from the --mcp-list output, never from memory.",
-      "login/logout are dropped because the classifier reads them as harmless",
-      "(no write verb), which would let the model trigger a blocking device-code",
-      "prompt mid-run. A human logs in out of band; the agent never should.",
-      "The three write_tools are real classifier misses found in that same run:",
-      "copy/dismiss/snooze all change state but contain no verb _WRITE_RE knows,",
-      "so without the override they would run without asking. get-mailbox-settings",
-      "is the opposite — it matches 'set' inside 'settings' and is only a read."
+      "login/logout are dropped because authentication is operator-only and must",
+      "never trigger a blocking device-code prompt inside a model run.",
+      "Every allowed operation is classified explicitly; names are not used as policy."
     ]
   },
 
@@ -185,14 +207,20 @@
     "prefix": "outlook_",
     "drop": ["login", "logout", "verify-login"],
     "allow": [
-      "list-mail-messages", "get-mail-message", "list-mail-folders",
-      "list-mail-folder-messages", "create-draft-email",
+      "list-mail-messages", "get-mail-message", "create-draft-email",
       "list-calendars", "list-calendar-events", "get-calendar-event",
       "get-calendar-view", "create-calendar-event"
     ],
-    "write_tools": ["copy-mail-message", "dismiss-calendar-event-reminder",
-                    "snooze-calendar-event-reminder"],
-    "read_tools": ["get-mailbox-settings"],
+    "tool_policies": {
+      "list-mail-messages": {"effect": "read", "transmits": false, "invites": false},
+      "get-mail-message": {"effect": "read", "transmits": false, "invites": false},
+      "create-draft-email": {"effect": "external_write", "transmits": false, "invites": false},
+      "list-calendars": {"effect": "read", "transmits": false, "invites": false},
+      "list-calendar-events": {"effect": "read", "transmits": false, "invites": false},
+      "get-calendar-event": {"effect": "read", "transmits": false, "invites": false},
+      "get-calendar-view": {"effect": "read", "transmits": false, "invites": false},
+      "create-calendar-event": {"effect": "external_write", "transmits": true, "invites": true}
+    },
     "hide_params": ["includeHeaders", "excludeResponse", "confirm"],
     "arg_hints": {
       "create-draft-email": {
@@ -239,7 +267,6 @@
     "args": ["-y", "@softeria/ms-365-mcp-server", "--org-mode", "--preset", "work"],
     "prefix": "teams_",
     "drop": ["login", "logout", "verify-login"],
-    "read_tools": ["get-mailbox-settings"],
     "notes": [
       "IN DRAFT MODE THIS IS READ-ONLY. Teams has no concept of a draft, so every",
       "way to put a message in front of a person is a transmit tool and the bridge",
@@ -260,9 +287,6 @@
              "--preset", "mail,calendar,work"],
     "prefix": "ms365_",
     "drop": ["login", "logout", "verify-login"],
-    "write_tools": ["copy-mail-message", "dismiss-calendar-event-reminder",
-                    "snooze-calendar-event-reminder"],
-    "read_tools": ["get-mailbox-settings"],
     "notes": [
       "No allow list here on purpose — this preset spans three surfaces, so run",
       "`--mcp ms365-work --mcp-list` against your own tenant and narrow it to the",

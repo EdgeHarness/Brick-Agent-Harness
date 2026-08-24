@@ -292,6 +292,9 @@
                 <span class="chev" aria-hidden="true">›</span>
               </summary>
               <div class="menu-body">
+                <p class="opt-note">Reviewed business connectors</p>
+                <div id="opt-connectors" class="mcp-list"></div>
+                <p class="opt-note">Other MCP servers</p>
                 <div id="opt-mcp" class="mcp-list"></div>
                 <label class="mcp-mode">
                   <span>Mode</span>
@@ -301,9 +304,10 @@
                     <option value="read_only">read only</option>
                   </select>
                 </label>
-                <p class="opt-note">Inference stays on this machine either way.
-                  These tools do not: they reach Google and Microsoft. Draft mode
-                  hides every tool that could transmit to a person.</p>
+                <p class="opt-note">Inference stays on this machine. Provider
+                  calls exchange the requested business data with HubSpot, Optix,
+                  Google, or Microsoft. Draft mode hides tools declared to send
+                  notifications or invitations.</p>
               </div>
             </details>
           </div>

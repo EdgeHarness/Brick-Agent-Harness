@@ -28,6 +28,7 @@ import json
 import re
 
 from . import guards as _guards
+from . import faults
 
 # Abstract on purpose: concrete example content in an instruction becomes an
 # attractor that 1B models copy verbatim. Real examples live per-tool in docs.
@@ -169,10 +170,21 @@ def _execute_with_policy(attempt, name, args):
     """Require an explicit one-shot decision for host/external effects."""
     effect = attempt.policy.effect(name)
     if effect in ("external_write", "shell"):
-        detail = json.dumps(
-            {"tool": name, "args": args}, sort_keys=True,
-            ensure_ascii=False, default=str,
-        )[:4_096]
+        getter = getattr(attempt.tools, "get", None)
+        spec = (getter(name) if getter is not None else None) or {}
+        renderer = spec.get("confirmation")
+        try:
+            detail = (
+                renderer(copy.deepcopy(args))
+                if renderer is not None
+                else json.dumps(
+                    {"tool": name, "args": args}, sort_keys=True,
+                    ensure_ascii=False, default=str,
+                )
+            )
+        except Exception as error:
+            raise faults.RunnerFault("confirmation summary generation failed") from error
+        detail = str(detail)[:4_096]
         if not attempt.policy.confirm(name, detail):
             observation = "ERROR: operator confirmation was denied or unavailable"
             attempt.record_action(name, args, False, observation)

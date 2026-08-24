@@ -44,7 +44,8 @@ generalization or performance.
 ```text
 harness/            runtime, grading, agent-loop and tool-registry contracts
 domains/            versioned domain packs
-mcp/                connector registry for real accounts, off by default
+connectors/         fixed HubSpot MCP and Optix GraphQL adapters, off/unbound by default
+mcp/                audited registry for other MCP subprocesses, off by default
 bench/              tasks, graders, runner and report
 agents/             per-model configs and one shared CLI runner
 webui/              loopback development console
@@ -99,24 +100,38 @@ repository as a whole is not offline.
 ## Real accounts
 
 Run options include a **real accounts** picker, off unless you tick something.
-It can attach live Gmail, Google Calendar, Outlook and Teams through third-party
-MCP servers, which hold the OAuth tokens. To add a provider, see
-[`mcp/ADDING-A-CONNECTOR.md`](mcp/ADDING-A-CONNECTOR.md): it is a JSON entry, not
-harness code.
+It supports two separate boundaries:
+
+- normalized HubSpot and Optix tools in [`connectors/`](connectors/README.md):
+  HubSpot uses its official remote MCP server; Optix uses fixed reviewed GraphQL
+  documents;
+- audited Gmail, Google Calendar, Outlook, and Teams subprocess MCP entries in
+  [`mcp/`](mcp/ADDING-A-CONNECTOR.md).
+
+Normalized connectors require Python 3.10 or newer and operator-managed
+credentials in the OS keyring. Core Brick remains Python 3.9 compatible. The
+checked-in HubSpot and Optix bindings are unbound, so neither can reach an
+account before authenticated sandbox discovery and a reviewed binding change.
 
 Enabling one is a deliberate departure from the synthetic-only boundary below.
 
-- Model inference still never leaves the machine.
-- The **tool calls** do. A Gmail read reaches Google. Do not enable a connector
+- Model inference stays on the local backend.
+- The **tool calls** do not stay local. A CRM read sends its query to the
+  selected provider and returns the requested business fields. Do not enable one
   during a demonstration whose claim is that nothing leaves the machine.
-- `draft` mode, the default, drops every tool that can transmit to a person, so
-  the model composes and a human sends. `live` mode does not.
+- `draft` mode drops every tool explicitly declared to notify or invite;
+  `read_only` drops all writes; `live` exposes only reviewed writes.
 - Every world-changing call is classified `external_write` and is refused unless
   an operator confirms it, because absence of a callback denies.
+- Real-account runs use run-only memory and persist only minimal operation
+  metadata, not their task, transcript, observations, or answer.
+- Dynamic provider catalogs are never given directly to the model. Catalog,
+  operation, account, and schema drift fail closed.
 - `bench/` never imports the bridge, so the comparison is unaffected.
 
-No evidence gate covers connectors and no gate result depends on one. Treat a
-connected account as production data: use a throwaway, never real Brix records.
+No benchmark evidence gate covers connectors and no gate result depends on one.
+Use only developer/sandbox accounts until Brix explicitly approves production
+access. See [`connectors/README.md`](connectors/README.md) for the staged rollout.
 
 ## Safety
 

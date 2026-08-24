@@ -42,6 +42,12 @@ artifacts.
 `--mcp` changes that: it attaches a real account, and in `--mcp-mode live` a
 send reaches a real recipient. Draft mode, the default, cannot.
 
+`--connector hubspot` or `--connector optix` selects the fixed normalized
+business adapters. They require Python 3.10+, optional dependencies, OS-keyring
+credentials, and a reviewed bound provider catalog. Use `--connector-help` and
+`--connector-list`; see [`../connectors/README.md`](../connectors/README.md).
+Real-account runs use temporary memory and do not retain a normal transcript.
+
 ## Requirements and launch
 
 The released runtime supports Python 3.9–3.13. A local Ollama server at

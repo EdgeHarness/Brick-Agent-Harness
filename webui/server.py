@@ -39,6 +39,7 @@ from agents._shared.run_agent import validate_config  # noqa: E402
 from harness.domain import load_domain  # noqa: E402
 from harness import chat  # noqa: E402
 from harness import mcp_bridge, mcp_config  # noqa: E402
+from connectors import config as connector_config  # noqa: E402
 from harness.storage import agent_runtime_paths  # noqa: E402
 from webui.control import (  # noqa: E402
     ConfirmationLedger,
@@ -180,6 +181,8 @@ def require_mcp_names(value):
         return []
     if not isinstance(value, list) or len(value) > 8:
         raise RequestError(400, "mcp must be a list of at most 8 server names")
+    if any(not isinstance(item, str) or not item for item in value):
+        raise RequestError(400, "mcp server names must be nonempty strings")
     known = {name for name, _ in mcp_config.available()}
     unknown = sorted({v for v in value if v not in known})
     if unknown:
@@ -248,6 +251,27 @@ def inspect_connector(name, mode):
             mcp_bridge.shutdown()
         finally:
             _INSPECT_LOCK.release()
+
+
+def require_connector_names(value):
+    if not value:
+        return []
+    if not isinstance(value, list) or len(value) > 2:
+        raise RequestError(400, "connectors must be a list of at most 2 names")
+    if any(not isinstance(item, str) or not item for item in value):
+        raise RequestError(400, "connector names must be nonempty strings")
+    available = {name: status for name, _, status in connector_config.available()}
+    unknown = sorted({item for item in value if item not in available})
+    if unknown:
+        raise RequestError(400, "unknown connectors: " + ", ".join(unknown))
+    unbound = sorted({item for item in value if available[item] != "bound"})
+    if unbound:
+        raise RequestError(
+            409,
+            "connectors require authenticated reviewed bindings: "
+            + ", ".join(unbound),
+        )
+    return sorted(set(value))
 
 
 def agent_dir(agent):
@@ -355,6 +379,12 @@ def agent_list():
             # config quietly enables a live mailbox for every run.
             "mcp_default": list((cfg.get("mcp") or {}).get("enable") or []),
             "mcp_default_mode": (cfg.get("mcp") or {}).get("mode") or "draft",
+            "connector_default": list(
+                (cfg.get("connectors") or {}).get("enable") or []
+            ),
+            "connector_default_mode": (
+                (cfg.get("connectors") or {}).get("mode") or "draft"
+            ),
             "files": file_count,
             "runs": run_count,
             "memories": memory_count,
@@ -620,6 +650,12 @@ class Runs:
                     cmd += ["--mcp-mode", options["mcp_mode"]]
                 if options.get("keep_office_tools"):
                     cmd.append("--keep-office-tools")
+            if options.get("connectors"):
+                cmd += ["--connector", ",".join(options["connectors"])]
+                if options.get("connector_mode"):
+                    cmd += ["--connector-mode", options["connector_mode"]]
+                if options.get("keep_office_tools") and "--keep-office-tools" not in cmd:
+                    cmd.append("--keep-office-tools")
             env = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8")
             process_tree = ProcessTree.start(
                 cmd, cwd=PROJECT, env=env, text=True,
@@ -865,6 +901,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     {"name": name, "summary": summary,
                      "setup": mcp_config.setup_notes(name)}
                     for name, summary in mcp_config.available()])
+            if path == "/api/connectors":
+                return self.send_json([
+                    {
+                        "name": name,
+                        "summary": summary,
+                        "status": status,
+                        "setup": connector_config.setup_notes(name),
+                    }
+                    for name, summary, status in connector_config.available()
+                ])
             if path == "/api/status":
                 self.exact_query(q)
                 run = self.server.runs.current
@@ -912,6 +958,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     body,
                     required=("agent", "domain", "task", "tiers", "max_calls"),
                     optional=("small", "deep", "mcp", "mcp_mode",
+                              "connectors", "connector_mode",
                               "keep_office_tools", "thread", "model"),
                 )
                 agent = require_string(body["agent"], "agent", maximum=128)
@@ -933,6 +980,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                                      "model", maximum=200),
                     "mcp": require_mcp_names(body.get("mcp")),
                     "mcp_mode": require_mcp_mode(body.get("mcp_mode")),
+                    "connectors": require_connector_names(body.get("connectors")),
+                    "connector_mode": require_mcp_mode(
+                        body.get("connector_mode")
+                    ),
                     "keep_office_tools": require_bool(
                         body.get("keep_office_tools") or False,
                         "keep_office_tools"),
@@ -942,6 +993,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "deep": require_optional_string(body.get("deep"), "deep"),
                     "max_calls": max_calls,
                 }
+                if (options["mcp"] or options["connectors"]) and options["thread"]:
+                    raise RequestError(
+                        400,
+                        "real-account runs cannot be written to persistent chat history",
+                    )
                 if options["thread"]:
                     chat.append(agent_dir(agent), options["thread"],
                                 "user", task)

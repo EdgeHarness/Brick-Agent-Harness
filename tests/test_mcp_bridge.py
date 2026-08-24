@@ -2,16 +2,18 @@
 
 The selftest server is a genuine MCP server (initialize / tools/list /
 tools/call over newline JSON-RPC); only its mailbox is fake. Its tool names are
-chosen to hit every branch of the write classifier, so these tests exercise the
+chosen to hit every explicit policy branch, so these tests exercise the
 same code path a real Gmail/Outlook server would - minus credentials.
 """
 from pathlib import Path
+import threading
 
 import pytest
 
 from harness import mcp_bridge, mcp_config
 from harness.runtime import ActionPolicy
 from harness.tools import ToolRegistry
+from harness import faults
 
 
 class _StubAttempt:
@@ -51,8 +53,7 @@ def test_effects_come_classified_for_the_action_policy(draft):
     assert set(effects) == set(specs)           # exactly the exposed tools
     assert effects["mail_list_mail"] == "read"
     assert effects["mail_draft_mail"] == "external_write"
-    # modify_mail has no write verb the classifier knows; only the registry's
-    # write_tools override classifies it. If this fails, the override is dead.
+    # The policy is explicit; the name is never used to infer safety.
     assert effects["mail_modify_mail"] == "external_write"
 
 
@@ -99,11 +100,32 @@ def test_live_mode_exposes_send_and_read_only_drops_every_write():
         assert effects["mail_send_mail"] == "external_write"
     finally:
         mcp_bridge.shutdown()
+
+
+def test_a_server_mode_can_narrow_but_never_widen_the_run_mode():
+    server = dict(
+        mcp_config.names_to_servers(["selftest"])[0], mode="live"
+    )
+    specs, _, summary = mcp_bridge.enable([server], mode="draft")
+    try:
+        assert summary[0]["mode"] == "draft"
+        assert "mail_send_mail" not in specs
+        assert "mail_reply_mail" not in specs
+    finally:
+        mcp_bridge.shutdown()
     specs, effects, _ = mcp_bridge.enable(
         mcp_config.names_to_servers(["selftest"]), mode="read_only")
     try:
         assert set(effects.values()) == {"read"}
         assert "mail_draft_mail" not in specs
+    finally:
+        mcp_bridge.shutdown()
+
+    server["mode"] = "read_only"
+    specs, effects, summary = mcp_bridge.enable([server], mode="live")
+    try:
+        assert summary[0]["mode"] == "read_only"
+        assert set(effects.values()) == {"read"}
     finally:
         mcp_bridge.shutdown()
 
@@ -265,10 +287,18 @@ def test_the_call_reaches_the_account_that_was_named():
 
     work, personal = _Fake("work", "WORK INBOX"), _Fake("personal", "PERSONAL INBOX")
     tool = {"name": "list_mail"}
-    providers = [mcp_bridge._adapt(c, tool, {}, "outlook_", True, set())[3]
+    cfg = {
+        "id": "mail",
+        "tool_policies": {
+            "list_mail": {
+                "effect": "read", "transmits": False, "invites": False,
+            }
+        },
+    }
+    providers = [mcp_bridge._adapt(c, tool, cfg, "outlook_", "live", set())[3]
                  for c in (work, personal)]
     run = mcp_bridge._to_broker(
-        mcp_bridge._adapt(work, tool, {}, "outlook_", True, set())[1],
+        mcp_bridge._adapt(work, tool, cfg, "outlook_", "live", set())[1],
         providers)["run"]
 
     assert run(_StubAttempt(), {"account": "personal"}) == "PERSONAL INBOX"
@@ -310,9 +340,161 @@ def test_a_clash_inside_one_server_still_qualifies_rather_than_brokering():
 
     fake = _Fake()
     seen = set()
-    first = mcp_bridge._adapt(fake, {"name": "list-mail"}, {}, "", True, seen)
+    cfg = {
+        "id": "srv",
+        "tool_policies": {
+            "list-mail": {
+                "effect": "read", "transmits": False, "invites": False,
+            },
+            "list_mail": {
+                "effect": "read", "transmits": False, "invites": False,
+            },
+        },
+    }
+    first = mcp_bridge._adapt(fake, {"name": "list-mail"}, cfg, "", "live", seen)
     seen.add(first[0])
-    second = mcp_bridge._adapt(fake, {"name": "list_mail"}, {}, "", True, seen)
+    second = mcp_bridge._adapt(fake, {"name": "list_mail"}, cfg, "", "live", seen)
     assert first[0] == "list_mail"
     assert second[0] == "srv_list_mail"
     assert "account" not in second[1]["params"]
+
+
+# ------------------------------------------------------- strict boundary ----
+
+def test_unknown_modes_fail_and_unclassified_generic_tools_default_to_write():
+    with pytest.raises(mcp_bridge.BridgeConfigError, match="mode"):
+        mcp_bridge.enable([], mode="anything")
+    adapted = mcp_bridge._adapt(
+        type("Client", (), {"id": "generic"})(),
+        {"name": "mystery"},
+        {"id": "generic"},
+        "",
+        "live",
+        set(),
+    )
+    assert adapted[2] == "external_write"
+    assert adapted[4] == "unclassified"
+
+
+def test_partial_exact_policy_fails_closed():
+    with pytest.raises(mcp_bridge.BridgeConfigError, match="no exact policy"):
+        mcp_bridge._adapt(
+            type("Client", (), {"id": "strict"})(),
+            {"name": "mystery"},
+            {"id": "strict", "tool_policies": {}},
+            "",
+            "live",
+            set(),
+        )
+
+
+def test_draft_drops_invitation_tools_even_when_the_name_looks_safe():
+    cfg = {
+        "id": "calendar",
+        "tool_policies": {
+            "reserve": {
+                "effect": "external_write", "transmits": False, "invites": True,
+            }
+        },
+    }
+    client = type("Client", (), {"id": "calendar"})()
+    assert mcp_bridge._adapt(
+        client, {"name": "reserve"}, cfg, "", "draft", set()
+    ) is None
+    assert mcp_bridge._adapt(
+        client, {"name": "reserve"}, cfg, "", "live", set()
+    ) is not None
+
+
+@pytest.mark.parametrize("field", ["command", "args", "env", "cwd", "tool_policies"])
+def test_agent_config_cannot_override_connector_execution(field):
+    with pytest.raises(mcp_config.ConfigError, match="cannot change"):
+        mcp_config.names_to_servers(
+            ["selftest"], {"servers": {"selftest": {field: "unsafe"}}}
+        )
+
+
+def test_child_environment_is_allowlisted_and_secrets_need_explicit_declaration(monkeypatch):
+    monkeypatch.setenv("UNRELATED_API_TOKEN", "must-not-leak")
+    monkeypatch.setenv("PATH", "safe-path")
+    child = mcp_bridge._child_env({"DECLARED_TOKEN": "explicit"})
+    assert child["PATH"] == "safe-path"
+    assert "UNRELATED_API_TOKEN" not in child
+    assert child["DECLARED_TOKEN"] == "explicit"
+
+
+def test_structured_mcp_results_stay_structured_and_are_redacted():
+    class Client:
+        catalog_stale = threading.Event()
+
+        def call_tool(self, name, args):
+            return False, {
+                "data": {"records": [{"id": "1"}], "access_token": "secret"},
+                "message": "ok",
+            }
+
+    value = mcp_bridge._make_executor(Client(), "read", {}, False)(
+        _StubAttempt(), {}
+    )
+    assert isinstance(value, dict)
+    assert value["data"]["records"] == [{"id": "1"}]
+    assert value["data"]["access_token"] == "[redacted]"
+
+
+def test_catalog_change_blocks_a_write_before_the_provider_call():
+    class Client:
+        def __init__(self):
+            self.catalog_stale = threading.Event()
+            self.catalog_stale.set()
+            self.calls = 0
+
+        def call_tool(self, name, args):
+            self.calls += 1
+            return False, "ok"
+
+    client = Client()
+    run = mcp_bridge._make_executor(client, "write", {}, True)
+    with pytest.raises(faults.EnvironmentFault, match="catalog changed"):
+        run(_StubAttempt(), {})
+    assert client.calls == 0
+
+
+def test_hard_generic_catalog_cap_closes_every_client(monkeypatch):
+    clients = []
+
+    class Client:
+        def __init__(self, sid, *_args, **_kwargs):
+            self.id = sid
+            self.catalog_stale = threading.Event()
+            self.closed = False
+            clients.append(self)
+
+        def list_tools(self):
+            return [
+                {"name": f"read_{index}"}
+                for index in range(mcp_bridge.MAX_MCP_TOOLS + 1)
+            ]
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setattr(mcp_bridge, "MCPClient", Client)
+    policies = {
+        f"read_{index}": {"effect": "read", "transmits": False, "invites": False}
+        for index in range(mcp_bridge.MAX_MCP_TOOLS + 1)
+    }
+    server = {
+        "id": "too-many", "command": "unused", "allow": list(policies),
+        "tool_policies": policies,
+    }
+    with pytest.raises(mcp_bridge.BridgeConfigError, match="hard limit"):
+        mcp_bridge.enable([server], mode="read_only")
+    assert clients and all(client.closed for client in clients)
+
+
+def test_calendar_attendee_operations_are_explicitly_invitation_capable():
+    registry = mcp_config.load_registry()
+    assert registry["gcal"]["tool_policies"]["create-event"]["invites"] is True
+    assert registry["ms365"]["tool_policies"]["create-calendar-event"]["invites"] is True
+    assert len(registry["ms365"]["allow"]) <= 8
+    assert len(registry["ms365-personal"]["allow"]) <= 8

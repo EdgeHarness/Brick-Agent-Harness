@@ -87,11 +87,26 @@ safe and does not claim lossless sudden-power-failure durability.
 Use only synthetic data. Supported surfaces expose domain-scoped simulated
 actions and attempt-owned artifacts, not arbitrary host paths or commands.
 
-The one exception is an MCP connector, which is off unless explicitly enabled
-and reaches a real account through a third-party server. Draft mode, the
-default, drops every tool that can transmit to a person; a world-changing call
-is refused unless an operator confirms it. Connect a throwaway account, never
-one holding real records. See the real-accounts section of the README.
+The one exception is an explicitly enabled real-account connector. Legacy MCP
+subprocess connectors keep their own OAuth material. Normalized HubSpot and
+Optix connectors store operator-managed credentials through the OS keyring
+(Windows Credential Manager on the supported Windows host), never in repository
+files, prompts, arguments, transcripts, or logs. Draft mode drops every tool
+declared to transmit or invite; a world-changing call is refused unless an
+operator confirms it. The checked-in normalized bindings are unbound. Use a
+developer or sandbox account until Brix approves production access. See
+[`connectors/README.md`](connectors/README.md).
+
+Inference remains local, but a connector request is network exchange with its
+provider. HubSpot or Optix receives the fields needed for that operation. A
+connected run therefore cannot be described as keeping all business data on the
+device.
+
+Real-account runs use empty run-only memory. Normal run transcripts, tasks,
+answers, and chat turns are not persisted; the connector operation ledger keeps
+only minimal status and hashed object identifiers outside the repository. This
+is a retention control, not a claim that the provider does not retain its own
+API records or logs.
 Any retained legacy overlay source is unreachable unsupported code and must not
 be reintroduced through a launcher, API, UI option, configuration, or domain
 composition path.

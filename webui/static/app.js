@@ -1522,22 +1522,37 @@ async function startRun() {
   if (!S.agent || S.locked) return;
   const task = $('task').value.trim();
   if (!task) { $('task').focus(); return; }
+  const selectedMcp = mcpSelected();
+  const selectedConnectors = connectorSelected();
+  const agent = S.agents.find((item) => item.id === S.agent) || {};
+  const useAccountDefaults = !selectedMcp.length && !selectedConnectors.length;
+  const effectiveMcp = useAccountDefaults ? (agent.mcp_default || []) : selectedMcp;
+  const effectiveConnectors = useAccountDefaults
+    ? (agent.connector_default || []) : selectedConnectors;
+  const realAccountRun = effectiveMcp.length + effectiveConnectors.length > 0;
   /* The thread is created from the first message rather than by the New chat
-     button, so an empty conversation never appears in the sidebar. */
-  if (!S.thread) {
+     button, so an empty conversation never appears in the sidebar. Real-account
+     tasks deliberately stay out of persistent chat history. */
+  if (!S.thread && !realAccountRun) {
     try {
       S.thread = (await post('/api/thread/new', { agent: S.agent, task })).id;
     } catch (err) { /* a thread is a nicety; the run should still go */ }
   }
   const body = {
-    agent: S.agent, task, thread: S.thread,
+    agent: S.agent, task, thread: realAccountRun ? null : S.thread,
     domain: S.domain,
     keep_office_tools: $('opt-keep-office').checked,
     tiers: $('opt-tiers').checked,
     max_calls: parseInt($('opt-calls').value, 10) || null,
     model: $('model').value || null,
-    mcp: mcpSelected(),
-    mcp_mode: $('opt-mcp-mode').value,
+    mcp: effectiveMcp,
+    mcp_mode: useAccountDefaults
+      ? (agent.mcp_default_mode || $('opt-mcp-mode').value)
+      : $('opt-mcp-mode').value,
+    connectors: effectiveConnectors,
+    connector_mode: useAccountDefaults
+      ? (agent.connector_default_mode || $('opt-mcp-mode').value)
+      : $('opt-mcp-mode').value,
   };
   resetRun();
   let res;
@@ -1924,8 +1939,41 @@ function renderCheck(r) {
   return box;
 }
 
+async function loadConnectors() {
+  let providers;
+  try {
+    providers = await api('/api/connectors');
+  } catch (err) {
+    return;
+  }
+  const box = $('opt-connectors');
+  box.textContent = '';
+  for (const provider of providers) {
+    const row = el('label', 'menu-row mcp-row');
+    row.title = provider.setup;
+    const cb = el('input');
+    cb.type = 'checkbox';
+    cb.className = 'brick-connector';
+    cb.value = provider.name;
+    cb.disabled = provider.status !== 'bound';
+    const suffix = provider.status === 'bound' ? '' : ' (setup required)';
+    const label = el('span', 'menu-label', provider.name + suffix);
+    label.append(el('em', null, provider.summary));
+    const tick = el('span', 'tick', '✓');
+    tick.setAttribute('aria-hidden', 'true');
+    row.append(cb, label, tick);
+    box.append(row);
+  }
+  paintOptDots();
+}
+
 function mcpSelected() {
   return [...document.querySelectorAll('.mcp-server:checked')].map((el) => el.value);
+}
+
+function connectorSelected() {
+  return [...document.querySelectorAll('.brick-connector:checked')]
+    .map((item) => item.value);
 }
 
 /* The popover closes and takes any memory of what is switched on with it, so
@@ -1940,7 +1988,9 @@ function paintOptDots() {
   if (S.domain && S.domain !== 'office_demo') on.unshift(S.domain);
   /* Real accounts lead the summary. Everything else here changes how the agent
      works; this is the only one that decides whether it can touch live mail. */
-  const conn = mcpSelected();
+  const selectedMcp = mcpSelected();
+  const selectedConnectors = connectorSelected();
+  const conn = [...selectedMcp, ...selectedConnectors];
   const mode = $('opt-mcp-mode').value;
   /* Ticking nothing does not mean connecting to nothing. The agent's own
      config.json can enable servers, and a run with no explicit selection falls
@@ -1948,9 +1998,15 @@ function paintOptDots() {
      mailbox. It reports what the next run will actually connect to, and says
      where that came from. */
   const agent = S.agents.find((x) => x.id === S.agent) || {};
-  const fallback = conn.length ? [] : (agent.mcp_default || []);
+  const fallback = conn.length ? [] : [
+    ...(agent.mcp_default || []), ...(agent.connector_default || []),
+  ];
   const live = conn.length ? conn : fallback;
-  const liveMode = conn.length ? mode : (agent.mcp_default_mode || mode);
+  const liveMode = conn.length ? mode : (
+    (agent.connector_default || []).length
+      ? (agent.connector_default_mode || mode)
+      : (agent.mcp_default_mode || mode)
+  );
   if (live.length) on.unshift(liveMode === 'live' ? `${live.length} live` : `${live.length} real`);
   $('conn-state').textContent = live.length
     ? `${live.length} · ${liveMode === 'read_only' ? 'read only' : liveMode}`
@@ -2089,6 +2145,7 @@ if (!CAPABILITY) {
 } else {
   loadAgents();
   loadMcp();
+  loadConnectors();
   $('new-chat').onclick = newChat;
 }
 setInterval(() => { if (!S.run) loadAgents(true); }, 20000);

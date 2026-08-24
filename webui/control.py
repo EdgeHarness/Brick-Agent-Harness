@@ -10,7 +10,6 @@ import json
 import os
 from pathlib import Path
 import queue
-import re
 import secrets
 import signal
 import stat
@@ -18,6 +17,8 @@ import subprocess
 import threading
 import time
 import shutil
+
+from harness.privacy import redact
 
 
 CAPABILITY_BYTES = 32
@@ -38,19 +39,6 @@ MAX_ARCHIVE_MEMBERS = 2_000
 MAX_WORKSPACE_MEMBERS = 5_000
 MAX_WORKSPACE_BYTES = 100 * 1024 * 1024
 CONFIRMATION_TIMEOUT_SECONDS = 120
-
-_SECRET_KEY = re.compile(
-    r"^(?:authorization|api[_-]?key|password|secret|token|"
-    r"access[_-]?token|refresh[_-]?token|capability|nonce)$",
-    re.I,
-)
-_BEARER = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+\-/]+=*")
-_SECRET_ASSIGNMENT = re.compile(
-    r"(?i)([\"']?(?:authorization|api[_-]?key|password|secret|token|"
-    r"access[_-]?token|refresh[_-]?token|capability|nonce)[\"']?\s*[:=]\s*)"
-    r"([\"']?)([^\s,}\"']+)([\"']?)"
-)
-
 
 class RequestError(ValueError):
     """A deliberately user-visible request rejection."""
@@ -329,28 +317,6 @@ def reset_directory(root, target):
     target = trusted_directory_under(root, target)
     shutil.rmtree(target)
     os.makedirs(target, exist_ok=False)
-
-
-def redact(value, *, depth=0):
-    """Return a bounded JSON-compatible copy with likely credentials removed."""
-    if depth > 20:
-        return "[truncated]"
-    if isinstance(value, dict):
-        out = {}
-        for key, item in list(value.items())[:1_000]:
-            label = str(key)[:256]
-            out[label] = "[redacted]" if _SECRET_KEY.search(label) else redact(
-                item, depth=depth + 1
-            )
-        return out
-    if isinstance(value, (list, tuple)):
-        return [redact(item, depth=depth + 1) for item in value[:2_000]]
-    if isinstance(value, str):
-        bounded = _BEARER.sub("Bearer [redacted]", value[:32_768])
-        return _SECRET_ASSIGNMENT.sub(r"\1\2[redacted]\4", bounded)
-    if value is None or isinstance(value, (bool, int, float)):
-        return value
-    return str(value)[:32_768]
 
 
 def prune_logs(log_dir):

@@ -3,20 +3,17 @@
 Everything about the real integration — OAuth, Node, a network — is someone
 else's dependency, which makes "is our wiring correct?" impossible to answer on
 a fresh machine. This server answers it: it speaks the same stdio JSON-RPC an
-npx server speaks, and its tool names are chosen to exercise every branch of
-mcp_bridge's classifier.
+npx server speaks, and its tools exercise explicit read, draft-write, and
+transmitting-write policies.
 
-    python3 -m mcp.selftest_server            # spoken to over stdin/stdout
+    python3 mcp/selftest_server.py             # spoken to over stdin/stdout
     python3 agents/8b/run_agent.py --mcp selftest --mcp-list
 
 Expected in draft mode:
     list_mail       read      exposed, no confirmation
     read_mail       read      exposed, no confirmation
     draft_mail      write     exposed, confirmed      (composing is not sending)
-    modify_mail     write     exposed, confirmed      (ONLY via the registry's
-                                                       write_tools override —
-                                                       "modify" is not a verb
-                                                       mcp_bridge._WRITE_RE knows)
+    modify_mail     write     exposed, confirmed      (explicit registry policy)
     send_mail       —         DROPPED (transmits to a person)
     reply_mail      —         DROPPED (transmits to a person)
     login           —         DROPPED (registry drop list)
