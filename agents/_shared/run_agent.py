@@ -218,10 +218,18 @@ def _connect_mcp(options, config_data):
 def _print_mcp_tools(summary, specs, effects):
     for server in summary:
         print(f"{server['id']}  ({server['mode']})")
+        classes = server.get("classified_by") or {}
         for name in server["tools"]:
             kind = "write" if effects[name] == "external_write" else "read"
-            print(f"    {kind:>5}  {name}")
+            why = classes.get(name, "")
+            # The source matters as much as the class: "unclassified" is the
+            # safe default speaking, not the server, and it is the one a
+            # developer should confirm or override in servers.json.
+            print(f"    {kind:>5}  {name}"
+                  + (f"    ({why})" if why else ""))
     for warning in mcp_config.count_warnings(summary):
+        print(f"  ! {warning}")
+    for warning in mcp_config.classification_warnings(summary):
         print(f"  ! {warning}")
 
 

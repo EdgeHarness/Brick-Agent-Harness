@@ -63,6 +63,14 @@ _WRITE_RE = re.compile(
     re.I)
 # Tools that actually TRANSMIT to another person. Dropped in draft mode.
 _TRANSMIT_RE = re.compile(r"(send|forward|reply)", re.I)
+# A read verb LEADING the name. Anchored, unlike _WRITE_RE, because the first
+# word of an MCP tool name is its action: "get-mailbox-settings" is a read that
+# only looks like a write because "set" hides inside "settings". Deliberately
+# excludes download and export, which put a file on disk.
+_READ_RE = re.compile(
+    r"^(list|get|read|search|find|fetch|query|show|describe|check|count|view)\b"
+    r"|^(list|get|read|search|find|fetch|query|show|describe|check|count|view)[_\-]",
+    re.I)
 
 
 # Credential-shaped environment variables never reach an MCP child process
@@ -378,15 +386,57 @@ def _example_for(harness_name, schema, back, hint=None):
     return {"tool": harness_name, "args": args}
 
 
-def _is_write(name, server_cfg):
-    keep_read = {k.lower() for k in server_cfg.get("read_tools", [])}
-    force_write = {k.lower() for k in server_cfg.get("write_tools", [])}
+def classify(name, server_cfg, tool=None):
+    """Is this MCP tool a write? Returns (is_write, why).
+
+    Resolved in falling order of authority, because guessing from a name is
+    the weakest evidence available and used to be the only evidence used:
+
+      1. the registry entry's explicit read_tools / write_tools override
+      2. the server's own MCP annotations (readOnlyHint, destructiveHint) -
+         the protocol carries the answer and we were throwing it away
+      3. a read verb leading the name (list_, get_, search_, ...)
+      4. a write verb anywhere in the name (_WRITE_RE)
+      5. UNKNOWN, which counts as a write
+
+    Step 5 is the change that matters. This used to fall through to "read",
+    so a tool whose name held no verb the regex knew - upsert_contact,
+    merge_records, execute_workflow - was published read-only and ran against
+    a real account with no confirmation. Absence of a recognised write verb is
+    not evidence that nothing is written, and this is the one classification
+    in the bridge that fails on a real person's data. It now fails closed,
+    matching ActionPolicy's deny-by-default posture everywhere else.
+
+    The cost of the safe default is a confirmation prompt on a tool that only
+    reads. `why` exists so `--mcp-list` can show which tools were guessed at,
+    making that a two-second fix in the registry rather than a mystery.
+    """
     n = name.lower()
-    if n in force_write:
-        return True
-    if n in keep_read:
-        return False
-    return bool(_WRITE_RE.search(name))
+    if n in {k.lower() for k in server_cfg.get("write_tools", [])}:
+        return True, "override"
+    if n in {k.lower() for k in server_cfg.get("read_tools", [])}:
+        return False, "override"
+
+    ann = (tool or {}).get("annotations") or {}
+    if isinstance(ann, dict):
+        # destructiveHint is only meaningful for a non-read-only tool, so a
+        # server that sets it at all is declaring a write.
+        if ann.get("destructiveHint") is True:
+            return True, "declared"
+        if ann.get("readOnlyHint") is True:
+            return False, "declared"
+        if ann.get("readOnlyHint") is False:
+            return True, "declared"
+
+    if _READ_RE.match(name):
+        return False, "read verb"
+    if _WRITE_RE.search(name):
+        return True, "write verb"
+    return True, "unclassified"
+
+
+def _is_write(name, server_cfg, tool=None):
+    return classify(name, server_cfg, tool)[0]
 
 
 def _make_executor(client, mcp_name, back):
@@ -451,7 +501,10 @@ def _to_broker(spec, providers):
 
 
 def _adapt(client, tool, server_cfg, prefix, draft_only, seen):
-    """One MCP tool -> (harness_name, spec, effect, provider) or None.
+    """One MCP tool -> (harness_name, spec, effect, provider, why) or None.
+
+    `why` is how the effect was decided (see classify); enable() carries it
+    into the summary so a developer can audit a new connector's classes.
 
     `seen` is the names THIS server has already claimed. A name already taken by
     an EARLIER server is not a clash, it is a second provider of the same
@@ -460,7 +513,7 @@ def _adapt(client, tool, server_cfg, prefix, draft_only, seen):
     mcp_name = tool.get("name")
     if not mcp_name:
         return None
-    is_write = _is_write(mcp_name, server_cfg)
+    is_write, why = classify(mcp_name, server_cfg, tool)
     if draft_only and is_write and _TRANSMIT_RE.search(mcp_name) \
             and mcp_name.lower() not in {k.lower() for k in server_cfg.get("write_tools", [])}:
         return None  # draft mode: never expose a tool that transmits to a person
@@ -486,7 +539,7 @@ def _adapt(client, tool, server_cfg, prefix, draft_only, seen):
         "run": _make_executor(client, mcp_name, back),
     }
     provider = (client.id, client, mcp_name, back, is_write)
-    return harness_name, spec, ("external_write" if is_write else "read"), provider
+    return harness_name, spec, ("external_write" if is_write else "read"), provider, why
 
 
 # ---------------------------------------------------------------- enable ----
@@ -524,13 +577,15 @@ def enable(servers, mode="draft"):
         _CLIENTS.append(client)
         prefix = cfg.get("prefix", "")
         added, writes, seen = [], [], set()
+        classes = {}
         for tool in client.list_tools():
-            if read_only and _is_write(tool.get("name", ""), cfg):
+            if read_only and _is_write(tool.get("name", ""), cfg, tool):
                 continue
             adapted = _adapt(client, tool, cfg, prefix, draft_only, seen)
             if not adapted:
                 continue
-            name, spec, effect, provider = adapted
+            name, spec, effect, provider, why = adapted
+            classes[name] = why
             providers.setdefault(name, []).append(provider)
             if name in specs:
                 # A SECOND PROVIDER of the same capability, not a name clash.
@@ -551,7 +606,8 @@ def enable(servers, mode="draft"):
             added.append(name)
             if effects[name] == "external_write":
                 writes.append(name)
-        summary.append({"id": sid, "mode": server_mode, "tools": added, "writes": writes})
+        summary.append({"id": sid, "mode": server_mode, "tools": added,
+                        "writes": writes, "classified_by": classes})
     return specs, effects, summary
 
 

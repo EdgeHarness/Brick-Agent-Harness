@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+### Connector effect classification fails closed and explains itself
+
+Adding a connector is a registry entry with no harness code, and the one
+manual step in that path was also the one that failed in the unsafe
+direction. `mcp_bridge.classify()` replaces the single name regex:
+
+- The server's own MCP annotations (`readOnlyHint`, `destructiveHint`) are
+  now read and believed. The protocol carried the answer and the bridge was
+  discarding it; a server that annotates its tools needs no classification
+  work at all.
+- A name matching nothing is now a **write**, not a read. `upsert_contact`,
+  `merge_records` and `execute_workflow` hold no verb the old regex knew, so
+  they were published read-only and reached a real account with no
+  confirmation. Absence of a known write verb is not evidence that nothing
+  is written.
+- A read verb LEADING the name is a read, which fixes the
+  `get-mailbox-settings` shape (a write verb hiding inside a longer word)
+  without an override.
+- `--mcp-list` prints how each tool was classified (`override`, `declared`,
+  `read verb`, `write verb`, `unclassified`), and
+  `mcp_config.classification_warnings()` names the unclassified ones so the
+  author can resolve each with one line in `servers.json`.
+
+Registry overrides still win over everything and are unchanged.
+`mcp/ADDING-A-CONNECTOR.md` sections 3 and 4 rewritten to match.
+
+
 ### Phase 5: Final-Agent-8B retired to a shipping instance
 
 - Final-Agent-8B `b509b38` declares this repository the engine: its

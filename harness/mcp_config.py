@@ -153,6 +153,28 @@ def setup_notes(name, registry_path=None):
     return "\n".join(lines)
 
 
+def classification_warnings(summary):
+    """Name the tools whose effect class was a safe guess, not a fact.
+
+    An unclassified tool is treated as a write, so nothing runs unconfirmed;
+    the cost is a confirmation prompt on a tool that may only read. Both
+    outcomes are fixed the same way, by one line in the registry entry, so
+    the run says which tools are waiting on that line."""
+    warnings = []
+    for server in summary:
+        guessed = sorted(
+            name for name, why in (server.get("classified_by") or {}).items()
+            if why == "unclassified"
+        )
+        if guessed:
+            warnings.append(
+                f"{server['id']}: {len(guessed)} tool(s) have no write/read verb "
+                f"and no server annotation, so they are treated as writes and "
+                f"will ask for confirmation: {', '.join(guessed)}. Confirm each "
+                f"in mcp/servers.json under 'read_tools' or 'write_tools'.")
+    return warnings
+
+
 def count_warnings(summary, budget=TOOL_BUDGET_WARN):
     """Warn when a server injected more tools than a small model can hold.
 

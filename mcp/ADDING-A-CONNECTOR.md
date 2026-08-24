@@ -61,15 +61,26 @@ before launch, see `_BRIDGE_KEYS` in [../harness/mcp_config.py](../harness/mcp_c
 
 ---
 
-## 3. Effect classes are assigned for you, from the tool name
+## 3. Effect classes are assigned for you, safe side first
 
 `enable()` returns an effect per tool alongside the specs, and `ActionPolicy`
 is what reads it. An MCP tool gets one of two of this harness's four classes:
+`read`, or `external_write` (assumed to reach another party).
 
-| tool name contains | class | meaning |
+`classify()` decides, in falling order of authority:
+
+| order | source | shown in `--mcp-list` as |
 |---|---|---|
-| no write verb | `read` | observes only |
-| anything world-changing | `external_write` | assumed to reach another party |
+| 1 | your `read_tools` / `write_tools` in this file | `override` |
+| 2 | the server's MCP annotations (`readOnlyHint`, `destructiveHint`) | `declared` |
+| 3 | a read verb leading the name (`list_`, `get_`, `search_`, ...) | `read verb` |
+| 4 | a write verb anywhere in the name | `write verb` |
+| 5 | nothing matched | `unclassified`, **treated as a write** |
+
+Step 5 is the important one. A name with no verb this harness recognises
+(`upsert_contact`, `merge_records`, `execute_workflow`) is a write until you
+say otherwise, and the run prints those names so you can confirm them. It used
+to fall through to `read`, which published them with no confirmation.
 
 Note what is missing: an MCP tool is **never** classified `state_write`. From a
 name alone we cannot tell whether a write reaches another person, and a calendar
@@ -86,29 +97,38 @@ the tool correctly is the whole of your job.
 
 ---
 
-## 4. The one thing that will bite you: the classifier misses writes
+## 4. Your one manual job: resolve the `unclassified` list
 
-The write/read split is a regex over the tool name (`_WRITE_RE`). It knows verbs
-like send, create, delete, update, move. It does **not** know every verb a server
-might use.
+Run `--mcp-list` and look at the parenthesised source next to each tool. Every
+tool marked `unclassified` is the safe default speaking, not the server, and
+resolving those is the whole of your classification work:
 
-Real example already in the file: Gmail's `modify_email` contains no verb the
-regex recognises, so without an override it would be classified `read` and
-**skip confirmation entirely**, despite changing a real mailbox.
-
-So, for every tool your server exposes, ask: *does this change anything?* If yes
-and the name lacks an obvious write verb, add it:
-
-```json
-"write_tools": ["modify_email", "batch_modify_emails", "download_attachment"]
+```
+    write  hs_upsert_contact    (unclassified)
+  ! hubspot: 1 tool(s) have no write/read verb and no server annotation, so
+    they are treated as writes and will ask for confirmation: hs_upsert_contact.
 ```
 
-`read_tools` is the opposite override, for a false positive. `get-mailbox-settings`
-matches "set" inside "settings" and is only a read.
+For each one, ask: *does this change anything on the real account?*
 
-**Get this wrong in the read direction and a world-changing tool runs without
-confirmation.** It is the highest-risk field in the entry, and it fails in the
-unsafe direction. Write a `notes` entry saying why each override exists.
+```json
+"write_tools": ["hs_upsert_contact"],
+"read_tools":  ["hs_recent_activity"]
+```
+
+Both answers are one line. Leaving it unresolved is safe but noisy: the tool
+keeps asking for confirmation on every call, which costs a small model a turn.
+
+Two conveniences worth knowing:
+
+- A server that ships MCP annotations classifies itself and you write nothing.
+  Prefer such servers when you have a choice.
+- `read_tools` is still needed for a false positive from a write verb inside a
+  longer word, though the leading-read-verb rule now catches the common shape
+  (`get-mailbox-settings` reads as `get`, not `set`).
+
+Write a `notes` entry saying why each override exists. Future you needs the
+reason, not the list.
 
 ---
 
@@ -211,7 +231,8 @@ the shapes off a live `--mcp-list`, not the vendor docs, because they disagree.
 - [ ] entry added to `servers.json` with `summary`, `command`, `args`, `prefix`
 - [ ] `setup` steps written, including any OAuth dance
 - [ ] tool count under 25 after `allow`, verified with `--mcp-list`
-- [ ] every world-changing tool with a non-obvious name listed in `write_tools`
+- [ ] no tool left `unclassified` in `--mcp-list`, each resolved into
+      `read_tools` or `write_tools`
 - [ ] `notes` explaining each override
 - [ ] `--mcp-list` shows no transmitting tools in draft mode
 - [ ] `python3 -m pytest tests/test_mcp_bridge.py -q` passes
