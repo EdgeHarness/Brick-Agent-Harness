@@ -267,14 +267,14 @@ PLAN_PROMPT = ('Which tools will you need to call to complete this task, in orde
                'Most tasks need only 1-4 calls. Do not include tools the task does not need.')
 
 
-def plan_step(llm, messages, ep, registry):
+def plan_step(llm, messages, ep, registry, max_steps=6):
     """Ask for a tool-grounded plan; return it as short text (or ''). Invalid
     tool names are dropped - free prose never enters the context."""
     reply = llm.chat(messages, force_json=True, num_predict=250, role="router")
     obj, _ = parse_lenient(reply)
     steps = []
     if isinstance(obj, dict) and isinstance(obj.get("steps"), list):
-        for s in obj["steps"][:6]:
+        for s in obj["steps"][:max_steps]:
             if isinstance(s, dict) and s.get("tool") in registry:
                 what = str(s.get("what", ""))[:60]
                 steps.append(f"{len(steps) + 1}. {s['tool']} - {what}")
@@ -307,8 +307,9 @@ def run_harness(llm, task_text, attempt):
     ep = Episode(attempt.hooks.on_note)
     config = attempt.config
     llm = _AttemptLLM(llm, config.max_calls)
+    profile = config.profile
     memories = attempt.memory.search(
-        task_text, k=3
+        task_text, k=profile.memory_k
     )  # inject only matches, never a recency fallback
     memory_block = ""
     if memories:
@@ -321,13 +322,18 @@ def run_harness(llm, task_text, attempt):
         memory_block=memory_block,
         extra_rules=attempt.resolved_prompt_rules + config.prompt_rules,
     )
-    messages = [{"role": "system", "content": system},
-                {"role": "user", "content": f"TASK: {task_text}\n\n{PLAN_PROMPT}"}]
+    messages = [{"role": "system", "content": system}]
     ep.note("system", system)
     ep.note("task", task_text)
 
-    plan = plan_step(llm, messages, ep, attempt.tools)
-    messages.pop()  # the plan request leaves the context; the plan re-enters as user guidance
+    plan = ""
+    if profile.plan:
+        messages.append(
+            {"role": "user", "content": f"TASK: {task_text}\n\n{PLAN_PROMPT}"}
+        )
+        plan = plan_step(llm, messages, ep, attempt.tools,
+                         max_steps=profile.plan_max_steps)
+        messages.pop()  # the plan request leaves the context; the plan re-enters as user guidance
     act = f"TASK: {task_text}\n\n"
     if plan:
         act += f"Suggested tool sequence (adapt if the results demand it):\n{plan}\n\n"
@@ -347,7 +353,7 @@ def run_harness(llm, task_text, attempt):
         )
 
     verify_rounds = 0
-    seen_calls = {}      # signature -> world_version at last execution
+    seen_calls = {}      # signature -> (world_version, repeats, last_ok)
     world_version = 0    # bumped on successful writes; repeated reads are only
                          # suppressed while the world is unchanged
     last_reply = None
@@ -366,7 +372,8 @@ def run_harness(llm, task_text, attempt):
         last_reply = reply
 
     while llm.calls < config.max_calls:
-        reply = llm.chat(messages, force_json=True, role="driver")
+        reply = llm.chat(messages, force_json=True, role="driver",
+                         num_predict=profile.num_predict)
         messages.append({"role": "assistant", "content": reply})
         ep.note("model", reply)
         obj, err = parse_lenient(reply)
@@ -446,20 +453,49 @@ def run_harness(llm, task_text, attempt):
                 continue
 
         sig = json.dumps({"t": name, "a": args}, sort_keys=True, default=str)
+        # A call may repeat up to its profile budget while the world is
+        # unchanged; any successful write moves world_version and hands out a
+        # fresh budget, because the same call can now legitimately return
+        # something new. At the default limits of 1 this is exactly the
+        # original one-execution rule.
+        last_version, repeats, last_ok = seen_calls.get(sig, (None, 0, True))
+        if last_version != world_version:
+            repeats = 0
+        limit = (profile.repeat_limit_write if attempt.policy.is_mutating(name)
+                 else profile.repeat_limit)
+        if not last_ok:
+            # A repeat budget exists so a model can look at something twice.
+            # That reasoning only holds for a call that WORKED: an identical
+            # call that errored against an unchanged world will produce the
+            # identical error, so a budget above one buys copies of the same
+            # failure.
+            limit = 1
         if (
-            name != "think"
+            profile.loop_break
+            and name != "think"
             and attempt.tools.suppresses_identical_repeats(name)
-            and seen_calls.get(sig) == world_version
+            and repeats >= limit
         ):
-            # Identical call, unchanged world: do not re-execute. If it is a
-            # verbatim repeat of the previous exchange, delete the older copy
-            # (repetition in context is an attractor for small models).
+            # Identical call, unchanged world, budget spent: do not
+            # re-execute. If it is a verbatim repeat of the previous exchange,
+            # delete the older copy (repetition in context is an attractor for
+            # small models).
             if len(messages) >= 3 and messages[-3]["role"] == "assistant" \
                     and messages[-3]["content"] == reply:
                 del messages[-3:-1]
-            fb = (f"You already called {name} with exactly those arguments; its result is above "
-                  f"and has not changed. Do the NEXT step of the task: \"{task_text}\" "
-                  f"If everything is complete, call done.")
+            if not last_ok:
+                fb = (f"{name} with exactly those arguments already failed, and nothing has "
+                      f"changed since, so it will fail the same way. Its error is above - fix "
+                      f"the arguments or use a different tool. The task is: \"{task_text}\"")
+            elif limit == 1:
+                # byte-identical to the phrasing the benchmark runs on
+                fb = (f"You already called {name} with exactly those arguments; its result is above "
+                      f"and has not changed. Do the NEXT step of the task: \"{task_text}\" "
+                      f"If everything is complete, call done.")
+            else:
+                fb = (f"You have called {name} with exactly those arguments {repeats} times now; "
+                      f"its result is above and has not changed. Do the NEXT step of the task: "
+                      f"\"{task_text}\" If everything is complete, call done.")
             messages.append({"role": "user", "content": fb})
             ep.note("feedback", fb)
             continue
@@ -479,11 +515,13 @@ def run_harness(llm, task_text, attempt):
                 g.opened_files.add(str(args.get("filename", "")))
         if ok and attempt.policy.is_mutating(name):
             world_version += 1
-        seen_calls[sig] = world_version
+        # recorded against the world version AFTER any bump, so an identical
+        # write stacked on its own result still counts as a repeat
+        seen_calls[sig] = (world_version, repeats + 1, ok)
         if not ok:
             ep.tool_errors += 1
         obs = _obs(obs, config.observation_limit)
-        if think_streak >= 2:
+        if think_streak >= profile.think_streak_cap:
             obs += " NOTE: stop thinking and take a concrete action now."
         messages.append({"role": "user", "content": f"OBSERVATION: {obs}"})
         ep.note("observation", obs)

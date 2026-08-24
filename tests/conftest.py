@@ -139,6 +139,8 @@ def attempt_factory(tmp_path):
         max_calls=14,
         hooks=None,
         guards=False,
+        profile=None,
+        verifier_rounds=2,
     ):
         counter["value"] += 1
         domain = load_domain(domain_name)
@@ -156,6 +158,8 @@ def attempt_factory(tmp_path):
                 max_calls=max_calls,
                 today=domain.default_today,
                 guards=guards,
+                verifier_rounds=verifier_rounds,
+                **({"profile": profile} if profile is not None else {}),
             ),
             domain=domain,
             tools=domain.registry,

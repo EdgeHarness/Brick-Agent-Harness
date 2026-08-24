@@ -73,7 +73,7 @@ upstream exists to prevent (plan off, num_predict 350, repeat budget 2).
 Ordered by effect on performance per unit of risk. Nothing below changes
 `bench/` behavior; the bench defaults stay byte-stable.
 
-### 1. Phase 3: port `harness/profiles.py` (next)
+### 1. Phase 3: port `harness/profiles.py` (DONE 2026-08-23)
 
 Per-model tuning is the largest interactive-performance lever available
 without any new measurement. Port the `Profile` dataclass, the named profiles,

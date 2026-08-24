@@ -11,6 +11,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Callable, Mapping, Optional
 
+from .profiles import DEFAULT as DEFAULT_PROFILE, Profile
 from .tools import ToolRegistry
 
 
@@ -37,6 +38,11 @@ class RunConfig:
     guards: bool = False
     # Prior conversation turns as a text block, for the done-echo guard.
     history: str = ""
+    # Per-model loop tuning (harness/profiles.py). The default reproduces the
+    # loop's original literals exactly, so bench/ never shifts; interactive
+    # callers resolve one per model tag and copy verify_rounds into
+    # verifier_rounds themselves.
+    profile: Profile = DEFAULT_PROFILE
 
     def __post_init__(self):
         if self.condition not in {"raw", "harness"}:
@@ -61,6 +67,8 @@ class RunConfig:
             raise TypeError("guards must be a bool")
         if not isinstance(self.history, str):
             raise TypeError("history must be a string")
+        if not isinstance(self.profile, Profile):
+            raise TypeError("profile must be a Profile")
 
     @property
     def today_human(self):

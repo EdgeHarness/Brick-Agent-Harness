@@ -15,7 +15,7 @@ from harness.agent import run_harness  # noqa: E402
 from harness.domain import load_domain  # noqa: E402
 from harness.llm import LLM, OLLAMA_URL  # noqa: E402
 from harness.memory import MemoryStore  # noqa: E402
-from harness import mcp_bridge, mcp_config  # noqa: E402
+from harness import mcp_bridge, mcp_config, profiles  # noqa: E402
 from harness.model_router import (  # noqa: E402
     ModelRouter,
     adapters_note,
@@ -278,16 +278,21 @@ def main(agent_dir=None, argv=None):
         prompt_rules += mcp_bridge.mail_rules(mcp_mode)
 
     paths = agent_runtime_paths(agent_dir, domain)
+    profile = profiles.for_model(
+        config_data["model"], config_data.get("harness")
+    )
     max_calls = options["max_calls"]
     if max_calls is None:
         max_calls = config_data.get("max_calls")
     if max_calls is None:
-        max_calls = DEFAULT_MAX_CALLS
+        max_calls = profile.max_calls
     run_config = RunConfig(
         condition="harness",
         max_calls=max_calls,
         today=domain.default_today,
+        verifier_rounds=profile.verify_rounds,
         guards=True,
+        profile=profile,
     )
 
     workdir = paths.workspace
@@ -348,6 +353,7 @@ def main(agent_dir=None, argv=None):
         print(f"  {adapters_note()}")
     else:
         print(f"  model: {config_data['model']}")
+    print(f"  profile: {profile.label}")
     print(f"  budget: {run_config.max_calls} LLM calls")
     episode = run_harness(llm, task, attempt)
 

@@ -18,7 +18,7 @@ from agents._shared.run_agent import validate_config  # noqa: E402
 from harness.agent import run_harness  # noqa: E402
 from harness.domain import load_domain  # noqa: E402
 from harness import chat  # noqa: E402
-from harness import mcp_bridge, mcp_config  # noqa: E402
+from harness import mcp_bridge, mcp_config, profiles  # noqa: E402
 from harness.llm import LLM, OLLAMA_URL  # noqa: E402
 from harness.memory import MemoryStore  # noqa: E402
 from harness.model_router import (  # noqa: E402
@@ -160,16 +160,21 @@ def main(argv=None):
         args.domain or config_data.get("domain") or "office_demo"
     )
     paths = agent_runtime_paths(folder, domain)
+    profile = profiles.for_model(
+        config_data["model"], config_data.get("harness")
+    )
     max_calls = args.max_calls
     if max_calls is None:
         max_calls = config_data.get("max_calls")
     if max_calls is None:
-        max_calls = DEFAULT_MAX_CALLS
+        max_calls = profile.max_calls
     run_config = RunConfig(
         condition="harness",
         max_calls=max_calls,
         today=domain.default_today,
+        verifier_rounds=profile.verify_rounds,
         guards=True,
+        profile=profile,
     )
 
     state = {"call": 0}
@@ -298,6 +303,7 @@ def main(argv=None):
         domain=domain.name,
         domain_version=domain.version,
         budget=run_config.max_calls,
+        profile=profile.to_dict(),
         task=args.task,
         endpoint=OLLAMA_URL,
         toolset=domain.name,

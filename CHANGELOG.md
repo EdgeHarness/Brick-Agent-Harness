@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Phase 3: per-model harness profiles
+
+- `harness/profiles.py`: a frozen `Profile` of the loop's tuning knobs (plan
+  on/off and length, verify rounds, repeat budgets split read/write, think
+  streak cap, reply token cap, memory_k, num_ctx, call budget), named
+  profiles for the five agent tiers and the two NPU model ids, and
+  `for_model()` resolution: exact tag, then parameter-count band, then
+  DEFAULT. A config.json `harness` block patches individual fields.
+- `RunConfig` carries the profile; the default reproduces the loop's original
+  literals exactly and a test asserts it, so `bench/` never shifts. The loop
+  now reads the knobs from the profile, including a repeat budget that lets a
+  model look at something twice where the profile allows it - a failed call
+  never earns a repeat budget, and the default keeps the one-execution rule
+  with byte-identical feedback phrasing.
+- The CLI agents and the Agent Lab runner resolve the profile from the
+  model tag, copy `verify_rounds` into `verifier_rounds`, use the profile
+  call budget when neither the CLI nor config.json names one, print the
+  profile label, and emit the full profile in the Agent Lab banner.
+- Live effect on the same task: the 1B previously spent 12/12 calls without
+  finishing; under format-survival it finished cleanly in 3 calls.
+
+
 ### As-is analysis and to-be roadmap
 
 - `docs/ROADMAP.md`: what is proven (F0 feasibility, S4 gate, 1,097 offline
