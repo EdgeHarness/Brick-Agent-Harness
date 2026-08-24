@@ -1,5 +1,6 @@
 """Run one configured agent and emit a JSONL event stream."""
 import argparse
+import dataclasses
 import json
 import os
 import re
@@ -168,6 +169,7 @@ def main(argv=None):
         condition="harness",
         max_calls=max_calls,
         today=domain.default_today,
+        guards=True,
     )
 
     state = {"call": 0}
@@ -228,6 +230,7 @@ def main(argv=None):
         history = chat.prompt_block(chat.messages(folder, args.thread))
         if history:
             prompt_rules += history
+            run_config = dataclasses.replace(run_config, history=history)
     connected = None
     if args.mcp:
         mcp_cfg = config_data.get("mcp") or {}

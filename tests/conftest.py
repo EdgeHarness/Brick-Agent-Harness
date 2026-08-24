@@ -138,6 +138,7 @@ def attempt_factory(tmp_path):
         condition="harness",
         max_calls=14,
         hooks=None,
+        guards=False,
     ):
         counter["value"] += 1
         domain = load_domain(domain_name)
@@ -154,6 +155,7 @@ def attempt_factory(tmp_path):
                 condition=condition,
                 max_calls=max_calls,
                 today=domain.default_today,
+                guards=guards,
             ),
             domain=domain,
             tools=domain.registry,

@@ -287,6 +287,7 @@ def main(agent_dir=None, argv=None):
         condition="harness",
         max_calls=max_calls,
         today=domain.default_today,
+        guards=True,
     )
 
     workdir = paths.workspace

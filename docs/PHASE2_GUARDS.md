@@ -1,7 +1,10 @@
 # Phase 2 design: guards, made domain-independent
 
-**Status: proposal. Not implemented, not approved.** Nothing in this document is
-in the tree. It exists to be argued with before any code is written.
+**Status: implemented through step 4** (`harness/guards.py`,
+`tests/test_guards.py`, wired into `run_harness` behind `RunConfig.guards`).
+Step 2, the world merge, remains blocked as recorded in §5; `guard_unread_file`
+takes option 2 and lists the attempt's artifact directory instead of asking the
+world, so no bound source is involved.
 
 Phase 1 brought the Agent Lab console and the MCP connector layer across from
 the Final-Agent-8B line. Phase 2 brings the five **guards**, which are the part

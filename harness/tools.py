@@ -240,6 +240,13 @@ class ToolRegistry:
             name for name, spec in self._specs.items() if spec.get("simulates")
         )
 
+    def openable_extensions(self):
+        """Every file extension some registered tool declares it can open."""
+        return frozenset(
+            ext for spec in self._specs.values()
+            for ext in spec.get("opens") or ()
+        )
+
     def opener_for(self, path):
         """A tool that can open this file, or None.
 

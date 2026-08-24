@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+### Phase 2 steps 3 and 4: the five guards, ported and wired
+
+Advisory cross-checks that question a suspicious tool call once and never
+forbid it. ON for interactive runs (CLI and Agent Lab), OFF in `bench/`, so no
+recorded comparison shifts.
+
+- `harness/guards.py`: `GuardState`, `wrong_date`, `unplanned_write`,
+  `unread_file`, `read_before_write` on tool calls, `done_echo` at the done
+  boundary, and `run_guards` with monotonic denial: the first guard to speak
+  wins and no later guard runs. The module knows no domain: write tools derive
+  from `ActionPolicy` effects, file capabilities from the `writes_file`/`opens`
+  spec keys, and the `unread_file` listing comes from the attempt's artifact
+  directory rather than any world member, so no `v0.13.5`-bound source is
+  touched.
+- `run_harness` runs the guards behind `RunConfig(guards=...)`, default off.
+  Every question is a `guard` transcript note, visible in the Agent Lab
+  timeline. `RunConfig` also carries `history` for the done-echo check;
+  `webui/runner.py` fills it from the thread and both interactive callers set
+  `guards=True`. `bench/` is untouched.
+- `ToolRegistry.openable_extensions()` supports the filename scan.
+- `tests/test_guards.py`: each guard has a test proving it fires (the
+  silent-no-op risk), question-once and monotonicity are asserted, and three
+  scripted loop tests cover questioned, repeated-and-run, and disabled.
+
 ### Phase 2 steps 1 and 2: declared capabilities, and the office world merge
 
 Groundwork for the guards. Neither step changes what a model does.

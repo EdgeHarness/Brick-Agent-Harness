@@ -27,6 +27,8 @@ import difflib
 import json
 import re
 
+from . import guards as _guards
+
 # Abstract on purpose: concrete example content in an instruction becomes an
 # attractor that 1B models copy verbatim. Real examples live per-tool in docs.
 SHAPE = '{"thought": "<why>", "tool": "<tool_name>", "args": { ... }}'
@@ -332,6 +334,18 @@ def run_harness(llm, task_text, attempt):
     act += f"Make the first tool call now. Reply with exactly one JSON object: {SHAPE}"
     messages.append({"role": "user", "content": act})
 
+    g = None
+    if config.guards:
+        write_tools = frozenset(
+            n for n in attempt.tools.names() if attempt.policy.is_mutating(n)
+        )
+        g = _guards.GuardState(
+            llm, ep, messages, task_text,
+            registry=attempt.tools, write_tools=write_tools, plan=plan,
+            artifact_dir=attempt.artifact_dir, today=config.today,
+            history=config.history,
+        )
+
     verify_rounds = 0
     seen_calls = {}      # signature -> world_version at last execution
     world_version = 0    # bumped on successful writes; repeated reads are only
@@ -379,6 +393,14 @@ def run_harness(llm, task_text, attempt):
                                   f"{verdict.get('missing', 'unknown')}. Continue with the next tool call.",
                                   reply)
                     continue
+            if g is not None:
+                g.summary = str(args.get("summary", ""))
+                questioned = _guards.run_guards(g, _guards.DONE_GUARDS)
+                if questioned:
+                    guard_name, message = questioned
+                    ep.note("guard", guard_name)
+                    give_feedback(message, reply)
+                    continue
             ep.done_summary = str(args.get("summary", ""))
             ep.finished = True
             ep.note("done", ep.done_summary)
@@ -412,6 +434,17 @@ def run_harness(llm, task_text, attempt):
             continue
         last_reply = reply
 
+        if g is not None:
+            # The cross-checks. First guard to speak wins and nothing after
+            # it runs, so a question cannot be reversed downstream.
+            g.name, g.args = name, args
+            questioned = _guards.run_guards(g)
+            if questioned:
+                guard_name, message = questioned
+                ep.note("guard", guard_name)
+                give_feedback(message, reply)
+                continue
+
         sig = json.dumps({"t": name, "a": args}, sort_keys=True, default=str)
         if (
             name != "think"
@@ -433,6 +466,17 @@ def run_harness(llm, task_text, attempt):
         think_streak = think_streak + 1 if name == "think" else 0
 
         ok, obs = _execute_with_policy(attempt, name, args)
+        if g is not None and ok:
+            if name not in g.write_tools and name != "think":
+                g.looked = True
+                # A filename the run was told about, from the result rather
+                # than from the model's own words: a model that writes "I'll
+                # check data.xlsx" has not been told anything.
+                fre = _guards.filename_re(attempt.tools)
+                if fre:
+                    g.mentioned_files.update(fre.findall(str(obs)))
+            if attempt.tools[name].get("opens"):
+                g.opened_files.add(str(args.get("filename", "")))
         if ok and attempt.policy.is_mutating(name):
             world_version += 1
         seen_calls[sig] = world_version

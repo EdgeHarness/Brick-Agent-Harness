@@ -32,6 +32,11 @@ class RunConfig:
     observation_limit: int = 2000
     verifier_rounds: int = 2
     prompt_rules: str = ""
+    # Advisory cross-checks (harness/guards.py). Off by default so bench/
+    # comparisons never shift; interactive callers turn them on explicitly.
+    guards: bool = False
+    # Prior conversation turns as a text block, for the done-echo guard.
+    history: str = ""
 
     def __post_init__(self):
         if self.condition not in {"raw", "harness"}:
@@ -52,6 +57,10 @@ class RunConfig:
             raise ValueError("verifier_rounds cannot be negative")
         if not isinstance(self.prompt_rules, str):
             raise TypeError("prompt_rules must be a string")
+        if type(self.guards) is not bool:
+            raise TypeError("guards must be a bool")
+        if not isinstance(self.history, str):
+            raise TypeError("history must be a string")
 
     @property
     def today_human(self):
