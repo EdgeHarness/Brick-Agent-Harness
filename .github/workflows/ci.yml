@@ -1,5 +1,8 @@
 name: Offline test suite
 
+# Branch pushes run a light check (Linux 3.9 + 3.13). The full matrix and the
+# Windows job run only for pull requests, tags, and manual dispatch, so an
+# ordinary push does not fan out six jobs and a failure email per job.
 on:
   push:
   pull_request:
@@ -16,12 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version:
-          - "3.9"
-          - "3.10"
-          - "3.11"
-          - "3.12"
-          - "3.13"
+        python-version: ${{ (github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/')) && fromJSON('["3.9", "3.13"]') || fromJSON('["3.9", "3.10", "3.11", "3.12", "3.13"]') }}
 
     steps:
       - name: Check out source
@@ -66,6 +64,7 @@ jobs:
 
   windows-x64:
     name: Windows x64 / Python 3.13
+    if: github.event_name != 'push' || startsWith(github.ref, 'refs/tags/')
     runs-on: windows-2022
     timeout-minutes: 45
 

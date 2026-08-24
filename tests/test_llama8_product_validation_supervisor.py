@@ -26,9 +26,10 @@ def test_supervisor_has_fixed_score_blind_sequence_and_no_runtime_mutators():
 
 @pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell unavailable")
 def test_supervisor_parses_under_windows_powershell():
+    script_literal = str(SCRIPT).replace("'", "''")
     command = (
         "$errors=$null; [System.Management.Automation.Language.Parser]::ParseFile("
-        f"'{str(SCRIPT).replace("'", "''")}', [ref]$null, [ref]$errors) | Out-Null; "
+        f"'{script_literal}', [ref]$null, [ref]$errors) | Out-Null; "
         "if ($errors.Count) { $errors | ForEach-Object { Write-Error $_ }; exit 1 }"
     )
     result = subprocess.run(
