@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### The connector audit reaches the console
+
+The runner had always emitted per-connector detail in the banner and the
+console dropped it, so the only place to see which real-account tools a
+connector exposed, and which of them could change something, was the CLI's
+`--mcp-list`. Integration work happens in the console, so the audit is now
+there: a panel per connector listing every tool, its effect class, and how
+that class was decided (`override`, `declared`, `read verb`, `write verb`,
+`unclassified`), with writes marked and warnings shown above the list.
+`webui/runner.py` now sends the classification warnings alongside the
+tool-count ones.
+
+
 ### Connector effect classification fails closed and explains itself
 
 Adding a connector is a registry entry with no harness code, and the one

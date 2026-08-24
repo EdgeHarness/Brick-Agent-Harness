@@ -312,7 +312,9 @@ def main(argv=None):
         today=run_config.today_human,
         tools=list(registry.names()),
         mcp=({"mode": args.mcp_mode or "draft", "servers": connected,
-              "warnings": mcp_config.count_warnings(connected)}
+              "warnings": (mcp_config.count_warnings(connected)
+                           + mcp_config.classification_warnings(connected)),
+              "effects": {name: effect for name, effect in mcp_effects.items()}}
              if connected else None),
     )
     emit("world", **world_snapshot(domain, attempt))

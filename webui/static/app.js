@@ -1045,7 +1045,52 @@ function onBanner(e) {
     det.append(el('div', 'note', `${e.today} · ${e.endpoint}`));
     n.append(det);
   }
+  if (e.mcp) n.append(connectorPanel(e.mcp));
   S.banner = n;
+}
+
+/* What a connector actually brought into this run.
+   The runner has always sent this and the console used to drop it, so the only
+   way to see which real-account tools were exposed, and which of them can
+   change something, was the CLI's --mcp-list. Integration work happens here,
+   so the audit belongs here: every tool, its effect class, and how that class
+   was decided (the server's own annotation, a verb in the name, an override in
+   servers.json, or the fail-closed default). */
+function connectorPanel(mcp) {
+  const wrap = el('div', 'connectors');
+  for (const w of mcp.warnings || []) {
+    wrap.append(el('div', 'connector-warn', w));
+  }
+  for (const s of mcp.servers || []) {
+    const writes = new Set(s.writes || []);
+    const det = el('details', 'connector');
+    const sum = el('summary', 'connector-sum');
+    sum.append(el('span', 'connector-id', s.id),
+               el('span', 'connector-meta',
+                  `${s.mode} · ${(s.tools || []).length} tools · ` +
+                  `${writes.size} can change something`));
+    det.append(sum);
+    const list = el('div', 'connector-tools');
+    for (const name of s.tools || []) {
+      const isWrite = writes.has(name);
+      const why = (s.classified_by || {})[name] || '';
+      const row = el('div', 'connector-tool');
+      row.append(el('span', 'tool-kind ' + (isWrite ? 'is-write' : 'is-read'),
+                    isWrite ? 'write' : 'read'),
+                 el('span', 'tool-name', name));
+      /* "unclassified" is the safe default speaking rather than the server,
+         and it is the one a connector author should resolve. */
+      if (why) {
+        row.append(el('span',
+                      'tool-why' + (why === 'unclassified' ? ' guessed' : ''),
+                      why));
+      }
+      list.append(row);
+    }
+    det.append(list);
+    wrap.append(det);
+  }
+  return wrap;
 }
 
 /* A disclosure that keeps the long text out of the flow but never out of

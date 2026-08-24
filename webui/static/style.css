@@ -920,6 +920,40 @@ button.ghost:hover, a.ghost:hover { color: var(--ink); }
 .knob.on { color: var(--ink-dim); border-color: var(--line); }
 .knob.off { color: var(--ink-faint); text-decoration: line-through; opacity: .7; }
 
+/* What each connector brought into the run, behind a disclosure in the banner.
+   The runner always sent this; the console used to drop it, which left the
+   CLI's --mcp-list as the only place to see whether a real-account tool was
+   classified as a write. */
+.connectors { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.connector-warn {
+  font-size: var(--t-meta); line-height: var(--lh-read); color: var(--warn);
+  background: var(--warn-soft); border: 1px solid var(--line);
+  border-radius: var(--r-xs); padding: 6px 9px;
+}
+.connector-sum {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px;
+  cursor: pointer; font-size: var(--t-meta);
+}
+.connector-id { font-family: var(--mono); color: var(--ink-dim); }
+.connector-meta { font-family: var(--mono); color: var(--ink-faint); }
+.connector-tools {
+  margin: 6px 0 2px; display: flex; flex-direction: column; gap: 3px;
+}
+.connector-tool {
+  display: flex; align-items: baseline; gap: 8px;
+  font-family: var(--mono); font-size: var(--t-meta);
+}
+.tool-kind {
+  flex: 0 0 auto; min-width: 3.4em; text-align: right;
+  border-radius: var(--r-xs); padding: 1px 6px;
+}
+.tool-kind.is-read { color: var(--ink-faint); }
+.tool-kind.is-write { color: var(--warn); background: var(--warn-soft); }
+.tool-name { color: var(--ink-dim); }
+.tool-why { color: var(--ink-faint); opacity: .75; }
+/* the fail-closed default rather than anything the server said */
+.tool-why.guessed { color: var(--warn); opacity: 1; }
+
 /* Before the model has written anything worth reading, the row says it is
    working. A sweep of lighter ink travels across the word, which reads as
    activity without a spinner and without the raw object being assembled on

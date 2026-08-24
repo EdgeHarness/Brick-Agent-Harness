@@ -194,6 +194,11 @@ confirm your connector appears with its summary and setup notes.
 python3 -m webui.server
 ```
 
+Then run one task with it selected. The banner grows a panel per connector
+showing every tool it exposed, whether that tool can change something, and how
+that was decided, plus any warning. It is the same audit as `--mcp-list`, so
+you can do the whole classification pass in the console without the CLI.
+
 ---
 
 ## 8. Two accounts of the same service
