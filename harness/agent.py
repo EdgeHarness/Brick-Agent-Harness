@@ -27,6 +27,8 @@ import difflib
 import json
 import re
 
+import requests
+
 from . import guards as _guards
 
 # Abstract on purpose: concrete example content in an instruction becomes an
@@ -426,7 +428,7 @@ def run_harness(llm, task_text, attempt):
                 and llm.calls < config.max_calls
             ):
                 verify_rounds += 1
-                verdict = _verify(llm, task_text, attempt)
+                verdict = _verify(llm, task_text, attempt, ep)
                 ep.note("verify", json.dumps(verdict, ensure_ascii=False))
                 if not verdict.get("complete", True):
                     give_feedback("VERIFIER: the task is NOT finished yet. Missing: "
@@ -562,7 +564,28 @@ def run_harness(llm, task_text, attempt):
     return ep
 
 
-def _verify(llm, task_text, attempt):
+def _verify(llm, task_text, attempt, ep):
+    """Ask the verifier model whether the task is actually done.
+
+    On any failure to get a usable verdict this falls back to
+    {"complete": True, "missing": ""} - i.e. it defers to whatever the driver
+    already decided. That default is deliberately lenient: bench/ results are
+    sealed against it, and flipping it to "complete": False would silently
+    move every past and future bench number rather than fix anything. Do not
+    "fix" it without re-running and re-freezing the whole bench.
+
+    What this function does own is making the failure visible instead of
+    silent. Two different things can go wrong and they are recorded as
+    distinct verify_fault notes so a reader of the transcript can tell them
+    apart:
+      - the verifier could not be reached at all (Ollama down, timeout, a
+        transport-level HTTP error) - an instrument fault, not evidence about
+        the model;
+      - the verifier answered but the reply did not parse into the expected
+        {"complete": bool} shape - a model-output fault.
+    Only a genuine parse of the expected shape returns the verifier's own
+    verdict unaltered.
+    """
     acts = [a for a in attempt.actions if a["tool"] != "think"]
     lines = []
     for a in acts:
@@ -577,11 +600,19 @@ def _verify(llm, task_text, attempt):
             {"role": "user", "content": prompt}]
     try:
         reply = llm.chat(msgs, force_json=True, num_predict=200, role="verifier")
-        obj, _ = parse_lenient(reply)
-        if isinstance(obj, dict) and isinstance(obj.get("complete"), bool):
-            return obj
-    except Exception:
-        pass
+    except requests.RequestException as e:
+        # The verifier could not be consulted at all. This is a defect in the
+        # run environment (Ollama down, a timeout, a bad HTTP response), not
+        # something the model did, so it must not be scored as one.
+        ep.note("verify_fault", f"instrument: verifier unreachable ({e})")
+        return {"complete": True, "missing": ""}
+    obj, _ = parse_lenient(reply)
+    if isinstance(obj, dict) and isinstance(obj.get("complete"), bool):
+        return obj
+    # The verifier answered, but not with the shape asked for. Distinct from
+    # the instrument case above: the check ran and got garbage, rather than
+    # never running.
+    ep.note("verify_fault", f"model_output: unparseable verifier reply: {reply[:200]!r}")
     return {"complete": True, "missing": ""}
 
 
