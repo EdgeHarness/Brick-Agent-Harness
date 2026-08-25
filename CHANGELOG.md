@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Registry overrides that no longer override anything
+
+Four entries carried `read_tools: ["get-mailbox-settings"]` because the name
+"matches set inside settings" and would otherwise read as a write. That has
+not been true since the read-verb rule became anchored: the name starts with
+`get`, so it classifies as a read unaided. `ADDING-A-CONNECTOR.md` already
+documented this, so the doc was updated when the classifier changed and the
+entries that motivated writing it were not. They are gone.
+
+Several `write_tools` overrides had the same shape of problem in their
+justification rather than their effect. The notes said "without the override
+they would run without asking", which stopped being true when unclassified
+names began failing closed to write. The overrides stay, since a named
+override is a clearer audit trail than relying on a default, but the notes now
+say that instead of something false.
+
+The reason these went stale is that nothing checked an override against the
+classifier it overrides. `tests/test_connector_registry.py` now strips each
+override and re-runs `classify()`, so an override that has stopped mattering
+says so. Run against the registry before the fix it named all eight, including
+two in `gmail` and `selftest` that had not been noticed.
+
 ### The completion verifier was failing open
 
 `_verify` ended in a bare `except Exception: pass` falling through to
