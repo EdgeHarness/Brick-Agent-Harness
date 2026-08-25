@@ -336,11 +336,16 @@ def build_harness_system(
     )
 
 
+_STUCK = ("{n} calls in a row reached no tool; ending the run with whatever "
+          "it had already done")
+
+
 def run_harness(llm, task_text, attempt):
     ep = Episode(attempt.hooks.on_note)
     config = attempt.config
     llm = _AttemptLLM(llm, config.max_calls)
     profile = config.profile
+    invalid_streak = 0
     memories = attempt.memory.search(
         task_text, k=profile.memory_k
     )  # inject only matches, never a recency fallback
@@ -471,6 +476,19 @@ def run_harness(llm, task_text, attempt):
                                 attempt.tools[close[0]]["example"],
                                 ensure_ascii=False,
                             ))
+            invalid_streak += 1
+            if (profile.invalid_streak_break
+                    and invalid_streak >= profile.invalid_streak_break):
+                # Nothing has reached a tool for several calls running. On a
+                # small model this is the shape of a run whose work is already
+                # done and which cannot say so: it re-calls a tool that
+                # already succeeded, with arguments that cannot validate, and
+                # ignores every instruction to call done. Continuing spends
+                # the rest of the budget to reach the same place. Stopping
+                # keeps whatever the run already accomplished, which the
+                # grader reads from the world rather than from finishing.
+                ep.note("stuck", _STUCK.format(n=invalid_streak))
+                break
             give_feedback("INVALID CALL: " + "; ".join(problems) + "." + hint
                           + " Reply with one corrected JSON object.", reply)
             continue
@@ -533,10 +551,16 @@ def run_harness(llm, task_text, attempt):
                       f"\"{task_text}\" If everything is complete, call done.")
             messages.append({"role": "user", "content": fb})
             ep.note("feedback", fb)
+            invalid_streak += 1
+            if (profile.invalid_streak_break
+                    and invalid_streak >= profile.invalid_streak_break):
+                ep.note("stuck", _STUCK.format(n=invalid_streak))
+                break
             continue
         think_streak = think_streak + 1 if name == "think" else 0
 
         ok, obs = _execute_with_policy(attempt, name, args)
+        invalid_streak = 0
         if g is not None and ok:
             if name not in g.write_tools and name != "think":
                 g.looked = True

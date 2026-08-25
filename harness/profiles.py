@@ -85,6 +85,15 @@ class Profile:
     # the callers: CLI flag, then config.json, then this.
     max_calls: int = 14
 
+    # Give up after this many consecutive calls that never reached a tool,
+    # 0 meaning never. Measured on a 1B: it forms the right call, the tool
+    # runs, and then it cannot stop. Two runs of three spent seventeen further
+    # calls re-calling the same tool with an unknown parameter and no required
+    # ones, never calling done, while the feedback each round said to call
+    # done. The work was already finished; only the budget was still burning.
+    # This is a cost brake and not a success fix, and it is measured as one.
+    invalid_streak_break: int = 0
+
     def to_dict(self):
         return asdict(self)
 
@@ -105,7 +114,7 @@ PROFILES = {
         plan=False, plan_max_steps=0, verify_rounds=0, loop_break=True,
         repeat_limit=2, think_streak_cap=1, num_predict=350, memory_k=2,
         observation_keep_tail=300, prune_context=True,
-        num_ctx=8192, max_calls=18),
+        num_ctx=8192, max_calls=18, invalid_streak_break=4),
 
     # --- Llama 3.2 3B -------------------------------------------------------
     "llama3.2:3b": Profile(

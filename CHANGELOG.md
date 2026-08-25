@@ -2,6 +2,41 @@
 
 ## Unreleased
 
+### A small model that has finished but cannot say so now stops
+
+Measured, then built, then measured again.
+
+`llama3.2:1b` on the office task `cal_add` forms the call correctly every
+time: right title, right date, 2pm converted to 14:00, both attendees. It then
+cannot stop. Two runs of three spent the remaining seventeen calls re-calling
+the same tool with an unknown parameter and none of the required ones, never
+calling `done`, while the feedback each round said to call `done`.
+
+`Profile.invalid_streak_break` ends a run after N calls that reach no tool. It
+defaults to 0, meaning never, so `DEFAULT` and therefore the bench are
+unchanged, and a test asserts that. It is 4 on the 1B profile.
+
+The counter resets when a tool RUNS, not when arguments validate, and that
+distinction is the whole thing. The failing loop alternates an invalid call
+with a suppressed identical repeat, so a strictly consecutive invalid counter
+never climbs past one. The first version made exactly that mistake and did not
+fire on the run it was written for. A test now covers that pattern
+specifically.
+
+Measured A/B on the same starting world, same task, same model:
+
+| | calls | invalid | wall | output tokens | event correct |
+|---|---|---|---|---|---|
+| off | 18 of 18 | 9 | 13.8s | 886 | yes |
+| off | 18 of 18 | 9 | 13.9s | 886 | yes |
+| on | 5 of 18 | 2 | 4.1s | 272 | yes |
+| on | 4 of 18 | 0 | 3.4s | 212 | yes |
+
+This is a cost brake and is described as one. Roughly three quarters of the
+calls, wall time and output tokens, for the same outcome. It does not make a
+failing task pass, and whatever the run already did survives, because the
+grader reads the world rather than whether `done` was called.
+
 ### Correction: what the live 1B runs show is a termination problem
 
 An earlier entry here reported the 1B producing eighteen invalid calls on
