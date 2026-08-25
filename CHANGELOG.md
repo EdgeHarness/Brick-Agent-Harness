@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+### Correction: what the live 1B runs show is a termination problem
+
+An earlier entry here reported the 1B producing eighteen invalid calls on
+`cal_add` and concluded its feedback loop was not reaching the model. That
+measurement was invalid. `webui/runner.py` passes `--task` through as the task
+TEXT, and it had been given a task *id*, so the model was told its task was
+the string "cal_add" and had nothing to fill its arguments with.
+
+Re-run correctly, three times, the picture reverses. The 1B forms the call
+correctly every time: right title, right date, 2pm converted to 14:00, both
+attendees. Two of three runs then spent the remaining seventeen calls unable
+to stop, re-calling the same tool with an unknown parameter and never calling
+`done`, despite feedback each round telling them to. The third stopped, but
+had also sent a message and set a reminder the task never asked for.
+
+So the small-model failure this project should be aiming at is termination,
+not tool-call formation. A separate check settles the formation half: the same
+model on the same task, in a focused single-tool prompt, answered correctly
+six times out of six with the plain `format: "json"` already in use, and six
+out of six again with a full JSON Schema driving constrained decoding.
+Schema-constrained decoding was the leading hypothesis from a survey of a
+reference harness, and it turns out to be a fix for something that is not
+broken.
+
 ### Five "macOS platform failures" were a test reaching for the real disk
 
 `run_probe` takes seven injectable probes so its mock harness can run offline

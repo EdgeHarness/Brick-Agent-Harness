@@ -108,23 +108,49 @@ budget on plan/verify calls they cannot use, and the 14B/32B tiers get room.
 
   Second, running it: four dated office tasks (`cal_add`, `cal_freeslot`,
   `cal_brief`, `remind_msg`) against `llama3.2:1b` with guards on produced zero
-  guard firings of any kind. Not because the guards behaved well, but because
-  the 1B never produced a single valid tool call. `cal_add` spent all 18 calls
-  on invalid ones, zero actions, `parse_failures: 0` and `invalid_calls: 18`.
-  Guards run after argument validation, so nothing ever reached them.
+  guard firings. Guards run after argument validation, and on the runs that
+  reached a valid write the date was correct, so there was nothing to question.
 
-  So the item cannot be settled on this machine with the only installed model.
-  It needs `llama3.1:8b`, which will not fit: the disk is at 98 percent with
+  So the item cannot be settled on this machine. `llama3.2:1b` is not a good
+  probe for it: the guard is writes-only and the 1B reaches few writes. It
+  needs `llama3.1:8b`, which will not fit while the disk is at 98 percent with
   11 GiB free. **Leaving this open rather than implementing thresholds against
-  a claim that the code appears to have already fixed.** If it is picked up
+  a claim the code appears to have already answered.** If it is picked up
   again, fix the docstring first: it reads as a live complaint about behaviour
   the same function no longer has.
 
-  A separate observation worth keeping from the same run: the 1B produced
-  well-formed JSON every time and omitted a required parameter every time,
-  through eighteen rounds of explicit corrective feedback naming the missing
-  parameters and showing the correct shape. That is not a parsing problem and
-  the harness's feedback was not the limitation.
+### What the live 1B runs actually showed
+
+A first pass at the measurement above was invalid and is worth recording,
+because the mistake is easy to repeat. `webui/runner.py` passes `--task`
+straight through to `run_harness` as the task TEXT. Passing a task *id* like
+`cal_add` therefore tells the model its task is the string "cal_add", and it
+duly produced eighteen calls with empty arguments. That was the measurement
+being wrong, not the model and not the harness.
+
+Re-run with the real prompt, three times, `llama3.2:1b` on `cal_add`:
+
+| run | calls | invalid | finished | successful actions |
+|---|---|---|---|---|
+| 1 | 18 of 18 | 9 | no | 1, correct |
+| 2 | 18 of 18 | 9 | no | 1, correct |
+| 3 | 7 of 18 | 0 | yes | 5, of which 4 were never asked for |
+
+**The 1B forms the tool call correctly and then cannot stop.** Every run
+produced `add_event` with the right title, the right date, 2pm converted to
+14:00, and both attendees. Two of three then spent the remaining seventeen
+calls re-calling `add_event` with an unknown `id` parameter and no required
+ones, never calling `done`, despite feedback each round saying "If everything
+is complete, call done." The third stopped but had also sent a message and set
+a reminder the task never mentioned.
+
+That is a termination problem, not a tool-formation problem, and it is where
+the next engine change should aim for small models. A separate check confirms
+the formation half: the same model, same task, in a focused single-tool prompt
+answered correctly six times out of six with the plain `format: "json"` the
+harness already sends, and constrained decoding against a full JSON Schema was
+also six out of six. So schema-constrained decoding is not the lever here; it
+would be fixing something that is not broken.
 
 ### 3. Phase 4: hardware layer (DONE 2026-08-23)
 
