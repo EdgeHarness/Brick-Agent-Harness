@@ -3,5 +3,12 @@
     "name":  "Agent 8B",
     "model":  "llama3.1:8b",
     "num_ctx":  8192,
-    "domain":  "office_demo"
+    "domain":  "office_demo",
+    "router": {
+        "roles": {
+            "driver":   {"model": "llama3.1:8b", "temperature": 0.0, "num_predict": 700, "keep_alive": "30m"},
+            "router":   {"model": "llama3.2:1b", "temperature": 0.0, "num_predict": 250, "keep_alive": "30m"},
+            "verifier": {"model": "llama3.2:1b", "temperature": 0.0, "num_predict": 250, "keep_alive": "30m"}
+        }
+    }
 }

@@ -6,6 +6,37 @@ import requests
 
 OLLAMA_URL = "http://127.0.0.1:11434"
 
+
+def installed_models(timeout=1.5):
+    """Best-effort GET /api/tags, returning the installed tag set.
+
+    Returns None if the installed set could not be determined (connection
+    error, timeout, non-200, or a body that doesn't parse as expected).
+    Never raises: a check that can crash the run is worse than the problem
+    it exists to prevent. Unknown is not the same as missing, so callers
+    should treat None as "proceed as if nothing is confirmed absent".
+    """
+    try:
+        r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=timeout)
+        r.raise_for_status()
+        data = r.json()
+        return {m["name"] for m in data["models"]}
+    except (requests.RequestException, ValueError, KeyError, TypeError):
+        return None
+
+
+def model_installed(tag, installed):
+    """Whether `tag` is present in `installed`.
+
+    Ollama reports a bare tag like "llama3.2" as "llama3.2:latest", so a
+    config tag with no ":" suffix is checked against the ":latest" form too.
+    """
+    if tag in installed:
+        return True
+    if ":" not in tag:
+        return f"{tag}:latest" in installed
+    return False
+
 # Optional per-client observation hook for live watchers:
 #   ("start", {"model", "role"})                     before the request goes out
 #   ("token", {"text"})                              per streamed chunk

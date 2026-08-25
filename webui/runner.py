@@ -14,18 +14,14 @@ PROJECT = os.path.dirname(HERE)
 if PROJECT not in sys.path:
     sys.path.insert(0, PROJECT)
 
-from agents._shared.run_agent import validate_config  # noqa: E402
+from agents._shared.run_agent import build_llm, validate_config  # noqa: E402
 from harness.agent import run_harness  # noqa: E402
 from harness.domain import load_domain  # noqa: E402
 from harness import chat  # noqa: E402
 from harness import mcp_bridge, mcp_config, profiles  # noqa: E402
-from harness.llm import LLM, OLLAMA_URL  # noqa: E402
+from harness.llm import OLLAMA_URL  # noqa: E402
 from harness.memory import MemoryStore  # noqa: E402
-from harness.model_router import (  # noqa: E402
-    ModelRouter,
-    adapters_note,
-    default_roles,
-)
+from harness.model_router import adapters_note  # noqa: E402
 from harness.runtime import (  # noqa: E402
     AttemptContext,
     RunConfig,
@@ -81,34 +77,6 @@ def resolve_agent_folder(agent):
 
 def world_snapshot(domain, attempt):
     return domain.present(attempt)
-
-
-def build_llm(config, args, log_dir, stream_hook):
-    use_router = args.tiers or bool(config.get("router"))
-    if not use_router:
-        return (
-            LLM(
-                config["model"],
-                num_ctx=config.get("num_ctx", 8192),
-                stream_hook=stream_hook,
-                retries=2,
-            ),
-            None,
-        )
-    router_config = config.get("router", {})
-    roles = router_config.get("roles") or default_roles(
-        base=router_config.get("base", config["model"]),
-        small=args.small or router_config.get("small"),
-        deep=args.deep or router_config.get("deep", "qwen2.5:14b"),
-    )
-    os.makedirs(log_dir, exist_ok=True)
-    router = ModelRouter(
-        roles=roles,
-        num_ctx=config.get("num_ctx", 8192),
-        log_path=os.path.join(log_dir, "model_calls.jsonl"),
-        stream_hook=stream_hook,
-    )
-    return router, router
 
 
 def main(argv=None):
@@ -282,7 +250,10 @@ def main(argv=None):
     attempt_holder["attempt"] = attempt
     log_dir = str(paths.logs)
     llm, router = build_llm(
-        config_data, args, log_dir, stream_hook=on_stream
+        config_data,
+        {"tiers": args.tiers, "small": args.small, "deep": args.deep},
+        log_dir,
+        stream_hook=on_stream,
     )
 
     tiers = None

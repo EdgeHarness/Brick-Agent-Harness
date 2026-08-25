@@ -13,7 +13,7 @@ if PROJECT not in sys.path:
 
 from harness.agent import run_harness  # noqa: E402
 from harness.domain import load_domain  # noqa: E402
-from harness.llm import LLM, OLLAMA_URL  # noqa: E402
+from harness.llm import LLM, OLLAMA_URL, installed_models, model_installed  # noqa: E402
 from harness.memory import MemoryStore  # noqa: E402
 from harness import mcp_bridge, mcp_config, profiles  # noqa: E402
 from harness.model_router import (  # noqa: E402
@@ -143,8 +143,38 @@ def validate_config(config):
 
 
 def build_llm(config, options, log_dir, stream_hook=None):
-    """Construct one LLM/router for this active attempt."""
+    """Construct one LLM/router for this active attempt.
+
+    Tiering only turns on if every role's model is confirmed installed.
+    Ollama returns 4xx for a tag it doesn't have, which crashes the run
+    (see harness/llm.py _attempt_with_retries), so an uninstalled tier
+    falls back to the single-model path instead of building a ModelRouter.
+    If the installed set can't be determined, this proceeds as before:
+    unknown is not the same as missing.
+    """
     use_router = options["tiers"] or bool(config.get("router"))
+    roles = None
+    if use_router:
+        router_config = config.get("router", {})
+        roles = router_config.get("roles") or default_roles(
+            base=router_config.get("base", config["model"]),
+            small=options["small"] or router_config.get("small"),
+            deep=options["deep"]
+            or router_config.get("deep", "qwen2.5:14b"),
+        )
+        installed = installed_models()
+        if installed is not None:
+            missing = sorted({
+                spec["model"] for spec in roles.values()
+                if not model_installed(spec["model"], installed)
+            })
+            if missing:
+                print(
+                    "model router: falling back to a single model, "
+                    "not installed: " + ", ".join(missing),
+                    file=sys.stderr,
+                )
+                use_router = False
     if not use_router:
         return (
             LLM(
@@ -155,13 +185,6 @@ def build_llm(config, options, log_dir, stream_hook=None):
             ),
             None,
         )
-    router_config = config.get("router", {})
-    roles = router_config.get("roles") or default_roles(
-        base=router_config.get("base", config["model"]),
-        small=options["small"] or router_config.get("small"),
-        deep=options["deep"]
-        or router_config.get("deep", "qwen2.5:14b"),
-    )
     log_path = os.path.join(log_dir, "model_calls.jsonl")
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     router = ModelRouter(
