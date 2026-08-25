@@ -2,6 +2,71 @@
 
 ## Unreleased
 
+### The completion verifier was failing open
+
+`_verify` ended in a bare `except Exception: pass` falling through to
+`{"complete": True}`. So when the verifier could not be consulted at all, a
+model not installed, Ollama down, a timeout, the harness reported the task
+COMPLETE. An instrument failure was being converted into a model success, and
+silently, which is worse than either of the two failures hard rule 5 exists to
+keep apart.
+
+The returned value is deliberately unchanged. Changing it to `complete: False`
+would shift every past and future bench number, and that is not a fix, it is a
+different experiment. What changes is that the failure is now visible: the two
+cases that used to collapse into one are separated, and each records a
+`verify_fault` note on the episode saying whether the verifier could not be
+reached or answered something unparseable. The docstring says why the lenient
+default is still there, so the next reader does not helpfully repair it.
+
+### Tiering can be turned on by default now, because it can check first
+
+`agents/8b/config.json` gains a default `router` block: the 8B drives, a 1B
+plans and verifies. This was deferred because turning tiering on breaks the
+agent when the small model is not installed, and nothing in this repository
+had ever asked Ollama what it has.
+
+`harness/llm.py` gains a best-effort `installed_models()`, one `GET /api/tags`
+that returns the installed tags or `None` and never raises. `build_llm()`
+consults it when tiering turns on and falls back to a single model, naming the
+missing tag, rather than crashing partway through a run. A probe that failed
+is treated as unknown rather than missing, so the check can only ever make
+things safer.
+
+A tag with no colon is matched against Ollama's implicit `:latest`, which is
+the difference between `llama3.2` resolving and appearing to be absent.
+
+`webui/runner.py` turned out to hold a byte-for-byte duplicate of `build_llm`,
+so the console had its own unguarded path to the same crash. It now calls the
+shared one.
+
+### Every run records its host, and which process actually served it
+
+Hard rule 3 now asks for this, and `bench/run_bench.py` recorded neither. A
+results file could not say which machine produced it.
+
+The second half matters more. The harness never chooses a backend: it posts to
+a fixed local port and whatever is listening decides what runs. Both the NPU
+and llama.cpp shims bind that same port, and the NPU one replaces the
+requested model tag with whatever GenieX has loaded and then reports it back
+under the requested alias, so `/api/tags` looks right and every number
+afterwards is about a model nobody asked for. A shim left running from an
+earlier session is not hypothetical, it is what happens when a terminal is
+closed.
+
+Both shims answer `/api/version` with their own name, so the fingerprint was
+free. `harness/backend.py` takes it, pairs it with the host, and writes both
+into every bench record. It warns when the NPU shim is answering anywhere
+other than a Snapdragon Copilot+ machine, which needs Windows AND ARM64: an
+Apple Silicon Mac also reports arm64, so checking the architecture alone would
+let the one host the check exists for pass straight through.
+
+### A written pattern for the next connector
+
+`docs/CONNECTOR-PATTERN.md`, derived from building one rather than from
+imagining one. What order to do the work in, the rules that transfer, and the
+traps, all of which actually happened.
+
 ### Hard rule 3 amended: live models run anywhere, gate evidence does not
 
 The rule read "live-model work runs only on the native Windows 11 ARM64

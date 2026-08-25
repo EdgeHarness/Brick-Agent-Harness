@@ -15,6 +15,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from harness.agent import Episode, run  # noqa: E402
+from harness import backend  # noqa: E402
 from harness.domain import load_domain  # noqa: E402
 from harness.llm import LLM  # noqa: E402
 from harness.memory import MemoryStore  # noqa: E402
@@ -138,6 +139,19 @@ def main(argv=None):
         with open(results_path, encoding="utf-8") as handle:
             results = json.load(handle)
 
+    # Hard rule 3: every live run records the host it ran on, and which
+    # process actually served the tokens. This lane recorded neither, which
+    # meant a results file could not say which machine produced it, and a
+    # shim left listening on the port from an earlier session would have
+    # rewritten the model tag with nothing anywhere noticing. Probed once
+    # per invocation rather than per cell, since it cannot change mid-run
+    # without the port changing hands.
+    provenance = backend.stamp()
+    if provenance["warning"]:
+        print(f"WARNING: {provenance['warning']}", file=sys.stderr)
+    host_record = provenance["host"]
+    backend_record = provenance["backend"]
+
     for model in args.models:
         for condition in args.conditions:
             run_dir = os.path.join(
@@ -238,6 +252,8 @@ def main(argv=None):
                     "wall_seconds": round(wall, 1),
                     "error": error,
                     "max_calls": config.max_calls,
+                    "host": host_record,
+                    "backend": backend_record,
                 }
                 results.append(record)
                 with open(results_path, "w", encoding="utf-8") as handle:
