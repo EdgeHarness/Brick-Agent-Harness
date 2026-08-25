@@ -2721,6 +2721,7 @@ def run_probe(
     monitor_factory=f0_windows.ProcessTreeMonitor,
     processor_probe=f0_windows.ollama_ps,
     listener_probe=f0_windows.listener_process,
+    disk_probe=shutil.disk_usage,
     run_id=None,
 ):
     protocol = load_protocol(protocol_path)
@@ -2834,7 +2835,12 @@ def run_probe(
             failures.append("model pull was not requested")
         tags = client.get("/api/tags")
         _write_json(run_dir / "ollama" / "tags-before.json", tags)
-        free_after = shutil.disk_usage(str(run_dir)).free
+        # Injectable like every other probe above. It was the one host fact
+        # this function reached for directly, which meant the offline mock
+        # harness was not offline: a machine low on disk failed five tests
+        # that are about verifier logic and say nothing about disk at all.
+        # The real gate is unchanged, it just arrives through a seam now.
+        free_after = disk_probe(str(run_dir)).free
         disk_after_pulls = {
             "schema_version": "brick.f0.disk-after-pulls/1",
             "free_bytes": free_after,

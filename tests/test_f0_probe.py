@@ -11,6 +11,20 @@ import pytest
 from bench import f0_probe, f0_windows
 
 
+class FakeDiskUsage:
+    """Disk space the mock harness controls, rather than the host's.
+
+    Without this the offline mocks reached for the real filesystem for one
+    number, so five tests about verifier logic failed on a nearly full disk
+    and passed everywhere else. They would fail the same way on Windows.
+    """
+
+    free = 512 * 1024 * 1024 * 1024
+
+    def __init__(self, _path):
+        pass
+
+
 def tool_response(name, arguments, model="qwen3.5:4b-q4_K_M"):
     return {
         "model": model,
@@ -475,6 +489,7 @@ def test_full_probe_is_offline_mockable_and_report_verifies(
 
     run_dir, summary = f0_probe.run_probe(
         tmp_path,
+        disk_probe=FakeDiskUsage,
         client_factory=client_factory,
         environment_probe=fake_environment,
         repository_probe=fake_repository,
@@ -517,6 +532,7 @@ def test_descriptive_model_failure_does_not_invalidate_primary(
 
     _, summary = f0_probe.run_probe(
         tmp_path,
+        disk_probe=FakeDiskUsage,
         client_factory=factory,
         environment_probe=fake_environment,
         repository_probe=fake_repository,
@@ -547,6 +563,7 @@ def test_report_tamper_is_detected(monkeypatch, tmp_path):
     )
     run_dir, _ = f0_probe.run_probe(
         tmp_path,
+        disk_probe=FakeDiskUsage,
         client_factory=FakeClient,
         environment_probe=fake_environment,
         repository_probe=fake_repository,
@@ -592,6 +609,7 @@ def test_no_pull_report_is_ineligible(monkeypatch, tmp_path):
     )
     _, summary = f0_probe.run_probe(
         tmp_path,
+        disk_probe=FakeDiskUsage,
         client_factory=FakeClient,
         environment_probe=fake_environment,
         repository_probe=fake_repository,
@@ -618,6 +636,7 @@ def test_report_rejects_unsafe_run_id_and_manifest_symlink(
     )
     run_dir, _ = f0_probe.run_probe(
         tmp_path,
+        disk_probe=FakeDiskUsage,
         client_factory=FakeClient,
         environment_probe=fake_environment,
         repository_probe=fake_repository,
@@ -755,6 +774,7 @@ def test_late_probe_exception_can_never_leave_overall_pass(
 
     _, summary = f0_probe.run_probe(
         tmp_path,
+        disk_probe=FakeDiskUsage,
         client_factory=LateFailureClient,
         environment_probe=fake_environment,
         repository_probe=fake_repository,
@@ -791,6 +811,7 @@ def test_early_environment_failure_is_committed_and_verifiable(tmp_path):
 
     run_dir, summary = f0_probe.run_probe(
         tmp_path,
+        disk_probe=FakeDiskUsage,
         client_factory=should_not_run,
         environment_probe=failed_environment,
         repository_probe=fake_repository,
@@ -904,6 +925,7 @@ def passing_mock_run(tmp_path, run_id):
     """Produce one committed, verified passing report from the offline mocks."""
     run_dir, summary = f0_probe.run_probe(
         tmp_path,
+        disk_probe=FakeDiskUsage,
         client_factory=FakeClient,
         environment_probe=fake_environment,
         repository_probe=fake_repository,
@@ -1039,3 +1061,45 @@ def test_passing_verifier_rejects_a_missing_runner_attestation(tmp_path):
     )
     with pytest.raises(f0_probe.F0Error, match="runner attestation failed"):
         f0_probe._verify_passing_report(run_dir, copy.deepcopy(summary))
+
+
+class ExhaustedDisk:
+    """A host with almost nothing left, which the gate must still refuse."""
+
+    free = 1024
+
+    def __init__(self, _path):
+        pass
+
+
+def test_the_disk_floor_still_fails_a_host_that_is_actually_full(tmp_path):
+    """Making the probe injectable must not have made the gate advisory.
+
+    The seam exists so the offline mocks stop reaching for the real
+    filesystem, not so the check can be waived. Lowering a floor to make a
+    failing run pass is exactly what CLAUDE.md forbids, so this asserts the
+    floor is still enforced through the new seam.
+    """
+    _, summary = f0_probe.run_probe(
+        tmp_path,
+        disk_probe=ExhaustedDisk,
+        client_factory=FakeClient,
+        environment_probe=fake_environment,
+        repository_probe=fake_repository,
+        storage_runner=fake_storage,
+        monitor_factory=FakeMonitor,
+        processor_probe=lambda _path: "NAME ID SIZE PROCESSOR\nfake",
+        listener_probe=fake_listener,
+        run_id="disk-floor",
+        pull=True,
+    )
+    assert summary["overall_status"] == "fail"
+
+
+def test_the_default_disk_probe_is_the_real_one():
+    """Nothing in production gets the fake. The gate still measures a disk."""
+    import inspect
+    import shutil as real_shutil
+
+    default = inspect.signature(f0_probe.run_probe).parameters["disk_probe"].default
+    assert default is real_shutil.disk_usage

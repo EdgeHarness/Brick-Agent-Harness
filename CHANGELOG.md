@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+### Five "macOS platform failures" were a test reaching for the real disk
+
+`run_probe` takes seven injectable probes so its mock harness can run offline
+and host-independently, and then called `shutil.disk_usage` directly for one
+number. So the offline harness was not offline. On a machine low on disk, five
+tests about verifier logic failed, saying nothing about verifiers and nothing
+about macOS: they would fail identically on a full Windows disk. They had been
+carried as known platform failures for some time.
+
+The disk probe is now injectable like the other seven and the tests supply
+their own. **The gate is unchanged.** The production default is still
+`shutil.disk_usage` and the floor is still enforced, both asserted by tests,
+because making a check injectable so a mock can run is a different thing from
+lowering a floor so a failing run passes, and only the first is allowed.
+
+Known failures on macOS drop from seven to two, and both remaining ones are
+genuine platform differences: APFS resolves an NFD filename to its NFC file,
+and macOS temp paths are far longer than the Windows `MAX_PATH` budget one
+assertion is written against.
+
 ### Registry overrides that no longer override anything
 
 Four entries carried `read_tools: ["get-mailbox-settings"]` because the name
