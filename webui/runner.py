@@ -85,7 +85,13 @@ def main(argv=None):
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--agent", required=True)
     parser.add_argument("--domain", default=None)
-    parser.add_argument("--task", required=True)
+    parser.add_argument(
+        "--task", required=True,
+        help="the task TEXT the model is given, not a task id. The console "
+             "passes whatever a person typed. Passing an id like 'cal_add' "
+             "tells the model its task is the string 'cal_add', which is "
+             "rejected below rather than silently measured.",
+    )
     parser.add_argument("--max-calls", type=int, default=None)
     parser.add_argument("--tiers", action="store_true")
     parser.add_argument("--small", default=None)
@@ -129,6 +135,20 @@ def main(argv=None):
     domain = load_domain(
         args.domain or config_data.get("domain") or "office_demo"
     )
+    # An id looks enough like a task to be passed by mistake, and the
+    # resulting run is not obviously broken: the model produces well-formed
+    # calls with empty arguments and burns its budget. That cost a full
+    # measurement and its write-up before anyone noticed, so it is worth one
+    # comparison and a message that hands back the text that was meant.
+    named = {task.id: task for task in domain.tasks}
+    if args.task.strip() in named:
+        wanted = named[args.task.strip()]
+        parser.error(
+            f"--task takes the task text, not a task id. You passed the id "
+            f"{wanted.id!r}, which the model would receive verbatim as its "
+            f"entire task. Did you mean:\n\n  --task {wanted.prompt!r}"
+        )
+
     paths = agent_runtime_paths(folder, domain)
     profile = profiles.for_model(
         config_data["model"], config_data.get("harness")

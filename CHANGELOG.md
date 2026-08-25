@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### A task id where task text belongs is now refused
+
+`--task` takes the text the model is given. The console passes whatever a
+person typed, so an id was never a supported input, but it was accepted
+silently and the resulting run is not obviously broken: the model receives
+`cal_add` as its entire task, produces well-formed calls with empty arguments,
+and burns its budget looking exactly like a model failure. That cost a full
+measurement and its write-up before anyone noticed.
+
+The runner now compares the text against the domain's task ids and, on a
+match, refuses with the prompt that was meant, ready to paste. `--task` also
+has help text saying which of the two it wants, which it did not before.
+
 ### The tier check left the crash it was meant to prevent
 
 Shipped earlier today: when tiering turns on and a role's model is not
