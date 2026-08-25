@@ -39,8 +39,27 @@ per-session protocol. Read it before starting work.
 9. Synthetic and fictional data only in this repository. No real client records,
    no general filesystem or shell capability on a supported surface. Real
    provider credentials are held by third-party MCP servers, never by this
-   repository, and only for a throwaway account: a connector is off by default,
-   is covered by no evidence gate, and no gate result may depend on one.
+   repository. A connector is off by default, is covered by no evidence gate,
+   and no gate result may ever depend on one.
+
+   **Amended 2026-08-25: a connector may use the operator's own real account.**
+   The original rule allowed a throwaway account only. That makes the connector
+   layer untestable, because the behaviour worth testing (a populated mailbox, a
+   real directory, real calendar conflicts) does not exist on an empty account.
+   A connector may therefore authenticate against the operator's own account,
+   theirs and no one else's, under two limits that do not move:
+
+   - **Read and draft only.** On a real account, only tools the server declares
+     `readOnlyHint` and tools that write a draft may be exercised. Any tool that
+     transmits to another person, or writes to a calendar another person can
+     see, still requires a throwaway account. Draft mode already enforces the
+     first half of this; the second half is on the operator.
+   - **Nothing real enters this repository.** No message, contact, event,
+     address, display name or tenant id from a real account is ever committed,
+     quoted in a test fixture, or recorded in evidence. Fixtures stay synthetic.
+
+   The gate boundary is unchanged: this amendment widens what may be *tested*
+   interactively and widens nothing that may be *claimed*.
 
 ## Current position
 

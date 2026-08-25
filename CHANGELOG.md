@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### Hard rule 9 amended: a connector may use the operator's own real account
+
+The rule allowed a throwaway account only. That made the connector layer
+untestable in the way that matters: an empty mailbox has no threads to
+summarise, no directory to resolve a name against, and no calendar conflicts
+to route around, so every connector test was a test of the plumbing and never
+of the behaviour.
+
+A connector may now authenticate against the operator's own account. The two
+limits that replace the old blanket ban are narrower and more honest than it
+was: on a real account only read tools and draft-writing tools may be
+exercised, and nothing from a real account (message, contact, event, address,
+display name, tenant id) is ever committed, quoted in a fixture, or recorded
+in evidence.
+
+The gate boundary does not move. This widens what may be tested interactively
+and widens nothing that may be claimed; a connector is still off by default,
+still covered by no evidence gate, and no gate result may depend on one.
+
 ### A first-party connector, and a draft-mode false positive it exposed
 
 `mcp/servers.json` gains `ms365-own`, our own Microsoft 365 server from
