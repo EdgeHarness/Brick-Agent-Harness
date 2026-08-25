@@ -21,9 +21,26 @@ per-session protocol. Read it before starting work.
 2. **When a gate fails, report it. Do not repair it.** A failure is the result:
    it says something the design assumed is untrue. Patching around it produces
    evidence for a tree nobody reviewed.
-3. **Live-model work runs only on the native Windows 11 ARM64 Lenovo.** The Mac
-   is for source work and offline tests. Never present a Mac run as gate
-   evidence.
+3. **Every live-model run records the host it ran on, and gate evidence comes
+   from the host its gate was sealed against.**
+
+   *Amended 2026-08-25.* The rule previously read "live-model work runs only on
+   the native Windows 11 ARM64 Lenovo". That was two rules wearing one hat. The
+   half worth keeping is about evidence: the released F0 numbers are
+   native-Lenovo, so a run from a different machine entered as gate evidence
+   makes the sealed number unverifiable rather than merely different. The half
+   worth dropping was about development, where refusing to run a model on the
+   Mac bought nothing and cost every interactive change its fastest feedback
+   loop.
+
+   So: run live models anywhere. Record the host in the run. A sealed gate
+   still names its host, and a run from any other host is a development
+   result, never gate evidence, however good the number looks.
+
+   One hardware note that is not negotiable: the NPU backend targets a
+   Snapdragon Copilot+ machine and must never be selected on any other host.
+   It is chosen by which process is listening on 11434, so the guard is that
+   nothing starts it automatically.
 4. **Advance only through sealed gates.** A fingerprint-bound authorization may
    auto-advance through its declared phases; a failed or changed gate terminates
    that authorization and cannot be patched in place.

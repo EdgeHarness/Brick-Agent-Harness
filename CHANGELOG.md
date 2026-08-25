@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### Hard rule 3 amended: live models run anywhere, gate evidence does not
+
+The rule read "live-model work runs only on the native Windows 11 ARM64
+Lenovo", which was two rules wearing one hat.
+
+The half worth keeping is about evidence. The released F0 numbers are
+native-Lenovo, so a run from another machine entered as gate evidence makes
+the sealed number unverifiable rather than merely different. That still
+holds: a sealed gate names its host, every live run records the host it ran
+on, and a run from any other host is a development result however good the
+number looks.
+
+The half worth dropping was about development. Refusing to run a model on the
+Mac bought nothing and cost every interactive change its fastest feedback
+loop, which is the loop the guards, the profiles and the connector layer all
+live in.
+
+One hardware line is added rather than removed: the NPU backend targets a
+Snapdragon Copilot+ machine and must never be selected on another host. It is
+chosen by which process is listening on 11434, so the guard is that nothing
+starts it automatically.
+
 ### Hard rule 9 amended: a connector may use the operator's own real account
 
 The rule allowed a throwaway account only. That made the connector layer
