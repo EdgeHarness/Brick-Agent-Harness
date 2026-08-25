@@ -663,6 +663,23 @@ def test_writer_rejects_absolute_paths(tmp_path):
     assert not outside.exists()
 
 
+def _folds_unicode_names(directory):
+    """Does this filesystem resolve an NFD name to its NFC file?
+
+    APFS and HFS+ do; ext4 and NTFS do not. Detected by trying it rather than
+    by naming an operating system, because APFS can be formatted either way
+    and a case-sensitive volume behaves differently again. The store's own
+    behaviour is asserted everywhere; only the "no decomposed twin" check
+    depends on the filesystem being able to express the difference.
+    """
+    probe = directory / "probe-caf\u00e9"
+    probe.write_bytes(b"")
+    try:
+        return os.path.lexists(str(directory / "probe-cafe\u0301"))
+    finally:
+        probe.unlink()
+
+
 def test_writer_normalizes_artifact_paths_to_nfc_before_creation(tmp_path):
     store = make_store(tmp_path)
 
@@ -673,11 +690,17 @@ def test_writer_normalizes_artifact_paths_to_nfc_before_creation(tmp_path):
             b"normalized path",
         )
 
+    # The part that is about the store: the name it created is composed.
     assert created.name == "Caf\u00e9.txt"
     assert created.read_bytes() == b"normalized path"
-    assert not os.path.lexists(
-        str(writer.artifacts_dir / "Cafe\u0301.txt")
-    )
+
+    if not _folds_unicode_names(writer.artifacts_dir):
+        # And on a filesystem that can tell the two spellings apart, there is
+        # no decomposed twin. Where the filesystem folds them, the absence of
+        # a twin is not a fact the store could establish or violate.
+        assert not os.path.lexists(
+            str(writer.artifacts_dir / "Cafe\u0301.txt")
+        )
 
 
 def test_non_nfc_member_injected_on_disk_blocks_publication(tmp_path):

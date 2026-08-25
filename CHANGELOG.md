@@ -2,6 +2,57 @@
 
 ## Unreleased
 
+### The tier check left the crash it was meant to prevent
+
+Shipped earlier today: when tiering turns on and a role's model is not
+installed, fall back to a single model rather than let Ollama's 4xx crash the
+run. It had a hole. `agents/8b/config.json` names `llama3.1:8b` as the driver,
+and if that is the missing one then falling back to a single `llama3.1:8b` is
+not a recovery, it is the same failure one step later. Running the 8B agent
+produced exactly that: a bare `404 Client Error: Not Found for url:
+/api/chat` three seconds in, naming neither the model nor the fix.
+
+`ModelNotInstalled` is raised before anything about tiering is decided, and
+says what is missing, what this machine does have, and the `ollama pull` that
+fixes it. The CLI reports it the way it reports any other startup
+misconfiguration rather than as a traceback.
+
+### The router fallback is a recorded fact, not a stderr line
+
+It printed to stderr and nothing else, so in a benchmark run it scrolled past
+unrecorded and a run whose verifier had quietly become the driver looked
+identical to one configured that way on purpose. `build_llm` now returns it,
+and the interactive log records it.
+
+That log was missing more than the fallback. It carried no host and no backend
+either, which is the interactive twin of the gap fixed in the bench lane this
+morning: a saved run could not say which machine or which process produced it.
+All three now sit above the transcript in the payload, because an oversized
+log drops the transcript to fit and provenance is the part that has to survive
+that.
+
+### The last two known test failures were also fixable
+
+Both were being carried as platform differences. Neither had to be.
+
+The NFC test asserted that a decomposed filename does not exist after the
+store writes the composed one. APFS resolves the two spellings to the same
+file, so that assertion is about the filesystem and not about the store. The
+store's own behaviour is asserted everywhere; the extra check now runs only
+where the filesystem can express the difference, detected by trying it rather
+than by naming an operating system, since APFS can be formatted either way.
+
+The S4 path test allocates a deliberately short temp directory on Windows so
+it exercises the real preflight instead of monkeypatching it away, and then
+used the default temp root everywhere else. That root is short on Linux and
+long on macOS, so the test was measuring the host's temp path rather than the
+attestor. The POSIX branch is now as deliberate as the Windows one, and where
+even that cannot fit inside the budget it skips with the reason rather than
+reporting a host fact as a code failure.
+
+Offline suite on macOS: **7 known failures at the start of the day, 0 now**,
+with 50 more tests than it had.
+
 ### A small model that has finished but cannot say so now stops
 
 Measured, then built, then measured again.

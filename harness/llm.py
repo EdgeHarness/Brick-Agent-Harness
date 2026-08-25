@@ -7,6 +7,25 @@ import requests
 OLLAMA_URL = "http://127.0.0.1:11434"
 
 
+class ModelNotInstalled(RuntimeError):
+    """The model a run is configured for is not on this machine.
+
+    Worth its own type and its own message because the alternative is what it
+    replaced: a bare `404 Client Error: Not Found for url: /api/chat` several
+    seconds into the run, which names neither the model nor the fix.
+    """
+
+    def __init__(self, tag, installed):
+        self.tag = tag
+        self.installed = sorted(installed or ())
+        have = ", ".join(self.installed) if self.installed else "nothing"
+        super().__init__(
+            f"{tag} is not installed. This machine has: {have}. "
+            f"Run `ollama pull {tag}`, or point the agent at an installed "
+            f"model with --model."
+        )
+
+
 def installed_models(timeout=1.5):
     """Best-effort GET /api/tags, returning the installed tag set.
 

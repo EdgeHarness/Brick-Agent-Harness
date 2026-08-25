@@ -13,7 +13,8 @@ if PROJECT not in sys.path:
 
 from harness.agent import run_harness  # noqa: E402
 from harness.domain import load_domain  # noqa: E402
-from harness.llm import LLM, OLLAMA_URL, installed_models, model_installed  # noqa: E402
+from harness.llm import (LLM, OLLAMA_URL, ModelNotInstalled,
+                         installed_models, model_installed)  # noqa: E402
 from harness.memory import MemoryStore  # noqa: E402
 from harness import mcp_bridge, mcp_config, profiles  # noqa: E402
 from harness.model_router import (  # noqa: E402
@@ -151,9 +152,27 @@ def build_llm(config, options, log_dir, stream_hook=None):
     falls back to the single-model path instead of building a ModelRouter.
     If the installed set can't be determined, this proceeds as before:
     unknown is not the same as missing.
+
+    Returns (llm, router, fallback). `fallback` is None, or a dict describing
+    why tiering was declined. It is returned rather than only printed because
+    a benchmark run's stderr scrolls past and is not part of the record: a run
+    whose verifier quietly became the driver would otherwise look identical to
+    one that was configured that way on purpose. Hard rule 5 keeps instrument
+    facts and model facts apart, and that only works if the instrument facts
+    are written down.
     """
+    installed = installed_models()
+    if installed is not None and not model_installed(config["model"], installed):
+        # Checked before anything about tiering, because falling back to a
+        # single model is no use when that model is the missing one. Shipping
+        # the tier check without this traded a crash inside the router for a
+        # bare 404 from the first driver call, which is the same run failing
+        # three seconds later with a worse message.
+        raise ModelNotInstalled(config["model"], installed)
+
     use_router = options["tiers"] or bool(config.get("router"))
     roles = None
+    fallback = None
     if use_router:
         router_config = config.get("router", {})
         roles = router_config.get("roles") or default_roles(
@@ -162,13 +181,20 @@ def build_llm(config, options, log_dir, stream_hook=None):
             deep=options["deep"]
             or router_config.get("deep", "qwen2.5:14b"),
         )
-        installed = installed_models()
         if installed is not None:
             missing = sorted({
                 spec["model"] for spec in roles.values()
                 if not model_installed(spec["model"], installed)
             })
             if missing:
+                fallback = {
+                    "reason": "models_not_installed",
+                    "missing": missing,
+                    "requested_roles": {
+                        role: spec["model"] for role, spec in roles.items()
+                    },
+                    "using": config["model"],
+                }
                 print(
                     "model router: falling back to a single model, "
                     "not installed: " + ", ".join(missing),
@@ -184,6 +210,7 @@ def build_llm(config, options, log_dir, stream_hook=None):
                 retries=2,
             ),
             None,
+            fallback,
         )
     log_path = os.path.join(log_dir, "model_calls.jsonl")
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
@@ -193,7 +220,7 @@ def build_llm(config, options, log_dir, stream_hook=None):
         log_path=log_path,
         stream_hook=stream_hook,
     )
-    return router, router
+    return router, router, None
 
 
 def _mcp_names(options, config_data):
@@ -346,7 +373,7 @@ def main(agent_dir=None, argv=None):
         prompt_profile=domain.prompt_profile,
         prompt_rules=prompt_rules,
     )
-    llm, router = build_llm(
+    llm, router, router_fallback = build_llm(
         config_data, options, str(paths.logs)
     )
 

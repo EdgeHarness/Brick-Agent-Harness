@@ -19,7 +19,8 @@ from harness.agent import run_harness  # noqa: E402
 from harness.domain import load_domain  # noqa: E402
 from harness import chat  # noqa: E402
 from harness import mcp_bridge, mcp_config, profiles  # noqa: E402
-from harness.llm import OLLAMA_URL  # noqa: E402
+from harness import backend  # noqa: E402
+from harness.llm import OLLAMA_URL, ModelNotInstalled  # noqa: E402
 from harness.memory import MemoryStore  # noqa: E402
 from harness.model_router import adapters_note  # noqa: E402
 from harness.runtime import (  # noqa: E402
@@ -249,12 +250,25 @@ def main(argv=None):
     )
     attempt_holder["attempt"] = attempt
     log_dir = str(paths.logs)
-    llm, router = build_llm(
-        config_data,
-        {"tiers": args.tiers, "small": args.small, "deep": args.deep},
-        log_dir,
-        stream_hook=on_stream,
-    )
+    # Hard rule 3: record the host and which process actually served the
+    # run. The bench lane does this per record; the interactive log had
+    # neither, so a saved run could not say which machine or which backend
+    # produced it, and a shim quietly serving a different model looked
+    # exactly like a normal run.
+    provenance = backend.stamp()
+    if provenance["warning"]:
+        print(f"WARNING: {provenance['warning']}", file=sys.stderr)
+    try:
+        llm, router, router_fallback = build_llm(
+            config_data,
+            {"tiers": args.tiers, "small": args.small, "deep": args.deep},
+            log_dir,
+            stream_hook=on_stream,
+        )
+    except ModelNotInstalled as exc:
+        # A misconfiguration, not a run failure, so it reads like the other
+        # startup errors here rather than like a traceback.
+        parser.error(str(exc))
 
     tiers = None
     if router:
@@ -280,6 +294,12 @@ def main(argv=None):
         endpoint=OLLAMA_URL,
         toolset=domain.name,
         tiers=tiers,
+        # Both are instrument facts, so they belong in the banner a person
+        # reads AND in the log below, not only on a stderr line that scrolls.
+        router_fallback=router_fallback,
+        host=provenance["host"],
+        backend=provenance["backend"],
+        backend_warning=provenance["warning"],
         today=run_config.today_human,
         tools=list(registry.names()),
         mcp=({"mode": args.mcp_mode or "draft", "servers": connected,
@@ -308,6 +328,13 @@ def main(argv=None):
             "domain": domain.name,
             "domain_version": domain.version,
             "via": "webui",
+            # Above the transcript on purpose: an oversized log drops the
+            # transcript to fit, and provenance is exactly what must survive
+            # that, since a run you cannot attribute is a run you cannot use.
+            "host": provenance["host"],
+            "backend": provenance["backend"],
+            "backend_warning": provenance["warning"],
+            "router_fallback": router_fallback,
             "transcript": episode.transcript,
             "finished": episode.finished,
             "summary": episode.done_summary,

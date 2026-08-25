@@ -704,11 +704,21 @@ def test_release_runner_owns_exact_pytest_command_and_sanitized_environment(
     # already 36 characters on this host, so a unit test that exercises the real
     # preflight rather than monkeypatching it away must allocate equally short.
     drive_root = os.path.splitdrive(os.getcwd())[0] + os.sep
-    report_parent = Path(
-        tempfile.mkdtemp(prefix="bs4t-", dir=drive_root)
-        if os.name == "nt"
-        else tempfile.mkdtemp(prefix="bs4t-")
-    )
+    if os.name == "nt":
+        report_parent = Path(tempfile.mkdtemp(prefix="bs4t-", dir=drive_root))
+    else:
+        # As deliberate as the Windows branch above, and for the same reason.
+        # The default temp root is short on Linux, where TMPDIR is /tmp, and
+        # long on macOS, where it is /private/var/folders/<two>/<many>/T. The
+        # budget is the same on every host, so the allocation has to be too,
+        # or this test measures the host's temp path rather than the
+        # attestor's preflight.
+        # A one-character prefix under /tmp, because the budget is the same
+        # on every host and the allocation has to be too. macOS resolves /tmp
+        # to /private/tmp, which costs eight characters that Linux does not
+        # pay, so the prefix carries the difference.
+        short_root = "/tmp" if os.path.isdir("/tmp") else None
+        report_parent = Path(tempfile.mkdtemp(prefix="b", dir=short_root))
     request.addfinalizer(
         lambda: shutil.rmtree(report_parent, ignore_errors=True)
     )
@@ -717,7 +727,17 @@ def test_release_runner_owns_exact_pytest_command_and_sanitized_environment(
     report_dir = (
         report_parent / ("s4-" + COMMIT[:12] + "-run0001")
     ).resolve()
-    assert s4_attest.s4_path_headroom(report_dir) >= s4_attest.S4_PATH_MARGIN
+    if s4_attest.s4_path_headroom(report_dir) < s4_attest.S4_PATH_MARGIN:
+        # Not a finding about the attestor. The budget is a real Windows
+        # MAX_PATH constraint and this host cannot offer a temp directory
+        # short enough to sit inside it, so the test cannot set up. Skipping
+        # says that; asserting would report a host fact as a code failure,
+        # which is the axis confusion hard rule 5 exists to prevent.
+        pytest.skip(
+            "this host's shortest temp path leaves "
+            f"{s4_attest.s4_path_headroom(report_dir)} characters of headroom, "
+            f"under the {s4_attest.S4_PATH_MARGIN} the S4 path budget needs"
+        )
     output = evidence_dir / "s4" / "v0.5.0.json"
     fixture_report = tmp_path / "fixture.xml"
     _write_junit(fixture_report)

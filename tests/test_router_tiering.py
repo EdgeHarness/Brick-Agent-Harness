@@ -21,7 +21,7 @@ if PROJECT not in sys.path:
 
 from agents._shared.run_agent import build_llm, validate_config  # noqa: E402
 from harness import profiles  # noqa: E402
-from harness.llm import installed_models, model_installed  # noqa: E402
+from harness.llm import ModelNotInstalled, installed_models, model_installed  # noqa: E402
 from harness.model_router import ModelRouter  # noqa: E402
 
 
@@ -117,9 +117,11 @@ def test_tiering_on_when_every_role_is_installed(monkeypatch, tmp_path):
     monkeypatch.setattr(
         requests, "get", lambda url, timeout=None: FakeResponse(json_body=REAL_TAGS_BODY)
     )
-    llm, router = build_llm(_config_with_roles(ROLES), _options(), str(tmp_path))
+    llm, router, fallback = build_llm(_config_with_roles(ROLES), _options(), str(tmp_path))
+    assert fallback is None
     assert isinstance(router, ModelRouter)
     assert llm is router
+    assert fallback is None, "nothing was declined, so nothing to report"
 
 
 def test_tiering_off_when_a_role_model_is_missing(monkeypatch, tmp_path, capsys):
@@ -127,10 +129,20 @@ def test_tiering_off_when_a_role_model_is_missing(monkeypatch, tmp_path, capsys)
         requests, "get", lambda url, timeout=None: FakeResponse(json_body=REAL_TAGS_BODY)
     )
     roles = dict(ROLES, verifier={"model": "qwen2.5:14b"})
-    llm, router = build_llm(_config_with_roles(roles), _options(), str(tmp_path))
+    llm, router, fallback = build_llm(_config_with_roles(roles), _options(), str(tmp_path))
     assert router is None
     assert llm.model == "llama3.1:8b"
     assert "qwen2.5:14b" in capsys.readouterr().err
+
+    # Returned, not only printed. A benchmark run's stderr scrolls past and
+    # is not part of the record, so a run whose verifier quietly became the
+    # driver would otherwise look identical to one configured that way on
+    # purpose. The caller writes this into the saved log.
+    assert fallback is not None
+    assert fallback["reason"] == "models_not_installed"
+    assert fallback["missing"] == ["qwen2.5:14b"]
+    assert fallback["using"] == "llama3.1:8b"
+    assert fallback["requested_roles"]["verifier"] == "qwen2.5:14b"
 
 
 def test_tiering_stays_on_when_installed_set_is_unknown(monkeypatch, tmp_path):
@@ -139,9 +151,10 @@ def test_tiering_stays_on_when_installed_set_is_unknown(monkeypatch, tmp_path):
 
     monkeypatch.setattr(requests, "get", raise_conn)
     roles = dict(ROLES, verifier={"model": "qwen2.5:14b"})
-    llm, router = build_llm(_config_with_roles(roles), _options(), str(tmp_path))
+    llm, router, fallback = build_llm(_config_with_roles(roles), _options(), str(tmp_path))
     assert isinstance(router, ModelRouter)
     assert llm is router
+    assert fallback is None, "nothing was declined, so nothing to report"
 
 
 # --- agents/8b/config.json -----------------------------------------------
@@ -159,3 +172,54 @@ def test_8b_config_resolves_profile_from_top_level_model_not_a_role_tag():
         config = json.load(f)
     profile = profiles.for_model(config["model"])
     assert profile is profiles.for_model("llama3.1:8b")
+
+
+# --- the configured model itself is missing ------------------------------
+#
+# Shipping the tier check without this traded a crash inside the router for a
+# bare "404 Client Error: Not Found for url: /api/chat" from the first driver
+# call. The same run failing three seconds later with a worse message.
+
+def test_a_missing_driver_model_is_named_before_any_call_goes_out(
+        monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        requests, "get",
+        lambda url, timeout=None: FakeResponse(json_body=REAL_TAGS_BODY),
+    )
+    config = _config_with_roles(ROLES)
+    config["model"] = "qwen2.5:32b"
+    with pytest.raises(ModelNotInstalled) as caught:
+        build_llm(config, _options(), str(tmp_path))
+    message = str(caught.value)
+    assert "qwen2.5:32b" in message
+    assert "ollama pull qwen2.5:32b" in message
+    assert "llama3.1:8b" in message, "it should say what IS installed"
+
+
+def test_falling_back_to_the_missing_model_is_not_treated_as_a_fallback(
+        monkeypatch, tmp_path):
+    """The exact shape of the defect: the driver is the one that is missing.
+
+    Declining tiering and returning a single LLM for that same model is not a
+    recovery, it is the same failure with an extra step.
+    """
+    monkeypatch.setattr(
+        requests, "get",
+        lambda url, timeout=None: FakeResponse(json_body=REAL_TAGS_BODY),
+    )
+    config = _config_with_roles(dict(ROLES, driver={"model": "qwen2.5:32b"}))
+    config["model"] = "qwen2.5:32b"
+    with pytest.raises(ModelNotInstalled):
+        build_llm(config, _options(), str(tmp_path))
+
+
+def test_an_unknown_installed_set_does_not_block_the_run(monkeypatch, tmp_path):
+    """Unknown is not missing. The check may only ever make things safer."""
+    def raise_conn(url, timeout=None):
+        raise requests.ConnectionError("no route")
+
+    monkeypatch.setattr(requests, "get", raise_conn)
+    config = _config_with_roles(ROLES)
+    config["model"] = "qwen2.5:32b"
+    llm, router, fallback = build_llm(config, _options(), str(tmp_path))
+    assert isinstance(router, ModelRouter)
