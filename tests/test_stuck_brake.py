@@ -140,3 +140,55 @@ def test_with_the_brake_off_the_same_replies_burn_the_budget(attempt_factory):
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+# ------------------------------------ the paths the first version missed --
+#
+# A review found the counter only rose on two of the four ways a call can
+# fail to reach a tool. It missed a reply that will not parse and a call a
+# guard questions, which is how a model degrading into garbled JSON kept
+# burning its whole budget while the docstring said otherwise. The counter is
+# pessimistic now: it rises on every call and falls only when a tool runs.
+
+def test_replies_that_will_not_parse_count(attempt_factory):
+    """The case a 1B actually degrades into, and the one that was missed."""
+    episode, _, llm = _run(attempt_factory, BRAKE, ["not json at all"] * 10)
+    assert [n["kind"] for n in episode.transcript].count("stuck") == 1
+    assert llm.used == 3, "it burned the budget on unparseable replies"
+
+
+def test_a_call_a_guard_questions_counts(attempt_factory):
+    """A questioned call is by definition a call that reached no tool.
+
+    Planning is on here, unlike the other profiles in this file, because the
+    unplanned-write guard has nothing to compare against without a plan.
+    """
+    planning = Profile(plan=True, plan_max_steps=3, verify_rounds=0,
+                       invalid_streak_break=3, max_calls=18)
+    attempt = attempt_factory(guards=True, profile=planning,
+                              max_calls=18, verifier_rounds=0)
+    llm = scripted(
+        [json.dumps({"steps": [{"tool": "list_emails", "what": "look"}]})]
+        + [json.dumps({"tool": "send_message",
+                       "args": {"to": "alex", "text": "hi"}})] * 10
+    )
+    episode = agent.run_harness(llm, "List my emails", attempt)
+    guarded = [n for n in episode.transcript if n["kind"] == "guard"]
+    stuck = [n for n in episode.transcript if n["kind"] == "stuck"]
+    assert guarded, "the guard never fired, so this tests nothing"
+    assert len(stuck) == 1
+    assert llm.used < 18
+
+
+def test_a_mixture_of_all_four_failure_shapes_still_stops(attempt_factory):
+    good = _reply("add_event", title="Design sync", date="2026-07-21",
+                  start_time="14:00", end_time="15:00")
+    episode, _, llm = _run(attempt_factory, BRAKE, [
+        good,                 # runs, resets
+        "not json",           # 1, format
+        _reply("add_event"),  # 2, invalid arguments
+        good,                 # 3, suppressed repeat
+        _reply("done", summary="never reached"),
+    ])
+    assert [n["kind"] for n in episode.transcript].count("stuck") == 1
+    assert llm.used == 4

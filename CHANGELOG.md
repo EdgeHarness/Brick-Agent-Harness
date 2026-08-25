@@ -2,6 +2,40 @@
 
 ## Unreleased
 
+### Correction: the stuck brake counted two of four failure shapes
+
+An adversarial review of the day's diff found the brake did not do what its
+own commit message and comment said. It claimed to end a run "after N calls
+that reach no tool" and counted only two of the ways a call can fail to reach
+one: arguments that will not validate, and a suppressed identical repeat. A
+reply that will not parse and a call a guard questions both reach no tool and
+neither counted, so a model degrading into garbled JSON, which is the exact
+shape this exists for, still burned its whole budget in silence. The review
+reproduced it: eight straight non-JSON replies never fired.
+
+Counting at each of the four places that gives up is what missed two of them,
+so the counter is pessimistic instead: it rises once per call, right after the
+reply, and falls only when a tool actually runs. One increment, one check, one
+reset. Tests cover the parse failure, the guard rejection, and a mixture of
+all four, and fail against the shipped version.
+
+### Correction: narrowing the verifier's except changed bench control flow
+
+The same review flagged something the commit that made it explicitly denied.
+Replacing `except Exception` with `except requests.RequestException` in
+`_verify` meant a 200 response carrying an unexpected body raised
+`JSONDecodeError` or `KeyError` out of `_verify` and out of `run_harness`.
+`DEFAULT.verify_rounds` is 2, so that is the path every default-profile bench
+cell takes, changed by a commit whose message said the behaviour did not.
+
+`_verify`'s contract is that it returns a dict, always. The catch is broad
+again. The mistake the original fix addressed was `pass`, not breadth: the
+silence was the defect, and recording the fault is what removes it. The
+comment now says so, at length, because the narrowing looked like an
+improvement and will look like one again to the next reader.
+
+Offline suite: 1213 passed, 51 skipped, zero failures.
+
 ### A task id where task text belongs is now refused
 
 `--task` takes the text the model is given. The console passes whatever a

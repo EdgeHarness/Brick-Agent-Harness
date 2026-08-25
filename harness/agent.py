@@ -27,7 +27,6 @@ import difflib
 import json
 import re
 
-import requests
 
 from . import guards as _guards
 
@@ -412,8 +411,27 @@ def run_harness(llm, task_text, attempt):
     while llm.calls < config.max_calls:
         if profile.prune_context:
             _shrink_context(messages, profile.num_ctx, ep)
+        if (profile.invalid_streak_break
+                and invalid_streak >= profile.invalid_streak_break):
+            # Nothing has reached a tool for several calls running. On a small
+            # model this is the shape of a run whose work is already done and
+            # which cannot say so: it re-calls a tool that already succeeded,
+            # with arguments that cannot validate, and ignores every
+            # instruction to call done. Continuing spends the rest of the
+            # budget to arrive at the same place. Stopping keeps whatever the
+            # run accomplished, which the grader reads from the world rather
+            # than from whether done was called.
+            ep.note("stuck", _STUCK.format(n=invalid_streak))
+            break
         reply = llm.chat(messages, force_json=True, role="driver",
                          num_predict=profile.num_predict)
+        # Pessimistic: assume this call reaches no tool until one runs. There
+        # are four ways it can fail to, and counting them at each of the four
+        # places that gives up meant missing two. A reply that will not parse
+        # and a call a guard questions are both calls that reached no tool,
+        # and a model that degrades into garbled JSON is exactly the case
+        # this exists for.
+        invalid_streak += 1
         messages.append({"role": "assistant", "content": reply})
         ep.note("model", reply)
         obj, err = parse_lenient(reply)
@@ -476,19 +494,6 @@ def run_harness(llm, task_text, attempt):
                                 attempt.tools[close[0]]["example"],
                                 ensure_ascii=False,
                             ))
-            invalid_streak += 1
-            if (profile.invalid_streak_break
-                    and invalid_streak >= profile.invalid_streak_break):
-                # Nothing has reached a tool for several calls running. On a
-                # small model this is the shape of a run whose work is already
-                # done and which cannot say so: it re-calls a tool that
-                # already succeeded, with arguments that cannot validate, and
-                # ignores every instruction to call done. Continuing spends
-                # the rest of the budget to reach the same place. Stopping
-                # keeps whatever the run already accomplished, which the
-                # grader reads from the world rather than from finishing.
-                ep.note("stuck", _STUCK.format(n=invalid_streak))
-                break
             give_feedback("INVALID CALL: " + "; ".join(problems) + "." + hint
                           + " Reply with one corrected JSON object.", reply)
             continue
@@ -551,11 +556,6 @@ def run_harness(llm, task_text, attempt):
                       f"\"{task_text}\" If everything is complete, call done.")
             messages.append({"role": "user", "content": fb})
             ep.note("feedback", fb)
-            invalid_streak += 1
-            if (profile.invalid_streak_break
-                    and invalid_streak >= profile.invalid_streak_break):
-                ep.note("stuck", _STUCK.format(n=invalid_streak))
-                break
             continue
         think_streak = think_streak + 1 if name == "think" else 0
 
@@ -624,11 +624,25 @@ def _verify(llm, task_text, attempt, ep):
             {"role": "user", "content": prompt}]
     try:
         reply = llm.chat(msgs, force_json=True, num_predict=200, role="verifier")
-    except requests.RequestException as e:
-        # The verifier could not be consulted at all. This is a defect in the
-        # run environment (Ollama down, a timeout, a bad HTTP response), not
+    except Exception as e:
+        # The verifier could not be consulted at all. A defect in the run
+        # environment (Ollama down, a timeout, a bad HTTP response, or a 200
+        # carrying a body that is not the shape the client expects), not
         # something the model did, so it must not be scored as one.
-        ep.note("verify_fault", f"instrument: verifier unreachable ({e})")
+        #
+        # Deliberately broad, and narrowing it was a mistake worth recording.
+        # This ran with a bare `except Exception: pass`, and the fix for that
+        # was to stop the silence, not to change what escapes. Catching only
+        # requests.RequestException let a malformed-but-200 reply raise
+        # JSONDecodeError or KeyError out of _verify and out of run_harness,
+        # which is a control-flow change on the path DEFAULT bench runs take,
+        # made while claiming none had happened.
+        #
+        # The contract is that this returns a dict, always. Breadth is the
+        # right call for a helper with that contract; the wrong call was
+        # `pass`, and this records instead.
+        ep.note("verify_fault",
+                f"instrument: verifier unreachable ({type(e).__name__}: {e})")
         return {"complete": True, "missing": ""}
     obj, _ = parse_lenient(reply)
     if isinstance(obj, dict) and isinstance(obj.get("complete"), bool):
