@@ -15,7 +15,7 @@ from .errors import ConnectorUnavailable, ProviderEnvironmentFault, ProviderReje
 
 
 HUBSPOT_MCP_ENDPOINT = "https://mcp.hubspot.com/"
-HUBSPOT_CALLBACK_PORT = 8765
+HUBSPOT_CALLBACK_PORT = 8766
 HUBSPOT_CALLBACK_PATH = "/oauth/callback"
 
 
@@ -105,7 +105,7 @@ class HubSpotTokenStorage:
 class _OAuthCallbackHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
-        if parsed.path != "/oauth/callback":
+        if parsed.path != HUBSPOT_CALLBACK_PATH:
             self.send_error(404)
             return
         values = {key: items[-1] for key, items in parse_qs(parsed.query).items()}
@@ -389,8 +389,16 @@ class HubSpotMCPClient:
                 texts.append(getattr(block, "text", ""))
             else:
                 texts.append(f"[MCP content block: {getattr(block, 'type', 'unknown')}]")
+        structured = result.structured_content
+        if structured is None and len(texts) == 1:
+            try:
+                parsed = json.loads(texts[0])
+                if isinstance(parsed, (dict, list)):
+                    structured = parsed
+            except (TypeError, ValueError):
+                pass
         payload = {
-            "data": redact(result.structured_content),
+            "data": redact(structured),
             "message": redact_text("\n".join(texts) or "(no content)"),
         }
         if result.is_error:
@@ -398,6 +406,10 @@ class HubSpotMCPClient:
             if error_origin == "model":
                 raise ProviderRejected(message)
             raise ProviderEnvironmentFault(message)
+        if structured is None:
+            raise ProviderEnvironmentFault(
+                "HubSpot MCP returned no structured result for a reviewed operation"
+            )
         return payload
 
     def close(self):

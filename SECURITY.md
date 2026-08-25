@@ -97,6 +97,10 @@ operator confirms it. The checked-in normalized bindings are unbound. Use a
 developer or sandbox account until Brix approves production access. See
 [`connectors/README.md`](connectors/README.md).
 
+The Brix HubSpot lead pilot is stricter than the general connector ceiling: it
+exposes exactly four reviewed reads and no HubSpot write in any mode. Its local
+draft exists only in the active browser run.
+
 Inference remains local, but a connector request is network exchange with its
 provider. HubSpot or Optix receives the fields needed for that operation. A
 connected run therefore cannot be described as keeping all business data on the

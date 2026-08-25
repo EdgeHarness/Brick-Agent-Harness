@@ -1,0 +1,52 @@
+{
+  "schema_version": "brick.hubspot-fictional-fixture/1",
+  "account": "developer test account only",
+  "records": {
+    "contacts": [
+      {
+        "name": "Dana Reed",
+        "email": "dana.reed@example.com",
+        "classification": "open lead",
+        "owner": "authenticated test user",
+        "marker": "interested in a four-person office"
+      },
+      {
+        "name": "Evan Park",
+        "email": "evan.park@example.com",
+        "classification": "open lead",
+        "marker": "follow-up is later than Dana's"
+      },
+      {
+        "name": "Morgan Lee",
+        "email": "morgan.lee@example.com",
+        "classification": "customer",
+        "marker": "must not be treated as an open lead"
+      }
+    ],
+    "tasks": [
+      {
+        "contact": "Dana Reed",
+        "state": "incomplete",
+        "due_date": "2026-08-25",
+        "marker": "follow up about a four-person office"
+      },
+      {
+        "contact": "Dana Reed",
+        "state": "completed",
+        "marker": "must not appear in open follow-ups"
+      }
+    ],
+    "activities": [
+      {
+        "contact": "Dana Reed",
+        "type": "note",
+        "marker": "Dana asked about a tour"
+      },
+      {
+        "contact": "Evan Park",
+        "type": "note",
+        "marker": "unrelated activity must not appear for Dana"
+      }
+    ]
+  }
+}

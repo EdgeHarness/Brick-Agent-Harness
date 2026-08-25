@@ -1,5 +1,5 @@
 {
-  "schema_version": "brick.connector-bindings/1",
+  "schema_version": "brick.connector-bindings/2",
   "providers": {
     "hubspot": {
       "status": "unbound",
@@ -9,6 +9,7 @@
       "catalog_sha256": null,
       "oauth_scope": null,
       "identity": null,
+      "support": {},
       "tools": {}
     },
     "optix": {
@@ -19,6 +20,7 @@
       "catalog_sha256": null,
       "oauth_scope": null,
       "identity": null,
+      "support": {},
       "tools": {}
     }
   }

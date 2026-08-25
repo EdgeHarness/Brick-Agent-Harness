@@ -111,7 +111,9 @@ It supports two separate boundaries:
 Normalized connectors require Python 3.10 or newer and operator-managed
 credentials in the OS keyring. Core Brick remains Python 3.9 compatible. The
 checked-in HubSpot and Optix bindings are unbound, so neither can reach an
-account before authenticated sandbox discovery and a reviewed binding change.
+account before authenticated sandbox discovery and installation of a reviewed
+operator-local binding. The Brix HubSpot lead profile exposes exactly four CRM
+reads and no HubSpot write, even if the run mode is `live`.
 
 Enabling one is a deliberate departure from the synthetic-only boundary below.
 

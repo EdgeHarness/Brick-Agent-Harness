@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import tempfile
 
 from . import config
 from .credentials import KeyringSecretStore
@@ -16,6 +17,7 @@ from .hubspot import (
 )
 from .optix import OptixGraphQLClient
 from .runtime import discovery_record, validate_reviewed_bindings
+from harness.privacy import redact
 
 
 OPTIX_GRAPHQL_ENDPOINT = "https://api.optixapp.com/graphql"
@@ -56,7 +58,6 @@ def _write_record(record, output):
 
 
 def _configure_hubspot(args, secrets):
-    identity = _nonempty_prompt("HubSpot portal/account identifier: ")
     client_id = _nonempty_prompt("HubSpot MCP auth-app client ID: ")
     client_secret = _nonempty_prompt("HubSpot MCP auth-app client secret: ", secret=True)
     redirect = store_client_credentials(
@@ -66,8 +67,12 @@ def _configure_hubspot(args, secrets):
         client_secret=client_secret,
         token_endpoint_auth_method=args.token_auth_method,
     )
-    secrets.set("hubspot", args.account, "account_identity", identity)
-    print("HubSpot credentials were stored in the OS keyring.")
+    # A newly configured OAuth client cannot inherit a previous grant or its
+    # verified portal binding.  Leaving either behind could make the UI report
+    # "ready" before this app has authorized the reviewed account.
+    for key in ("oauth_tokens", "account_identity", "account_profile"):
+        secrets.delete("hubspot", args.account, key)
+    print("HubSpot app credentials were stored in the OS keyring.")
     print(f"The auth app redirect URL must be exactly: {redirect}")
 
 
@@ -79,18 +84,118 @@ def _configure_optix(args, secrets):
     print("Optix credentials were stored in the OS keyring.")
 
 
+def _named_values(value, names):
+    found = []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if key in names and item not in (None, "", [], {}):
+                found.append(item)
+            found.extend(_named_values(item, names))
+    elif isinstance(value, list):
+        for item in value:
+            found.extend(_named_values(item, names))
+    return found
+
+
+def _one_profile_value(data, names, label, *, required=False):
+    values = []
+    for value in _named_values(data, set(names)):
+        text = str(value)
+        if text not in values:
+            values.append(text)
+    if len(values) > 1:
+        raise ValueError(f"get_user_details returned ambiguous {label}")
+    if not values:
+        if required:
+            raise ValueError(f"get_user_details did not return {label}")
+        return None
+    return values[0]
+
+
+def hubspot_user_profile(payload):
+    """Extract only unambiguous identity fields from get_user_details data."""
+    data = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(data, dict):
+        raise ValueError("get_user_details returned no structured account data")
+    portal_id = _one_profile_value(
+        data,
+        ("portalId", "portal_id", "hubId", "hub_id", "accountId", "account_id"),
+        "portal ID",
+        required=True,
+    )
+    user_email = _one_profile_value(
+        data, ("userEmail", "user_email", "email"), "authenticated user email",
+        required=True,
+    )
+    accessible = _named_values(
+        data,
+        {
+            "accessibleObjects", "accessible_objects", "availableObjects",
+            "available_objects", "objectDataAvailability",
+        },
+    )
+    return redact(
+        {
+            "account_identity": portal_id,
+            "portal_id": portal_id,
+            "account_name": _one_profile_value(
+                data, ("accountName", "account_name", "portalName", "portal_name"),
+                "account name",
+            ),
+            "user_id": _one_profile_value(
+                data, ("userId", "user_id"), "authenticated user ID"
+            ),
+            "user_name": _one_profile_value(
+                data, ("userName", "user_name", "fullName", "full_name"),
+                "authenticated user name",
+            ),
+            "user_email": user_email,
+            "owner_id": _one_profile_value(
+                data, ("ownerId", "owner_id"), "owner ID"
+            ),
+            "accessible_objects": accessible[0] if len(accessible) == 1 else accessible,
+        }
+    )
+
+
 def _authorize_hubspot(args, secrets):
-    _identity(secrets, "hubspot", args.account)
+    if secrets.get_json("hubspot", args.account, "oauth_client") is None:
+        raise ValueError("configure the HubSpot auth app before authorizing")
     client = HubSpotMCPClient(
         account_alias=args.account,
         secrets=secrets,
         interactive_auth=True,
     )
     try:
-        count = len(client.catalog())
+        catalog = client.catalog()
+        if "get_user_details" not in catalog:
+            raise ValueError("HubSpot did not expose get_user_details")
+        profile = hubspot_user_profile(
+            client.call("get_user_details", {}, error_origin="environment")
+        )
     finally:
         client.close()
-    print(f"HubSpot OAuth completed and exposed {count} tools for review.")
+    print("HubSpot authorization returned:")
+    print(f"  account: {profile.get('account_name') or '(name unavailable)'}")
+    print(f"  portal ID: {profile['portal_id']}")
+    print(
+        "  user: "
+        + (profile.get("user_name") or "(name unavailable)")
+        + f" <{profile['user_email']}>"
+    )
+    print(f"  accessible objects: {profile.get('accessible_objects') or '(not reported)'}")
+    answer = input("Store this verified account binding? Type yes to confirm: ").strip()
+    if answer.casefold() != "yes":
+        for key in ("oauth_tokens", "account_identity", "account_profile"):
+            secrets.delete("hubspot", args.account, key)
+        raise ValueError("HubSpot authorization was not confirmed; grant discarded")
+    secrets.set(
+        "hubspot", args.account, "account_identity", profile["account_identity"]
+    )
+    secrets.set_json("hubspot", args.account, "account_profile", profile)
+    print(
+        f"HubSpot account verified and {len(catalog)} provider tools are available for review."
+    )
 
 
 def _discover(args, secrets):
@@ -119,6 +224,35 @@ def _discover(args, secrets):
         ),
         args.output,
     )
+
+
+def _install_bindings(args, secrets):
+    source = Path(args.input).resolve()
+    declarations = config.load_declarations()
+    document = config.load_bindings(source, declarations)
+    hubspot = document["providers"]["hubspot"]
+    if hubspot["status"] == "bound" and config.binding_status(
+        "hubspot", hubspot, secrets
+    ) != "ready":
+        raise ValueError(
+            "reviewed HubSpot binding does not match the authorized keyring account"
+        )
+    target = Path(config.local_bindings_path()).resolve()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    encoded = json.dumps(document, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    with tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", newline="\n", dir=target.parent, delete=False
+    ) as handle:
+        handle.write(encoded)
+        handle.flush()
+        os.fsync(handle.fileno())
+        temporary = Path(handle.name)
+    try:
+        os.replace(temporary, target)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+    print(f"installed reviewed connector bindings: {target}")
 
 
 def build_parser():
@@ -154,6 +288,11 @@ def build_parser():
     discover.add_argument("--provider", required=True, choices=("hubspot", "optix"))
     discover.add_argument("--account", required=True)
     discover.add_argument("--output")
+    install = sub.add_parser(
+        "install-bindings",
+        help="validate and install a reviewed secret-free binding outside Git",
+    )
+    install.add_argument("--input", required=True)
     return parser
 
 
@@ -186,6 +325,8 @@ def main(argv=None):
             _authorize_hubspot(args, secrets)
         elif args.command == "discover":
             _discover(args, secrets)
+        elif args.command == "install-bindings":
+            _install_bindings(args, secrets)
         return 0
     except (ConnectorError, ValueError, OSError) as exc:
         parser.error(str(exc))

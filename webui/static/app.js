@@ -1046,7 +1046,20 @@ function onBanner(e) {
     n.append(det);
   }
   if (e.mcp) n.append(connectorPanel(e.mcp));
+  if (e.connectors) n.append(businessConnectorPanel(e.connectors));
   S.banner = n;
+}
+
+function businessConnectorPanel(connectors) {
+  const servers = (connectors.providers || []).map((provider) => ({
+    ...provider,
+    classified_by: Object.fromEntries(
+      Object.entries(provider.effects || {}).map(([name, value]) => [
+        name, (value || {}).classified_by || 'reviewed declaration',
+      ]),
+    ),
+  }));
+  return connectorPanel({ servers, warnings: connectors.warnings || [] });
 }
 
 /* What a connector actually brought into this run.
@@ -1065,7 +1078,8 @@ function connectorPanel(mcp) {
     const writes = new Set(s.writes || []);
     const det = el('details', 'connector');
     const sum = el('summary', 'connector-sum');
-    sum.append(el('span', 'connector-id', s.id),
+    const account = s.account ? ` / ${s.account}` : '';
+    sum.append(el('span', 'connector-id', s.id + account),
                el('span', 'connector-meta',
                   `${s.mode} · ${(s.tools || []).length} tools · ` +
                   `${writes.size} can change something`));
@@ -1869,7 +1883,7 @@ async function loadMcp() {
    to look. The result lands under the row you clicked rather than in a
    dialog, because it is an answer about that row and you are usually about
    to tick the box next to it. */
-function checkRow(name) {
+function checkRow(name, endpoint = '/api/mcp/inspect') {
   const wrap = el('div', 'mcp-check');
   const btn = el('button', 'mcp-check-btn', 'Check');
   btn.type = 'button';
@@ -1885,7 +1899,7 @@ function checkRow(name) {
     out.append(el('div', 'mcp-check-wait',
                   'Starting the server. First run can wait on a download or a sign-in.'));
     try {
-      const r = await post('/api/mcp/inspect', {
+      const r = await post(endpoint, {
         name, mode: $('opt-mcp-mode').value,
       });
       out.textContent = '';
@@ -1955,14 +1969,17 @@ async function loadConnectors() {
     cb.type = 'checkbox';
     cb.className = 'brick-connector';
     cb.value = provider.name;
-    cb.disabled = provider.status !== 'bound';
-    const suffix = provider.status === 'bound' ? '' : ' (setup required)';
+    cb.disabled = provider.status !== 'ready';
+    const suffix = provider.status === 'ready' ? '' : ` (${provider.status})`;
     const label = el('span', 'menu-label', provider.name + suffix);
     label.append(el('em', null, provider.summary));
     const tick = el('span', 'tick', '✓');
     tick.setAttribute('aria-hidden', 'true');
     row.append(cb, label, tick);
     box.append(row);
+    if (provider.status === 'ready') {
+      box.append(checkRow(provider.name, '/api/connectors/inspect'));
+    }
   }
   paintOptDots();
 }
@@ -2008,6 +2025,12 @@ function paintOptDots() {
       : (agent.mcp_default_mode || mode)
   );
   if (live.length) on.unshift(liveMode === 'live' ? `${live.length} live` : `${live.length} real`);
+  const privacy = $('connector-privacy');
+  if (privacy) {
+    privacy.textContent = live.includes('hubspot')
+      ? 'Model inference stays on this machine. Requested CRM data is exchanged with HubSpot.'
+      : 'Model inference stays on this machine. Selected provider tools exchange only the requested business data.';
+  }
   $('conn-state').textContent = live.length
     ? `${live.length} · ${liveMode === 'read_only' ? 'read only' : liveMode}`
       + (fallback.length ? ' · from config' : '')

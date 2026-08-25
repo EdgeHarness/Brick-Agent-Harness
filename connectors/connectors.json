@@ -19,11 +19,10 @@
           "binding_key": "find_contact",
           "description": "Find HubSpot contacts by a supplied name or email fragment.",
           "params": {
-            "query": {"type": "string", "required": true},
-            "limit": {"type": "integer from 1 to 20", "required": false}
+            "query": {"type": "string", "required": true}
           },
-          "example": {"query": "alex@example.com", "limit": 5},
-          "normalized_schema_sha256": "7879af2e548f20e9d3595b4e44b762fe77425948f8f800d6b4ca7c91f2e9e5d6",
+          "example": {"query": "dana.reed@example.com"},
+          "normalized_schema_sha256": "af18d88d4f6d5439577cde929e2fd0a8d34516d55df3b78bccb55d7c311f35ae",
           "effect": "read",
           "transmits": false,
           "invites": false,
@@ -54,11 +53,10 @@
           "binding_key": "recent_activity",
           "description": "Read recent CRM activity associated with one HubSpot contact.",
           "params": {
-            "contact_id": {"type": "string", "required": true},
-            "limit": {"type": "integer from 1 to 20", "required": false}
+            "contact_id": {"type": "string", "required": true}
           },
-          "example": {"contact_id": "contact_123", "limit": 10},
-          "normalized_schema_sha256": "6bcee63e77359c2aa0d801a2b229166c84c0c8a3285ef2fa82b88ec02cb68b90",
+          "example": {"contact_id": "contact_123"},
+          "normalized_schema_sha256": "1836e33feba5984a0c4dd48b86635be87e10bce79df1837e5672e9dec2d98b72",
           "effect": "read",
           "transmits": false,
           "invites": false,
@@ -68,40 +66,20 @@
           "rate_limit_bucket": "hubspot"
         },
         {
-          "name": "hs_open_followups",
+          "name": "hs_my_open_followups",
           "binding_key": "open_followups",
-          "description": "Read open HubSpot follow-up activities for one owner through a due date.",
+          "description": "Read incomplete HubSpot follow-up tasks assigned to the authenticated user through a due date.",
           "params": {
-            "owner_id": {"type": "string", "required": true},
-            "due_before": {"type": "ISO 8601 date", "required": true},
-            "limit": {"type": "integer from 1 to 20", "required": false}
+            "due_before": {"type": "ISO 8601 date", "required": true}
           },
-          "example": {"owner_id": "owner_123", "due_before": "2026-08-31", "limit": 10},
-          "normalized_schema_sha256": "f69c962167cfac9a43baa09812ba3aacf275c636c37587c97fc189c792dbdc06",
+          "example": {"due_before": "2026-08-31"},
+          "normalized_schema_sha256": "43055946fe34f6843e50191d2ab571622f15c7943af833d7fef2c777a8fa5b78",
           "effect": "read",
           "transmits": false,
           "invites": false,
           "modes": ["read_only", "draft", "live"],
           "idempotent": true,
           "retry": "safe",
-          "rate_limit_bucket": "hubspot"
-        },
-        {
-          "name": "hs_log_note",
-          "binding_key": "log_note",
-          "description": "Add one internal note to a specific HubSpot contact after operator confirmation.",
-          "params": {
-            "contact_id": {"type": "string", "required": true},
-            "body": {"type": "string", "required": true}
-          },
-          "example": {"contact_id": "contact_123", "body": "Left a voicemail and will follow up Tuesday."},
-          "normalized_schema_sha256": "e267b3734ca52f337e43aa3231b3aadaae65caaa70b1031810b93cc863ed211d",
-          "effect": "external_write",
-          "transmits": false,
-          "invites": false,
-          "modes": ["live"],
-          "idempotent": false,
-          "retry": "never",
           "rate_limit_bucket": "hubspot"
         }
       ]

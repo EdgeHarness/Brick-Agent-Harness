@@ -40,6 +40,11 @@ from harness.domain import load_domain  # noqa: E402
 from harness import chat  # noqa: E402
 from harness import mcp_bridge, mcp_config  # noqa: E402
 from connectors import config as connector_config  # noqa: E402
+from connectors import runtime as connector_runtime  # noqa: E402
+from connectors.errors import (  # noqa: E402
+    ConnectorConfigError,
+    ConnectorUnavailable,
+)
 from harness.storage import agent_runtime_paths  # noqa: E402
 from webui.control import (  # noqa: E402
     ConfirmationLedger,
@@ -142,8 +147,8 @@ def reject_removed_run_fields(body):
 
 
 # Model facts from openrouter.ai, generated into model_catalog.json rather than
-# fetched. The product's whole claim is that nothing leaves the machine, so the
-# UI must not reach the network to describe a model.
+# fetched. Model inference is local, and the UI must not add an unrelated
+# network request merely to describe a model.
 def _load_catalog():
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         "model_catalog.json")
@@ -203,6 +208,7 @@ def require_mcp_mode(value):
 # inspections would close each other's processes. The server is threaded, so
 # this has to be said explicitly.
 _INSPECT_LOCK = threading.Lock()
+_CONNECTOR_INSPECT_LOCK = threading.Lock()
 
 
 def inspect_connector(name, mode):
@@ -253,6 +259,61 @@ def inspect_connector(name, mode):
             _INSPECT_LOCK.release()
 
 
+def inspect_business_connector(name, mode):
+    """Inspect one reviewed normalized connector without invoking a model."""
+    if not _CONNECTOR_INSPECT_LOCK.acquire(blocking=False):
+        raise RequestError(409, "another business connector check is already running")
+    try:
+        require_connector_names([name])
+        specs, effects, summary = connector_runtime.enable([name], mode=mode)
+        provider = summary[0] if summary else {}
+        classifications = provider.get("effects") or {}
+        return {
+            "name": name,
+            "status": "ready",
+            "account": provider.get("account"),
+            "mode": provider.get("mode", mode),
+            "tools": [
+                {
+                    "name": tool,
+                    "effect": effects.get(tool, "read"),
+                    "transmits": bool(
+                        (classifications.get(tool) or {}).get("transmits")
+                    ),
+                    "invites": bool(
+                        (classifications.get(tool) or {}).get("invites")
+                    ),
+                    "why": (
+                        (classifications.get(tool) or {}).get("classified_by")
+                        or "reviewed declaration"
+                    ),
+                }
+                for tool in provider.get("tools", [])
+            ],
+            "writes": list(provider.get("writes") or []),
+            "warnings": [],
+        }
+    except (ConnectorConfigError, ConnectorUnavailable) as exc:
+        return {
+            "name": name,
+            "tools": [],
+            "warnings": [],
+            "error": redact(str(exc))[:300],
+        }
+    except Exception as exc:
+        return {
+            "name": name,
+            "tools": [],
+            "warnings": [],
+            "error": f"{type(exc).__name__}: connector check failed",
+        }
+    finally:
+        try:
+            connector_runtime.shutdown()
+        finally:
+            _CONNECTOR_INSPECT_LOCK.release()
+
+
 def require_connector_names(value):
     if not value:
         return []
@@ -264,12 +325,14 @@ def require_connector_names(value):
     unknown = sorted({item for item in value if item not in available})
     if unknown:
         raise RequestError(400, "unknown connectors: " + ", ".join(unknown))
-    unbound = sorted({item for item in value if available[item] != "bound"})
-    if unbound:
+    unavailable = sorted({item for item in value if available[item] != "ready"})
+    if unavailable:
         raise RequestError(
             409,
             "connectors require authenticated reviewed bindings: "
-            + ", ".join(unbound),
+            + ", ".join(
+                f"{item} ({available[item]})" for item in unavailable
+            ),
         )
     return sorted(set(value))
 
@@ -937,6 +1000,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 name = require_string(body["name"], "name", maximum=64)
                 mode = require_mcp_mode(body.get("mode")) or "draft"
                 return self.send_json(inspect_connector(name, mode))
+            if path == "/api/connectors/inspect":
+                body = exact_object(body, required=("name",), optional=("mode",))
+                name = require_string(body["name"], "name", maximum=64)
+                mode = require_mcp_mode(body.get("mode")) or "read_only"
+                return self.send_json(inspect_business_connector(name, mode))
             if path == "/api/thread/new":
                 body = exact_object(body, required=("agent",),
                                     optional=("task",))

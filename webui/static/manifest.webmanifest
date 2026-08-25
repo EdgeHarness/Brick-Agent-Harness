@@ -1,7 +1,7 @@
 {
   "name": "Agent Lab",
   "short_name": "Agent Lab",
-  "description": "On-device agents. Nothing leaves this machine.",
+  "description": "On-device model inference with reviewed business connectors.",
   "start_url": "/",
   "scope": "/",
   "id": "/",

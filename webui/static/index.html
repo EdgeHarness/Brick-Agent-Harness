@@ -203,7 +203,7 @@
         <div id="empty" class="empty">
           <span class="empty-mark" role="img" aria-label="AgentLab"></span>
           <h3>What can I help you with?</h3>
-          <p>Pick a model, say what you want, press Run. Nothing leaves this machine.</p>
+          <p>Pick a model, say what you want, press Run. Model inference stays on this machine.</p>
         </div>
       </div>
 
@@ -304,10 +304,9 @@
                     <option value="read_only">read only</option>
                   </select>
                 </label>
-                <p class="opt-note">Inference stays on this machine. Provider
-                  calls exchange the requested business data with HubSpot, Optix,
-                  Google, or Microsoft. Draft mode hides tools declared to send
-                  notifications or invitations.</p>
+                <p class="opt-note" id="connector-privacy">Model inference stays
+                  on this machine. Selected provider tools exchange only the
+                  requested business data.</p>
               </div>
             </details>
           </div>

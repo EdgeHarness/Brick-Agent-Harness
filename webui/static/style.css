@@ -539,6 +539,8 @@ button.menu-row[aria-checked="true"] .tick { opacity: 1; }
    Glass, because it floats over the transcript. */
 .opts {
   position: absolute; left: 0; bottom: calc(100% + 10px); width: min(320px, 86vw);
+  max-height: calc(100vh - var(--dock-h, 96px) - 24px);
+  overflow-y: auto; overscroll-behavior: contain; box-sizing: border-box;
   z-index: 5; padding: 14px 16px 16px;
   background: var(--glass); border: 1px solid var(--glass-line);
   border-radius: var(--r-lg);

@@ -6,7 +6,8 @@ result roots never import it.
 
 The checked-in provider bindings are deliberately `unbound`. No real account is
 reachable until an operator completes authenticated sandbox discovery, reviews
-the exact provider operations, commits their schema digests, and restarts Brick.
+the exact provider operations, and installs a secret-free binding in the
+operator-local configuration directory.
 
 ## Architecture
 
@@ -16,15 +17,19 @@ local model -> Brick ToolRegistry -> fixed Brick tool -> provider adapter
                                                     `-> Optix fixed GraphQL
 ```
 
-The model sees short names such as `hs_find_contact` and
-`optix_room_availability`. It never sees HubSpot's full dynamic catalog or a
-free-form GraphQL query parameter.
+The Brix lead workflow exposes exactly `hs_find_contact`, `hs_get_contact`,
+`hs_recent_activity`, and `hs_my_open_followups`. All four are reads. The model
+never sees HubSpot's full dynamic catalog, provider operation names, object
+types, property lists, filters, owner identifiers, or limits. Optix similarly
+never exposes a free-form GraphQL query parameter.
 
 - `connectors.json` declares the stable model-facing names, flat parameter
   schemas, examples, their exact normalized schema digests, effects, allowed
   modes, retry rules, and rate-limit bucket.
-- `bindings.json` binds an authenticated account, catalog digest, live identity
-  probe, exact provider operation, argument conversion, and result projection.
+- `bindings.json` is the checked-in unbound fallback. A reviewed local binding
+  pins the authenticated account, full catalog digest, live identity probe,
+  exact provider operations, fixed literals, nested argument destinations,
+  deterministic conversions, and narrow result projections.
 - `runtime.py` compares the live account and catalog with those bindings before
   exposing any tool. It checks the catalog again immediately before a write.
 - `ledger.py` records only minimal write status and hashed object identifiers in
@@ -48,16 +53,20 @@ python -m connectors.cli list
 Credentials are prompted on the terminal and stored through the operating
 system keyring. There is intentionally no `--token` or `--client-secret` flag.
 
-## HubSpot sandbox setup
+## HubSpot developer-account setup
 
 HubSpot documents its CRM MCP endpoint at `https://mcp.hubspot.com/`, using
 Streamable HTTP and OAuth with required PKCE:
 <https://developers.hubspot.com/docs/apps/developer-platform/build-apps/integrate-with-the-remote-hubspot-mcp-server>
 
-1. Create an MCP auth app in a HubSpot developer or sandbox portal.
-2. Register this exact redirect URL:
-   `http://127.0.0.1:8765/oauth/callback`.
-3. Store the app credentials and operator-selected portal identifier:
+1. Create a free standard HubSpot account. Under **Development > Testing > Test
+   Accounts**, create the developer test account that will hold only fictional
+   records. Under **Development > MCP Auth Apps**, create the auth app that Brick
+   will use, then select the developer test account during OAuth.
+2. Register these redirect URLs in the auth app:
+   - `http://localhost:6274/oauth/callback/debug` for MCP Inspector;
+   - `http://127.0.0.1:8766/oauth/callback` for Brick.
+3. Store only the app client credentials:
 
    ```powershell
    python -m connectors.cli configure-hubspot --account sandbox
@@ -69,17 +78,38 @@ Streamable HTTP and OAuth with required PKCE:
    python -m connectors.cli authorize-hubspot --account sandbox
    ```
 
-5. Capture a secret-free authenticated catalog:
+   Brick calls `get_user_details`, shows the sanitized portal and user identity,
+   and stores the portal binding only after the operator types `yes`.
+
+5. Independently connect MCP Inspector to `https://mcp.hubspot.com/`, list the
+   catalog, and call only `get_user_details`. Confirm it is the same developer
+   test portal.
+
+6. Capture a secret-free authenticated catalog outside Git:
 
    ```powershell
    python -m connectors.cli discover --provider hubspot --account sandbox `
      --output C:\safe-review\hubspot-discovery.json
    ```
 
-Do not infer tool names from this repository. Review the discovered catalog and
-bind only operations actually present for the selected portal and permissions.
-The first release excludes mail sending, conversation replies, marketing
-actions, deletes, merges, owner changes, bulk edits, and cross-portal tools.
+Do not infer provider input or result schemas from this repository. Review the
+discovered catalog and bind only operations actually present for the selected
+portal and permissions. The only permitted provider operation names are
+`get_user_details`, `search_crm_objects`, `get_crm_objects`, and, when owner
+resolution requires it, `search_owners`. The first release rejects
+`manage_crm_objects`, conversation search, mail sending, conversation replies,
+marketing actions, deletes, merges, owner changes, bulk edits, and cross-portal
+tools.
+
+7. Build a reviewed binding from the discovered schemas, then install it:
+
+   ```powershell
+   python -m connectors.cli install-bindings `
+     --input C:\safe-review\reviewed-bindings.json
+   ```
+
+   The command validates the document and authenticated account before
+   atomically installing it under `%LOCALAPPDATA%\BrickAgentHarness\connectors`.
 
 ## Optix sandbox setup
 
@@ -119,32 +149,36 @@ Browser automation is not a fallback when developer API access is unavailable.
 
 ## Binding review
 
-`bindings.json` stays unbound until the discovery record has been reviewed. A
-bound provider must include:
+The checked-in `bindings.json` stays unbound. A reviewed operator-local provider
+binding must include:
 
 - one account alias and hash of the independently verified account identifier;
 - the full authenticated catalog hash;
 - a read-only identity operation that returns exactly `account_identity`;
 - only provider operations proved by discovery;
-- an argument map and any explicit `iso8601_to_unix` conversions;
+- fixed provider literals for object types, properties, filters, sorts, and
+  limits;
+- JSON-pointer argument destinations and only named deterministic conversions;
 - a narrow result projection;
 - an exact provider schema or GraphQL document digest;
 - an optional read-back operation for a write.
 
 Run `python -m connectors.cli validate` after every edit. Runtime discovery must
-match the committed digests byte for byte. A HubSpot tool-list change or Optix
-schema change blocks the connector until it is reviewed and rebound.
+match the installed binding digests byte for byte. A HubSpot tool-list change or
+Optix schema change blocks the connector until it is reviewed and rebound.
 
-HubSpot argument-map destinations are provider argument names. Optix
-destinations are restricted JSON pointers into the fixed GraphQL variables
-object, for example `/input/bookings/0/resource_id`. They cannot overlap, index
-unbounded lists, refer to variables absent from the document, or expose a query
-document through model arguments. Read and verification bindings must be
-GraphQL queries; introspection and mutations are rejected there.
+HubSpot and Optix argument destinations are restricted JSON pointers. For
+example, `/filters/2/value` can receive an operator-supplied due date after a
+reviewed conversion while the filter property and operator remain fixed.
+Destinations cannot overwrite fixed literals, overlap, index unbounded lists,
+refer to variables absent from an Optix document, or expose a query document
+through model arguments. Read and verification bindings must be GraphQL queries;
+introspection and mutations are rejected there.
 
 Discovery output contains no credential, but it can describe a tenant-specific
-catalog. Keep the review file outside Git and commit only the reviewed digests,
-operation documents, and account fingerprint in `bindings.json`.
+catalog. Keep discovery and account-specific reviewed bindings outside Git.
+Only provider-neutral declarations and fictional fixture expectations belong in
+the repository.
 
 ## Modes and privacy
 
@@ -180,18 +214,23 @@ python agents\8b\run_agent.py --connector hubspot --connector-mode read_only `
 ```
 
 Use the Agent Lab real-accounts panel for the same flow. Unbound providers are
-visible but disabled.
+visible but disabled. The panel distinguishes `unbound`, `authorization
+required`, `account mismatch`, and `ready`. Choose the
+`brix_hubspot_leads` domain for the Brix lead workflow. Its answer is displayed
+in the current run only and must end with `Draft, not sent`.
 
 ## Rollout gates
 
-1. Authenticated read-only sandbox discovery and binding review.
-2. Read-only lead, member, room, and availability workflows.
-3. Confirmed sandbox booking draft and local follow-up drafting.
-4. One confirmed internal HubSpot note and one confirmed Optix booking, each
-   read back exactly once.
-5. Brix approval, then production read-only access.
-6. Enable each production write separately after workflow and notification
-   review.
+1. Authenticated HubSpot developer-account discovery and binding review.
+2. Find Dana, read her record and activities, and list only her open owned
+   follow-up from the fictional fixture.
+3. Produce a screen-only draft and prove HubSpot state did not change.
+4. Restart Brick and repeat a read using the stored grant.
+5. Obtain Brix approval, map Brix's actual lead objects and properties, and make
+   a separately reviewed read-only Brix binding.
+
+HubSpot writes and outbound messages are not part of this release. Optix write
+gates remain separate from the Brix HubSpot lead pilot.
 
 Webhooks, scheduled automation, onboarding account creation, outbound messages,
 marketing, deletes, billing, browser automation, tenant switching, and unattended

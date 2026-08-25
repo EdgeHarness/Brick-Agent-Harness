@@ -57,12 +57,21 @@ def _sha_text(value):
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def _hub_operation(operation, schema, argument_map, result_map, *, verification=None):
+def _hub_operation(
+    operation, schema, argument_map, result_map, *, verification=None,
+    literals=None, context_map=None, transforms=None, item_map=None,
+):
     return {
         "operation": operation,
-        "argument_map": argument_map,
-        "argument_transforms": {},
+        "literal_arguments": literals or {},
+        "argument_map": {
+            key: value if value.startswith("/") else "/" + value
+            for key, value in argument_map.items()
+        },
+        "context_map": context_map or {},
+        "argument_transforms": transforms or {},
         "result_map": result_map,
+        "item_map": item_map,
         "error_origin": "model",
         "verification": verification,
         "input_schema_sha256": config.digest(schema),
@@ -70,7 +79,21 @@ def _hub_operation(operation, schema, argument_map, result_map, *, verification=
 
 
 def _hub_identity(schema):
-    value = _hub_operation("whoami", schema, {}, {"account_identity": "/data/portal"})
+    value = _hub_operation(
+        "get_user_details",
+        schema,
+        {},
+        {
+            "account_identity": "/data/portal_id",
+            "portal_id": "/data/portal_id",
+            "account_name": "/data/account_name",
+            "user_id": "/data/user_id",
+            "user_name": "/data/user_name",
+            "user_email": "/data/user_email",
+            "owner_id": "/data/owner_id",
+            "accessible_objects": "/data/accessible_objects",
+        },
+    )
     value.pop("verification")
     value["error_origin"] = "environment"
     return value
@@ -87,9 +110,12 @@ def _optix_operation(
 ):
     return {
         "operation": operation,
+        "literal_arguments": {},
         "argument_map": argument_map,
+        "context_map": {},
         "argument_transforms": transforms or {},
         "result_map": result_map,
+        "item_map": None,
         "error_origin": "model",
         "verification": verification,
         "document": document,
@@ -107,29 +133,41 @@ def _optix_identity(document):
 
 
 class FakeHubSpot:
-    def __init__(self, catalog=None, identity=HUB_IDENTITY):
+    def __init__(self, catalog=None, identity=HUB_IDENTITY, owner_id="o1"):
         self.schemas = catalog or {
-            "whoami": {"type": "object", "properties": {}},
-            "search_contacts": {
-                "type": "object",
-                "properties": {"query": {"type": "string"}, "limit": {"type": "integer"}},
-                "required": ["query"],
-            },
-            "create_note": {
+            "get_user_details": {"type": "object", "properties": {}},
+            "search_crm_objects": {
                 "type": "object",
                 "properties": {
-                    "contactId": {"type": "string"},
-                    "body": {"type": "string"},
+                    "objectType": {"type": "string"},
+                    "query": {"type": "string"},
+                    "properties": {"type": "array"},
+                    "limit": {"type": "integer"},
+                    "filters": {"type": "array"},
+                    "sorts": {"type": "array"},
                 },
-                "required": ["contactId", "body"],
+                "required": ["objectType"],
             },
-            "get_note": {
+            "get_crm_objects": {
                 "type": "object",
-                "properties": {"noteId": {"type": "string"}},
-                "required": ["noteId"],
+                "properties": {
+                    "objectType": {"type": "string"},
+                    "objectIds": {"type": "array"},
+                    "properties": {"type": "array"},
+                },
+                "required": ["objectType", "objectIds"],
+            },
+            "search_owners": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer"},
+                },
+                "required": ["query"],
             },
         }
         self.identity = identity
+        self.owner_id = owner_id
         self.calls = []
         self.catalog_calls = 0
         self.closed = False
@@ -147,14 +185,96 @@ class FakeHubSpot:
         if operation in self.fail:
             error = self.fail[operation]
             raise error if isinstance(error, Exception) else error()
-        if operation == "whoami":
-            return {"data": {"portal": self.identity}, "message": "ok"}
-        if operation == "search_contacts":
-            return {"data": {"contacts": [{"id": "c1"}]}, "message": "ok"}
-        if operation == "create_note":
-            return {"data": {"note": {"id": "n1"}}, "message": "ok"}
-        if operation == "get_note":
-            return {"data": {"found": arguments.get("noteId") == "n1"}, "message": "ok"}
+        if operation == "get_user_details":
+            return {
+                "data": {
+                    "portal_id": self.identity,
+                    "account_name": "Brix Sandbox",
+                    "user_id": "u1",
+                    "user_name": "Test Owner",
+                    "user_email": "owner@example.com",
+                    "owner_id": self.owner_id,
+                    "accessible_objects": ["contacts", "tasks", "notes"],
+                },
+                "message": "ok",
+            }
+        if operation == "search_owners":
+            return {
+                "data": {
+                    "results": [
+                        {"id": "o1", "name": "Test Owner", "email": "owner@example.com"}
+                    ]
+                },
+                "message": "ok",
+            }
+        if operation == "get_crm_objects":
+            return {
+                "data": {
+                    "results": [
+                        {
+                            "id": "c1",
+                            "properties": {
+                                "firstname": "Dana", "lastname": "Reed",
+                                "email": "dana.reed@example.com",
+                                "lifecyclestage": "lead", "hs_lead_status": "OPEN",
+                                "hubspot_owner_id": "o1",
+                            },
+                        }
+                    ]
+                },
+                "message": "ok",
+            }
+        if operation == "search_crm_objects":
+            object_type = arguments.get("objectType")
+            if object_type == "contacts":
+                return {
+                    "data": {
+                        "results": [
+                            {
+                                "id": "c1",
+                                "properties": {
+                                    "firstname": "Dana", "lastname": "Reed",
+                                    "email": "dana.reed@example.com",
+                                    "lifecyclestage": "lead", "hs_lead_status": "OPEN",
+                                    "hubspot_owner_id": "o1",
+                                },
+                            }
+                        ],
+                        "total": 1,
+                    },
+                    "message": "ok",
+                }
+            if object_type == "tasks" and len(arguments.get("filters") or []) >= 3:
+                return {
+                    "data": {
+                        "results": [{
+                            "id": "t-open",
+                            "properties": {
+                                "contact_id": "c1", "hs_timestamp": "2026-08-25T15:00:00Z",
+                                "hs_task_status": "NOT_STARTED",
+                                "hs_task_subject": "Follow up about four-person office",
+                                "hs_task_body": "Ask whether Dana wants a tour.",
+                            },
+                        }],
+                        "total": 1,
+                    },
+                    "message": "ok",
+                }
+            singular = object_type[:-1] if object_type and object_type.endswith("s") else object_type
+            return {
+                "data": {
+                    "results": [{
+                        "id": f"{singular}-1",
+                        "properties": {
+                            "hs_timestamp": "2026-08-24T18:00:00Z",
+                            "status": "COMPLETED" if object_type == "tasks" else "",
+                            "subject": f"Seeded {singular}",
+                            "summary": f"Seeded {singular} for Dana",
+                        },
+                    }]
+                },
+                "message": "ok",
+            }
         raise AssertionError(operation)
 
     def close(self):
@@ -223,13 +343,62 @@ class FakeOptix:
 
 def _hubspot_binding(client):
     catalog = client.catalog()
-    verify = _hub_operation(
-        "get_note",
-        client.schemas["get_note"],
-        {"note_id": "noteId"},
-        {"verified": "/data/found"},
+    contact_fields = {
+        "contact_id": "/id",
+        "first_name": "/properties/firstname",
+        "last_name": "/properties/lastname",
+        "email": "/properties/email",
+        "lifecycle_stage": "/properties/lifecyclestage",
+        "lead_status": "/properties/hs_lead_status",
+        "owner_id": "/properties/hubspot_owner_id",
+    }
+    activity_fields = {
+        "activity_id": "/id",
+        "timestamp": "/properties/hs_timestamp",
+        "status": "/properties/status",
+        "subject": "/properties/subject",
+        "summary": "/properties/summary",
+    }
+    activity_calls = []
+    for label in ("call", "email", "meeting", "note", "task"):
+        plural = label + ("s" if label != "activity" else "")
+        activity_calls.append(
+            {
+                "label": label,
+                "binding": _hub_operation(
+                    "search_crm_objects",
+                    client.schemas["search_crm_objects"],
+                    {"contact_id": "/filters/0/value"},
+                    {"activities": "/data/results"},
+                    literals={
+                        "objectType": plural,
+                        "properties": [
+                            "hs_timestamp", "status", "subject", "summary"
+                        ],
+                        "limit": 10,
+                        "filters": [
+                            {"propertyName": "associations.contact", "operator": "EQ"}
+                        ],
+                        "sorts": ["-hs_timestamp"],
+                    },
+                    item_map={"source": "activities", "fields": activity_fields},
+                ),
+            }
+        )
+        activity_calls[-1]["binding"].pop("verification")
+    owner_lookup = _hub_operation(
+        "search_owners",
+        client.schemas["search_owners"],
+        {},
+        {"owners": "/data/results"},
+        literals={"limit": 10},
+        context_map={"user_email": "/query"},
+        item_map={
+            "source": "owners",
+            "fields": {"owner_id": "/id", "name": "/name", "email": "/email"},
+        },
     )
-    verify.pop("verification")
+    owner_lookup.pop("verification")
     return {
         "status": "bound",
         "endpoint": "https://mcp.hubspot.com/",
@@ -239,20 +408,85 @@ def _hubspot_binding(client):
             "hubspot", "sandbox", HUB_IDENTITY, catalog, "https://mcp.hubspot.com/"
         )["catalog_sha256"],
         "oauth_scope": None,
-        "identity": _hub_identity(client.schemas["whoami"]),
+        "identity": _hub_identity(client.schemas["get_user_details"]),
+        "support": {"owner_lookup": owner_lookup},
         "tools": {
             "find_contact": _hub_operation(
-                "search_contacts",
-                client.schemas["search_contacts"],
-                {"query": "query", "limit": "limit"},
-                {"contacts": "/data/contacts"},
+                "search_crm_objects",
+                client.schemas["search_crm_objects"],
+                {"query": "/query"},
+                {"matches": "/data/results", "total": "/data/total"},
+                literals={
+                    "objectType": "contacts",
+                    "properties": [
+                        "firstname", "lastname", "email", "lifecyclestage",
+                        "hs_lead_status", "hubspot_owner_id",
+                    ],
+                    "limit": 5,
+                },
+                item_map={"source": "matches", "fields": contact_fields},
             ),
-            "log_note": _hub_operation(
-                "create_note",
-                client.schemas["create_note"],
-                {"contact_id": "contactId", "body": "body"},
-                {"note_id": "/data/note/id"},
-                verification=verify,
+            "get_contact": _hub_operation(
+                "get_crm_objects",
+                client.schemas["get_crm_objects"],
+                {"contact_id": "/objectIds"},
+                {
+                    "contact_id": "/data/results/0/id",
+                    "first_name": "/data/results/0/properties/firstname",
+                    "last_name": "/data/results/0/properties/lastname",
+                    "email": "/data/results/0/properties/email",
+                    "lifecycle_stage": "/data/results/0/properties/lifecyclestage",
+                    "lead_status": "/data/results/0/properties/hs_lead_status",
+                    "owner_id": "/data/results/0/properties/hubspot_owner_id",
+                },
+                literals={
+                    "objectType": "contacts",
+                    "properties": [
+                        "firstname", "lastname", "email", "lifecyclestage",
+                        "hs_lead_status", "hubspot_owner_id",
+                    ],
+                },
+                transforms={"contact_id": "singleton_list"},
+            ),
+            "recent_activity": {
+                "workflow_kind": "hubspot_recent_activity_v1",
+                "calls": activity_calls,
+            },
+            "open_followups": _hub_operation(
+                "search_crm_objects",
+                client.schemas["search_crm_objects"],
+                {"due_before": "/filters/2/value"},
+                {"tasks": "/data/results", "total": "/data/total"},
+                literals={
+                    "objectType": "tasks",
+                    "properties": [
+                        "contact_id", "hs_timestamp", "hs_task_status",
+                        "hs_task_subject", "hs_task_body",
+                    ],
+                    "limit": 10,
+                    "filters": [
+                        {"propertyName": "hubspot_owner_id", "operator": "EQ"},
+                        {
+                            "propertyName": "hs_task_status", "operator": "NEQ",
+                            "value": "COMPLETED",
+                        },
+                        {"propertyName": "hs_timestamp", "operator": "LTE"},
+                    ],
+                    "sorts": ["hs_timestamp"],
+                },
+                context_map={"owner_id": "/filters/0/value"},
+                transforms={"due_before": "iso_date_to_utc_millis_end"},
+                item_map={
+                    "source": "tasks",
+                    "fields": {
+                        "task_id": "/id",
+                        "contact_id": "/properties/contact_id",
+                        "due_at": "/properties/hs_timestamp",
+                        "status": "/properties/hs_task_status",
+                        "subject": "/properties/hs_task_subject",
+                        "summary": "/properties/hs_task_body",
+                    },
+                },
             ),
         },
     }
@@ -284,6 +518,7 @@ def _optix_binding(client):
         )["catalog_sha256"],
         "oauth_scope": None,
         "identity": _optix_identity(identity),
+        "support": {},
         "tools": {
             "find_member": _optix_operation(
                 "members", members, {"query": "/query", "limit": "/limit"},
@@ -355,9 +590,16 @@ def test_checked_in_declarations_are_strict_and_unbound_by_default():
         "max_connector_tools": 8,
         "max_total_tools": 25,
     }
-    assert {tool["name"] for tool in declarations["providers"]["hubspot"]["tools"]} >= {
-        "hs_find_contact", "hs_log_note",
+    assert {tool["name"] for tool in declarations["providers"]["hubspot"]["tools"]} == {
+        "hs_find_contact",
+        "hs_get_contact",
+        "hs_recent_activity",
+        "hs_my_open_followups",
     }
+    assert all(
+        tool["effect"] == "read"
+        for tool in declarations["providers"]["hubspot"]["tools"]
+    )
     assert {tool["name"] for tool in declarations["providers"]["optix"]["tools"]} >= {
         "optix_room_availability", "optix_commit_booking",
     }
@@ -463,14 +705,15 @@ def test_unbound_provider_refuses_without_opening_a_client():
 
 
 @pytest.mark.parametrize(
-    "mode,expected",
-    [
-        ("read_only", {"hs_find_contact"}),
-        ("draft", {"hs_find_contact"}),
-        ("live", {"hs_find_contact", "hs_log_note"}),
-    ],
+    "mode", ("read_only", "draft", "live"),
 )
-def test_hubspot_modes_expose_only_reviewed_tools(tmp_path, mode, expected):
+def test_hubspot_modes_expose_only_four_reviewed_reads(tmp_path, mode):
+    expected = {
+        "hs_find_contact",
+        "hs_get_contact",
+        "hs_recent_activity",
+        "hs_my_open_followups",
+    }
     client = FakeHubSpot()
     path = _bindings_path(tmp_path, hubspot=_hubspot_binding(client))
     specs, effects, summary = runtime.enable(
@@ -480,10 +723,201 @@ def test_hubspot_modes_expose_only_reviewed_tools(tmp_path, mode, expected):
     )
     assert set(specs) == expected
     assert set(effects) == expected
+    assert set(effects.values()) == {"read"}
     assert summary[0]["account"] == "sandbox"
+    assert summary[0]["writes"] == []
     assert "provider" in specs[next(iter(specs))]["confirmation"]({})
     runtime.shutdown()
     assert client.closed
+
+
+def test_hubspot_public_results_have_stable_bounded_shapes(tmp_path):
+    client = FakeHubSpot()
+    path = _bindings_path(tmp_path, hubspot=_hubspot_binding(client))
+    specs, _, _ = runtime.enable(
+        ["hubspot"], mode="read_only", bindings_path=path,
+        clients={"hubspot": client}, secrets=_secrets(),
+    )
+
+    found = specs["hs_find_contact"]["run"](_attempt(), {"query": "Dana Reed"})
+    assert found == {
+        "matches": [{
+            "contact_id": "c1",
+            "first_name": "Dana",
+            "last_name": "Reed",
+            "email": "dana.reed@example.com",
+            "lifecycle_stage": "lead",
+            "lead_status": "OPEN",
+            "owner_id": "o1",
+        }],
+        "truncated": False,
+    }
+
+    contact = specs["hs_get_contact"]["run"](_attempt(), {"contact_id": "c1"})
+    assert set(contact) == {"contact", "missing_fields"}
+    assert tuple(contact["contact"]) == runtime._CONTACT_FIELDS
+    assert contact["missing_fields"] == []
+
+    activity = specs["hs_recent_activity"]["run"](
+        _attempt(), {"contact_id": "c1"}
+    )
+    assert set(activity) == {"contact_id", "activities", "truncated"}
+    assert activity["contact_id"] == "c1"
+    assert {row["type"] for row in activity["activities"]} == {
+        "call", "email", "meeting", "note", "task",
+    }
+    assert len(activity["activities"]) == 5
+    assert [
+        operation for operation, arguments, _ in client.calls
+        if operation == "search_crm_objects"
+        and arguments.get("objectType") in {
+            "calls", "emails", "meetings", "notes", "tasks",
+        }
+        and len(arguments.get("filters") or []) == 1
+    ] == ["search_crm_objects"] * 5
+
+    followups = specs["hs_my_open_followups"]["run"](
+        _attempt(), {"due_before": "2026-08-25"}
+    )
+    assert set(followups) == {
+        "owner", "due_before", "tasks", "truncated",
+    }
+    assert followups["owner"] == {
+        "owner_id": "o1", "name": "Test Owner", "email": "owner@example.com",
+    }
+    assert followups["tasks"][0]["task_id"] == "t-open"
+    assert followups["tasks"][0]["status"] == "NOT_STARTED"
+    runtime.shutdown()
+
+
+def test_hubspot_empty_search_is_a_bounded_not_found_result(tmp_path):
+    client = FakeHubSpot()
+    original = client.call
+
+    def call(operation, arguments, *, error_origin="environment"):
+        if operation == "search_crm_objects" and arguments.get("objectType") == "contacts":
+            client.calls.append((operation, copy.deepcopy(arguments), error_origin))
+            return {"data": {"results": [], "total": 0}, "message": "ok"}
+        return original(operation, arguments, error_origin=error_origin)
+
+    client.call = call
+    path = _bindings_path(tmp_path, hubspot=_hubspot_binding(client))
+    specs, _, _ = runtime.enable(
+        ["hubspot"], mode="read_only", bindings_path=path,
+        clients={"hubspot": client}, secrets=_secrets(),
+    )
+    assert specs["hs_find_contact"]["run"](
+        _attempt(), {"query": "Nobody"}
+    ) == {"matches": [], "truncated": False}
+    runtime.shutdown()
+
+
+def test_hubspot_transport_preserves_structured_results_and_fails_closed_without_them():
+    from connectors.hubspot import HubSpotMCPClient
+
+    class Portal:
+        def __init__(self, result):
+            self.result = result
+
+        def call(self, callback, operation, arguments):
+            del callback, operation, arguments
+            return self.result
+
+    def client_for(result):
+        client = HubSpotMCPClient.__new__(HubSpotMCPClient)
+        client._lock = threading.RLock()
+        client._closed = False
+        client._portal = Portal(result)
+        return client
+
+    structured = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text="ok")],
+        structured_content={"results": []},
+        is_error=False,
+    )
+    assert client_for(structured).call("search_crm_objects", {})["data"] == {
+        "results": []
+    }
+
+    json_text = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text='{"results":[]}')],
+        structured_content=None,
+        is_error=False,
+    )
+    assert client_for(json_text).call("search_crm_objects", {})["data"] == {
+        "results": []
+    }
+
+    text_only = SimpleNamespace(
+        content=[SimpleNamespace(type="text", text="No records")],
+        structured_content=None,
+        is_error=False,
+    )
+    with pytest.raises(ProviderEnvironmentFault, match="no structured result"):
+        client_for(text_only).call("search_crm_objects", {})
+
+
+def test_hubspot_owner_is_derived_or_resolved_to_one_exact_user(tmp_path):
+    client = FakeHubSpot(owner_id=None)
+    path = _bindings_path(tmp_path, hubspot=_hubspot_binding(client))
+    specs, _, _ = runtime.enable(
+        ["hubspot"], mode="read_only", bindings_path=path,
+        clients={"hubspot": client}, secrets=_secrets(),
+    )
+    result = specs["hs_my_open_followups"]["run"](
+        _attempt(), {"due_before": "2026-08-25"}
+    )
+    assert result["owner"]["owner_id"] == "o1"
+    lookup = next(item for item in client.calls if item[0] == "search_owners")
+    assert lookup[1] == {"limit": 10, "query": "owner@example.com"}
+    runtime.shutdown()
+
+    ambiguous = FakeHubSpot(owner_id=None)
+    original = ambiguous.call
+
+    def call(operation, arguments, *, error_origin="environment"):
+        if operation == "search_owners":
+            ambiguous.calls.append((operation, copy.deepcopy(arguments), error_origin))
+            return {"data": {"results": [
+                {"id": "o1", "name": "One", "email": "owner@example.com"},
+                {"id": "o2", "name": "Two", "email": "OWNER@example.com"},
+            ]}}
+        return original(operation, arguments, error_origin=error_origin)
+
+    ambiguous.call = call
+    path = _bindings_path(tmp_path, hubspot=_hubspot_binding(ambiguous))
+    with pytest.raises(ConnectorUnavailable, match="exactly one"):
+        runtime.enable(
+            ["hubspot"], mode="read_only", bindings_path=path,
+            clients={"hubspot": ambiguous}, secrets=_secrets(),
+        )
+
+
+@pytest.mark.parametrize("operation", ("manage_crm_objects", "search_conversations"))
+def test_hubspot_write_and_unreviewed_operations_are_unreachable(tmp_path, operation):
+    client = FakeHubSpot()
+    binding = _hubspot_binding(client)
+    binding["tools"]["find_contact"]["operation"] = operation
+    path = _bindings_path(tmp_path, hubspot=binding)
+    with pytest.raises(ConnectorConfigError, match="outside the read-only allow list"):
+        runtime.enable(
+            ["hubspot"], mode="read_only", bindings_path=path,
+            clients={"hubspot": client}, secrets=_secrets(),
+        )
+
+
+def test_hubspot_fixed_literals_and_filter_operators_cannot_be_remapped(tmp_path):
+    client = FakeHubSpot()
+    binding = _hubspot_binding(client)
+    binding["tools"]["find_contact"]["argument_map"]["query"] = "/objectType"
+    with pytest.raises(ConnectorConfigError, match="overwrite a fixed literal"):
+        config.load_bindings(_bindings_path(tmp_path, hubspot=binding))
+
+    binding = _hubspot_binding(client)
+    binding["tools"]["open_followups"]["argument_map"]["due_before"] = \
+        "/filters/2/operator"
+    with pytest.raises(ConnectorConfigError, match="overwrite a fixed literal"):
+        config.load_bindings(_bindings_path(tmp_path, hubspot=binding))
 
 
 @pytest.mark.parametrize(
@@ -529,9 +963,24 @@ def test_live_identity_and_catalog_are_both_bound(tmp_path):
             clients={"hubspot": drifted}, secrets=_secrets(),
         )
 
+    described = FakeHubSpot()
+    original_catalog = described.catalog
+
+    def changed_description():
+        value = original_catalog()
+        value["search_crm_objects"]["description"] = "provider changed this"
+        return value
+
+    described.catalog = changed_description
+    with pytest.raises(CatalogDrift, match="catalog"):
+        runtime.enable(
+            ["hubspot"], mode="read_only", bindings_path=path,
+            clients={"hubspot": described}, secrets=_secrets(),
+        )
+
     client = FakeHubSpot()
     binding = _hubspot_binding(client)
-    binding["tools"]["find_contact"]["argument_map"]["query"] = "qury"
+    binding["tools"]["find_contact"]["argument_map"]["query"] = "/qury"
     path = _bindings_path(tmp_path, hubspot=binding)
     with pytest.raises(ConnectorConfigError, match="does not cover"):
         runtime.enable(
@@ -541,58 +990,71 @@ def test_live_identity_and_catalog_are_both_bound(tmp_path):
 
 
 def test_catalog_is_rechecked_immediately_before_a_write(tmp_path):
-    client = FakeHubSpot()
-    path = _bindings_path(tmp_path, hubspot=_hubspot_binding(client))
+    client = FakeOptix()
+    path = _bindings_path(tmp_path, optix=_optix_binding(client))
     specs, _, _ = runtime.enable(
-        ["hubspot"], mode="live", bindings_path=path,
-        clients={"hubspot": client}, secrets=_secrets(),
+        ["optix"], mode="draft", bindings_path=path,
+        clients={"optix": client}, secrets=_secrets(),
         ledger=OperationLedger(tmp_path / "ledger.jsonl"),
     )
-    client.schemas["new_after_connect"] = {"type": "object", "properties": {}}
+    client.schema["queryType"]["fields"].append({"name": "newAfterConnect"})
     with pytest.raises(CatalogDrift, match="write refused"):
-        specs["hs_log_note"]["run"](
-            _attempt(), {"contact_id": "c1", "body": "internal note"}
+        specs["optix_draft_booking"]["run"](
+            _attempt(), {
+                "member_id": "m1", "owner_user_id": "u1", "room_id": "r1",
+                "start": START, "end": END,
+            }
         )
-    assert not any(call[0] == "create_note" for call in client.calls)
+    assert not any(call[0] == "bookingsDraft" for call in client.calls)
     runtime.shutdown()
 
 
 def test_write_ledger_prevents_replay_and_verifies_returned_identifier(tmp_path):
-    client = FakeHubSpot()
-    path = _bindings_path(tmp_path, hubspot=_hubspot_binding(client))
+    client = FakeOptix()
+    path = _bindings_path(tmp_path, optix=_optix_binding(client))
     ledger = OperationLedger(tmp_path / "ledger.jsonl")
     specs, _, _ = runtime.enable(
-        ["hubspot"], mode="live", bindings_path=path,
-        clients={"hubspot": client}, secrets=_secrets(), ledger=ledger,
+        ["optix"], mode="live", bindings_path=path,
+        clients={"optix": client}, secrets=_secrets(), ledger=ledger,
     )
-    args = {"contact_id": "c1", "body": "internal note"}
-    result = specs["hs_log_note"]["run"](_attempt(), args)
-    assert result == {"result": {"note_id": "n1"}, "verification": {"verified": True}}
-    assert [item[0] for item in client.calls][-2:] == ["create_note", "get_note"]
-    assert client.calls[-1][1] == {"noteId": "n1"}
+    args = {
+        "booking_session_id": "s1", "member_id": "m1",
+        "owner_user_id": "u1", "room_id": "r1",
+        "start": START, "end": END,
+    }
+    result = specs["optix_commit_booking"]["run"](_attempt(), args)
+    assert result == {
+        "result": {"booking_id": "b1"},
+        "verification": {"booking_id": "b1"},
+    }
+    assert [item[0] for item in client.calls][-2:] == ["bookingsCommit", "booking"]
     with pytest.raises(AmbiguousWrite, match="already started"):
-        specs["hs_log_note"]["run"](_attempt(), args)
+        specs["optix_commit_booking"]["run"](_attempt(), args)
     assert ledger.latest(next(iter({r["client_key"] for r in _ledger_rows(tmp_path / "ledger.jsonl")})))["status"] == "verified"
     runtime.shutdown()
 
 
 def test_failed_readback_after_a_completed_write_never_reopens_replay(tmp_path):
-    client = FakeHubSpot()
-    client.fail["get_note"] = ProviderRejected("verification rejected")
-    path = _bindings_path(tmp_path, hubspot=_hubspot_binding(client))
+    client = FakeOptix()
+    client.fail["booking"] = ProviderRejected("verification rejected")
+    path = _bindings_path(tmp_path, optix=_optix_binding(client))
     ledger_path = tmp_path / "ledger.jsonl"
     specs, _, _ = runtime.enable(
-        ["hubspot"], mode="live", bindings_path=path,
-        clients={"hubspot": client}, secrets=_secrets(),
+        ["optix"], mode="live", bindings_path=path,
+        clients={"optix": client}, secrets=_secrets(),
         ledger=OperationLedger(ledger_path),
     )
-    args = {"contact_id": "c1", "body": "internal note"}
+    args = {
+        "booking_session_id": "s1", "member_id": "m1",
+        "owner_user_id": "u1", "room_id": "r1",
+        "start": START, "end": END,
+    }
     with pytest.raises(ProviderRejected, match="verification rejected"):
-        specs["hs_log_note"]["run"](_attempt(), args)
+        specs["optix_commit_booking"]["run"](_attempt(), args)
     assert _ledger_rows(ledger_path)[-1]["status"] == "unknown"
     with pytest.raises(AmbiguousWrite, match="already started"):
-        specs["hs_log_note"]["run"](_attempt(), args)
-    assert sum(call[0] == "create_note" for call in client.calls) == 1
+        specs["optix_commit_booking"]["run"](_attempt(), args)
+    assert sum(call[0] == "bookingsCommit" for call in client.calls) == 1
     runtime.shutdown()
 
 
@@ -687,9 +1149,9 @@ def test_corrupt_operation_ledger_blocks_writes_instead_of_forgetting_them(tmp_p
 
 
 def test_operation_identity_is_stable_across_attempts_and_requires_hex(tmp_path):
-    args = {"contact_id": "c1", "body": "same note"}
-    assert client_key("hubspot:sandbox", "hs_log_note", args) == client_key(
-        "hubspot:sandbox", "hs_log_note", dict(reversed(list(args.items())))
+    args = {"booking_session_id": "s1", "room_id": "r1"}
+    assert client_key("optix:sandbox", "optix_commit_booking", args) == client_key(
+        "optix:sandbox", "optix_commit_booking", dict(reversed(list(args.items())))
     )
     path = tmp_path / "bad-key.jsonl"
     row = {
@@ -709,9 +1171,11 @@ def test_operation_identity_is_stable_across_attempts_and_requires_hex(tmp_path)
 
 def test_projected_provider_observations_have_a_hard_size_limit():
     with pytest.raises(ProviderEnvironmentFault, match="observation limit"):
-        runtime._project(
-            {"data": {"value": "x" * (runtime.MAX_PROJECTED_RESULT_BYTES + 1)}},
-            {"value": "/data/value"},
+        runtime._bounded_observation(
+            runtime._project(
+                {"data": {"value": "x" * (runtime.MAX_PROJECTED_RESULT_BYTES + 1)}},
+                {"value": "/data/value"},
+            )
         )
 
 
@@ -745,52 +1209,58 @@ def test_iso_times_are_explicitly_converted_and_arbitrary_graphql_is_impossible(
     runtime.shutdown()
 
 
-@pytest.mark.parametrize(
-    "arguments,message",
-    [
-        ({"query": "x", "limit": 0}, "between 1 and 20"),
-        ({"query": "x", "limit": "five"}, "must be an integer"),
-    ],
-)
-def test_normalized_argument_types_fail_as_model_input(tmp_path, arguments, message):
+def test_model_cannot_override_fixed_hubspot_limit_or_object_type(tmp_path):
     client = FakeHubSpot()
     path = _bindings_path(tmp_path, hubspot=_hubspot_binding(client))
     specs, _, _ = runtime.enable(
         ["hubspot"], mode="read_only", bindings_path=path,
         clients={"hubspot": client}, secrets=_secrets(),
     )
-    with pytest.raises(faults.ModelInputFault, match=message):
-        specs["hs_find_contact"]["run"](_attempt(), arguments)
+    with pytest.raises(faults.ModelInputFault, match="unknown connector arguments: limit"):
+        specs["hs_find_contact"]["run"](
+            _attempt(), {"query": "Dana", "limit": 20}
+        )
+    result = specs["hs_find_contact"]["run"](_attempt(), {"query": "Dana"})
+    assert result["matches"][0]["first_name"] == "Dana"
+    provider_args = next(
+        args for operation, args, _ in client.calls
+        if operation == "search_crm_objects" and args.get("objectType") == "contacts"
+    )
+    assert provider_args["limit"] == 5
+    assert provider_args["objectType"] == "contacts"
+    assert provider_args["properties"] == [
+        "firstname", "lastname", "email", "lifecyclestage",
+        "hs_lead_status", "hubspot_owner_id",
+    ]
     runtime.shutdown()
 
 
 def test_normalized_dates_are_strict_model_input(tmp_path):
     client = FakeHubSpot()
-    client.schemas["followups"] = {
-        "type": "object",
-        "properties": {
-            "ownerId": {"type": "string"},
-            "dueBefore": {"type": "string"},
-            "limit": {"type": "integer"},
-        },
-        "required": ["ownerId", "dueBefore"],
-    }
-    binding = _hubspot_binding(client)
-    binding["tools"]["open_followups"] = _hub_operation(
-        "followups",
-        client.schemas["followups"],
-        {"owner_id": "ownerId", "due_before": "dueBefore", "limit": "limit"},
-        {"contacts": "/data/contacts"},
-    )
-    path = _bindings_path(tmp_path, hubspot=binding)
+    path = _bindings_path(tmp_path, hubspot=_hubspot_binding(client))
     specs, _, _ = runtime.enable(
         ["hubspot"], mode="read_only", bindings_path=path,
         clients={"hubspot": client}, secrets=_secrets(),
     )
     with pytest.raises(faults.ModelInputFault, match="ISO 8601 date"):
-        specs["hs_open_followups"]["run"](
-            _attempt(), {"owner_id": "owner-1", "due_before": "next Tuesday"}
+        specs["hs_my_open_followups"]["run"](
+            _attempt(), {"due_before": "next Tuesday"}
         )
+    result = specs["hs_my_open_followups"]["run"](
+        _attempt(), {"due_before": "2026-08-25"}
+    )
+    assert result["owner"]["owner_id"] == "o1"
+    call = next(
+        args for operation, args, _ in client.calls
+        if operation == "search_crm_objects"
+        and args.get("objectType") == "tasks"
+        and len(args.get("filters") or []) >= 3
+    )
+    assert call["filters"][0]["value"] == "o1"
+    assert call["filters"][1] == {
+        "propertyName": "hs_task_status", "operator": "NEQ", "value": "COMPLETED",
+    }
+    assert call["filters"][2]["value"] == 1787702399999
     runtime.shutdown()
 
 
@@ -807,7 +1277,7 @@ def test_safe_read_retries_once_but_model_rejection_does_not(tmp_path):
     original = client.call
 
     def call(operation, arguments, *, error_origin="environment"):
-        if operation == "search_contacts":
+        if operation == "search_crm_objects" and arguments.get("objectType") == "contacts":
             error = flaky()
             if error:
                 raise error
@@ -820,8 +1290,8 @@ def test_safe_read_retries_once_but_model_rejection_does_not(tmp_path):
         clients={"hubspot": client}, secrets=_secrets(),
     )
     assert specs["hs_find_contact"]["run"](_attempt(), {"query": "alex"})[
-        "contacts"
-    ] == [{"id": "c1"}]
+        "matches"
+    ][0]["contact_id"] == "c1"
     assert attempts["count"] == 2
     runtime.shutdown()
 
@@ -864,7 +1334,7 @@ def test_tool_documentation_is_backend_independent(tmp_path):
     )
     docs = ToolRegistry(specs).docs(with_examples=True)
     assert docs == ToolRegistry(copy.copy(specs)).docs(with_examples=True)
-    assert "search_contacts" not in docs
+    assert "search_crm_objects" not in docs
     assert "hs_find_contact" in docs
     runtime.shutdown()
 
@@ -1001,7 +1471,7 @@ def test_hubspot_tokens_and_client_secret_stay_in_secret_store():
         client_id="client-id",
         client_secret="client-secret-value",
     )
-    assert redirect == "http://127.0.0.1:8765/oauth/callback"
+    assert redirect == "http://127.0.0.1:8766/oauth/callback"
     client_info = secrets.get_json("hubspot", "sandbox", "oauth_client")
     assert client_info["client_secret"] == "client-secret-value"
     assert client_info["token_endpoint_auth_method"] == "client_secret_post"
@@ -1032,6 +1502,145 @@ def test_hubspot_tokens_and_client_secret_stay_in_secret_store():
     assert validate_stored_scope(secrets, "sandbox", "crm.read")
     with pytest.raises(ProviderEnvironmentFault, match="missing reviewed scopes"):
         validate_stored_scope(secrets, "sandbox", "crm.read notes.write")
+
+
+def test_hubspot_callback_port_is_separate_from_agent_lab():
+    from connectors.hubspot import HUBSPOT_CALLBACK_PORT
+    from webui.server import DEFAULT_PORT
+
+    assert HUBSPOT_CALLBACK_PORT == 8766
+    assert DEFAULT_PORT == 8765
+    assert HUBSPOT_CALLBACK_PORT != DEFAULT_PORT
+
+
+def test_connector_status_distinguishes_unbound_auth_mismatch_and_ready():
+    unbound = config.load_bindings()["providers"]["hubspot"]
+    assert config.binding_status("hubspot", unbound, MemorySecretStore()) == "unbound"
+
+    bound = _hubspot_binding(FakeHubSpot())
+    secrets = MemorySecretStore()
+    assert config.binding_status("hubspot", bound, secrets) == \
+        "authorization required"
+    secrets.set_json("hubspot", "sandbox", "oauth_client", {"client_id": "id"})
+    secrets.set_json("hubspot", "sandbox", "oauth_tokens", {"access_token": "token"})
+    secrets.set("hubspot", "sandbox", "account_identity", "wrong-portal")
+    assert config.binding_status("hubspot", bound, secrets) == "account mismatch"
+    secrets.set("hubspot", "sandbox", "account_identity", HUB_IDENTITY)
+    assert config.binding_status("hubspot", bound, secrets) == "ready"
+
+
+def test_configure_hubspot_stores_only_client_and_clears_stale_authorization(
+    monkeypatch,
+):
+    pytest.importorskip("mcp")
+    from connectors import cli
+
+    secrets = MemorySecretStore({
+        ("hubspot", "sandbox", "oauth_tokens"): json.dumps({"access_token": "old"}),
+        ("hubspot", "sandbox", "account_identity"): "old-portal",
+        ("hubspot", "sandbox", "account_profile"): json.dumps({"portal_id": "old"}),
+    })
+    answers = iter(("client-id", "client-secret"))
+    monkeypatch.setattr(cli, "_nonempty_prompt", lambda *args, **kwargs: next(answers))
+    cli._configure_hubspot(
+        SimpleNamespace(account="sandbox", token_auth_method="client_secret_post"),
+        secrets,
+    )
+    assert secrets.get_json("hubspot", "sandbox", "oauth_client")["client_id"] == \
+        "client-id"
+    assert secrets.get("hubspot", "sandbox", "oauth_tokens") is None
+    assert secrets.get("hubspot", "sandbox", "account_identity") is None
+    assert secrets.get("hubspot", "sandbox", "account_profile") is None
+
+
+def test_hubspot_authorization_identity_is_derived_and_decline_discards_grant(
+    monkeypatch,
+):
+    from connectors import cli
+
+    class FakeAuthClient:
+        closed = False
+
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def catalog(self):
+            return {"get_user_details": {"input_schema": {}}}
+
+        def call(self, operation, arguments, *, error_origin="environment"):
+            assert operation == "get_user_details"
+            assert arguments == {}
+            assert error_origin == "environment"
+            return {"data": {
+                "portalId": "portal-derived",
+                "accountName": "Developer Test",
+                "userId": "user-1",
+                "userEmail": "owner@example.com",
+                "ownerId": "owner-1",
+                "accessibleObjects": ["contacts", "tasks"],
+            }}
+
+        def close(self):
+            type(self).closed = True
+
+    secrets = MemorySecretStore()
+    secrets.set_json("hubspot", "sandbox", "oauth_client", {"client_id": "id"})
+    secrets.set_json("hubspot", "sandbox", "oauth_tokens", {"access_token": "grant"})
+    monkeypatch.setattr(cli, "HubSpotMCPClient", FakeAuthClient)
+    monkeypatch.setattr("builtins.input", lambda _prompt: "no")
+    with pytest.raises(ValueError, match="not confirmed"):
+        cli._authorize_hubspot(SimpleNamespace(account="sandbox"), secrets)
+    assert FakeAuthClient.closed
+    assert secrets.get("hubspot", "sandbox", "oauth_tokens") is None
+    assert secrets.get("hubspot", "sandbox", "account_identity") is None
+    assert secrets.get("hubspot", "sandbox", "account_profile") is None
+
+    FakeAuthClient.closed = False
+    secrets.set_json("hubspot", "sandbox", "oauth_tokens", {"access_token": "grant"})
+    monkeypatch.setattr("builtins.input", lambda _prompt: "yes")
+    cli._authorize_hubspot(SimpleNamespace(account="sandbox"), secrets)
+    assert secrets.get("hubspot", "sandbox", "account_identity") == "portal-derived"
+    profile = secrets.get_json("hubspot", "sandbox", "account_profile")
+    assert profile["portal_id"] == "portal-derived"
+    assert profile["user_email"] == "owner@example.com"
+
+
+def test_hubspot_identity_extraction_rejects_missing_or_ambiguous_values():
+    from connectors.cli import hubspot_user_profile
+
+    with pytest.raises(ValueError, match="no structured account data"):
+        hubspot_user_profile({"message": "portal 123"})
+    with pytest.raises(ValueError, match="ambiguous portal ID"):
+        hubspot_user_profile({"data": {
+            "portalId": "one", "nested": {"portal_id": "two"},
+            "userEmail": "owner@example.com",
+        }})
+
+
+def test_reviewed_binding_installs_outside_git_only_for_matching_account(
+    tmp_path, monkeypatch,
+):
+    from connectors import cli
+
+    source_client = FakeHubSpot()
+    source = _bindings_path(tmp_path, hubspot=_hubspot_binding(source_client))
+    target = tmp_path / "operator-local" / "bindings.json"
+    monkeypatch.setattr(config, "local_bindings_path", lambda: str(target))
+    secrets = MemorySecretStore()
+    secrets.set_json("hubspot", "sandbox", "oauth_client", {"client_id": "id"})
+    secrets.set_json("hubspot", "sandbox", "oauth_tokens", {"access_token": "token"})
+    secrets.set("hubspot", "sandbox", "account_identity", HUB_IDENTITY)
+    cli._install_bindings(SimpleNamespace(input=source), secrets)
+    assert target.is_file()
+    installed = config.load_bindings(target)
+    assert installed["providers"]["hubspot"]["status"] == "bound"
+    assert str(target).startswith(str(tmp_path))
+
+    target.unlink()
+    secrets.set("hubspot", "sandbox", "account_identity", "wrong")
+    with pytest.raises(ValueError, match="does not match"):
+        cli._install_bindings(SimpleNamespace(input=source), secrets)
+    assert not target.exists()
 
 
 def _unused_loopback_port():
@@ -1131,7 +1740,7 @@ def test_expired_hubspot_grant_uses_the_official_refresh_flow():
             "https://mcp.hubspot.com/",
             OAuthClientMetadata(
                 client_name="Brick Agent Harness",
-                redirect_uris=["http://127.0.0.1:8765/oauth/callback"],
+                redirect_uris=["http://127.0.0.1:8766/oauth/callback"],
                 scope="crm.read",
             ),
             storage,

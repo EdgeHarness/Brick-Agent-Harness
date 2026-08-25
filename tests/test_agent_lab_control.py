@@ -681,3 +681,92 @@ def test_connector_inspection_lists_tools_with_their_effect_and_reason(lab_serve
     assert by_name["mail_modify_mail"]["why"] == "policy"
     # draft mode never exposes a tool that transmits to a person
     assert not [n for n in by_name if "send" in n]
+
+
+def test_business_connector_inspection_requires_the_capability(lab_server):
+    status, _, _ = request(
+        lab_server,
+        "POST",
+        "/api/connectors/inspect",
+        body={"name": "hubspot", "mode": "read_only"},
+        headers={"Content-Type": "application/json"},
+    )
+    assert status == 401
+
+
+def test_business_connector_inspection_rejects_unknown_fields_and_modes(lab_server):
+    headers = authorized(lab_server, origin=True, content_type=True)
+    status, _, _ = request(
+        lab_server,
+        "POST",
+        "/api/connectors/inspect",
+        body={"name": "hubspot", "command": "arbitrary"},
+        headers=headers,
+    )
+    assert status == 400
+    status, _, _ = request(
+        lab_server,
+        "POST",
+        "/api/connectors/inspect",
+        body={"name": "hubspot", "mode": "unsafe"},
+        headers=headers,
+    )
+    assert status == 400
+
+
+def test_business_connector_inspection_lists_exact_reviewed_reads(
+    lab_server, monkeypatch,
+):
+    tools = (
+        "hs_find_contact",
+        "hs_get_contact",
+        "hs_recent_activity",
+        "hs_my_open_followups",
+    )
+    monkeypatch.setattr(
+        lab.connector_config,
+        "available",
+        lambda: [("hubspot", "HubSpot", "ready")],
+    )
+    monkeypatch.setattr(
+        lab.connector_runtime,
+        "enable",
+        lambda names, mode: (
+            {name: {} for name in tools},
+            {name: "read" for name in tools},
+            [{
+                "id": "hubspot",
+                "account": "sandbox",
+                "mode": mode,
+                "tools": list(tools),
+                "writes": [],
+                "effects": {
+                    name: {
+                        "effect": "read",
+                        "transmits": False,
+                        "invites": False,
+                        "classified_by": "reviewed declaration",
+                    }
+                    for name in tools
+                },
+            }],
+        ),
+    )
+    closed = []
+    monkeypatch.setattr(lab.connector_runtime, "shutdown", lambda: closed.append(True))
+    status, _, body = request(
+        lab_server,
+        "POST",
+        "/api/connectors/inspect",
+        body={"name": "hubspot", "mode": "read_only"},
+        headers=authorized(lab_server, origin=True, content_type=True),
+    )
+    assert status == 200
+    payload = json.loads(body)
+    assert payload["account"] == "sandbox"
+    assert payload["mode"] == "read_only"
+    assert payload["writes"] == []
+    assert [item["name"] for item in payload["tools"]] == list(tools)
+    assert all(item["effect"] == "read" for item in payload["tools"])
+    assert all(item["why"] == "reviewed declaration" for item in payload["tools"])
+    assert closed == [True]

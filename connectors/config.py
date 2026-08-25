@@ -12,7 +12,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DECLARATIONS_PATH = os.path.join(HERE, "connectors.json")
 BINDINGS_PATH = os.path.join(HERE, "bindings.json")
 SCHEMA_VERSION = "brick.connectors/1"
-BINDINGS_VERSION = "brick.connector-bindings/1"
+BINDINGS_VERSION = "brick.connector-bindings/2"
 MODES = frozenset(("read_only", "draft", "live"))
 EFFECTS = frozenset(("read", "external_write"))
 RETRY_POLICIES = frozenset(("never", "safe"))
@@ -21,6 +21,7 @@ _NAME = re.compile(r"^[a-z][a-z0-9_]{0,23}$")
 _ACCOUNT = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _GRAPHQL_NAME = re.compile(r"^[_A-Za-z][_0-9A-Za-z]*$")
+_POINTER_PART = re.compile(r"^[_A-Za-z][_0-9A-Za-z.\-]*$")
 _TOP_KEYS = frozenset(("schema_version", "limits", "providers"))
 _LIMIT_KEYS = frozenset(("max_connector_tools", "max_total_tools"))
 _PROVIDER_KEYS = frozenset(("summary", "transport", "setup", "tools"))
@@ -36,16 +37,24 @@ _BINDING_TOP_KEYS = frozenset(("schema_version", "providers"))
 _BINDING_PROVIDER_KEYS = frozenset(
     (
         "status", "endpoint", "account_alias", "account_fingerprint_sha256",
-        "catalog_sha256", "oauth_scope", "identity", "tools",
+        "catalog_sha256", "oauth_scope", "identity", "support", "tools",
     )
 )
 _OPERATION_KEYS = frozenset(
     (
-        "operation", "argument_map", "argument_transforms", "result_map",
-        "error_origin", "verification",
+        "operation", "literal_arguments", "argument_map", "context_map",
+        "argument_transforms", "result_map", "item_map", "error_origin",
+        "verification",
     )
 )
-_ARGUMENT_TRANSFORMS = frozenset(("iso8601_to_unix",))
+_WORKFLOW_KEYS = frozenset(("workflow_kind", "calls"))
+_WORKFLOW_STEP_KEYS = frozenset(("label", "binding"))
+_ITEM_MAP_KEYS = frozenset(("source", "fields"))
+_ARGUMENT_TRANSFORMS = frozenset(
+    ("iso8601_to_unix", "iso_date_to_utc_millis_end", "singleton_list")
+)
+_CONTEXT_ARGUMENTS = frozenset(("owner_id", "user_email"))
+_ACTIVITY_LABELS = frozenset(("call", "email", "meeting", "note", "task"))
 
 
 def canonical_json(value):
@@ -66,6 +75,24 @@ def normalized_schema_digest(tool):
             for key in ("name", "description", "params", "example")
         }
     )
+
+
+def local_bindings_path():
+    """Operator-local binding path; never a repository artifact."""
+    base = os.environ.get("LOCALAPPDATA")
+    if base:
+        return os.path.join(base, "BrickAgentHarness", "connectors", "bindings.json")
+    return os.path.join(
+        os.path.expanduser("~"), ".brick-agent-harness", "connectors", "bindings.json"
+    )
+
+
+def runtime_bindings_path(path=None):
+    """Use an explicit path, then an installed local binding, else safe defaults."""
+    if path is not None:
+        return os.fspath(path)
+    local = local_bindings_path()
+    return local if os.path.isfile(local) else BINDINGS_PATH
 
 
 def _load(path):
@@ -215,6 +242,83 @@ def _validate_endpoint(provider, endpoint, status):
         )
 
 
+def _pointer_parts(pointer, label):
+    if not isinstance(pointer, str) or not pointer.startswith("/"):
+        raise ConnectorConfigError(f"{label} must be a JSON pointer")
+    parts = pointer.split("/")[1:]
+    if not parts or any(
+        not part
+        or (part.isdigit() and int(part) > 20)
+        or not (part.isdigit() or _POINTER_PART.fullmatch(part))
+        for part in parts
+    ):
+        raise ConnectorConfigError(f"{label} is an invalid JSON pointer")
+    return tuple(parts)
+
+
+def _literal_leaf_paths(value, prefix=()):
+    if isinstance(value, dict):
+        if not value and prefix:
+            yield prefix
+        for key, item in value.items():
+            if not isinstance(key, str) or not _POINTER_PART.fullmatch(key):
+                raise ConnectorConfigError("literal provider argument keys are invalid")
+            yield from _literal_leaf_paths(item, prefix + (key,))
+    elif isinstance(value, list):
+        if len(value) > 21:
+            raise ConnectorConfigError("literal provider argument lists are too large")
+        if not value and prefix:
+            yield prefix
+        for index, item in enumerate(value):
+            yield from _literal_leaf_paths(item, prefix + (str(index),))
+    else:
+        yield prefix
+
+
+def _validate_destinations(operation, label):
+    destinations = []
+    for field in ("argument_map", "context_map"):
+        for destination in operation[field].values():
+            destinations.append(_pointer_parts(destination, f"{label} {field} destination"))
+    if len(destinations) != len(set(destinations)):
+        raise ConnectorConfigError(f"{label} provider argument destinations must be unique")
+    if any(
+        left != right
+        and ((len(left) < len(right) and right[:len(left)] == left)
+             or (len(right) < len(left) and left[:len(right)] == right))
+        for index, left in enumerate(destinations)
+        for right in destinations[index + 1:]
+    ):
+        raise ConnectorConfigError(f"{label} provider argument destinations may not overlap")
+    literal_paths = list(_literal_leaf_paths(operation["literal_arguments"]))
+    for destination in destinations:
+        if any(
+            (len(leaf) <= len(destination) and destination[:len(leaf)] == leaf)
+            or (len(destination) < len(leaf) and leaf[:len(destination)] == destination)
+            for leaf in literal_paths
+        ):
+            raise ConnectorConfigError(
+                f"{label} model or context argument would overwrite a fixed literal"
+            )
+
+
+def _validate_item_map(operation, label):
+    item_map = operation["item_map"]
+    if item_map is None:
+        return
+    _exact(item_map, _ITEM_MAP_KEYS, f"{label} item_map")
+    source = item_map["source"]
+    if source not in operation["result_map"]:
+        raise ConnectorConfigError(f"{label} item_map source is not projected")
+    fields = item_map["fields"]
+    if not isinstance(fields, dict) or not fields:
+        raise ConnectorConfigError(f"{label} item_map fields must be nonempty")
+    for name, pointer in fields.items():
+        if not isinstance(name, str) or not _NAME.fullmatch(name):
+            raise ConnectorConfigError(f"{label} item_map has an invalid field name")
+        _pointer_parts(pointer, f"{label} item field")
+
+
 def _validate_operation_shape(
     provider, operation, label, allow_verification, read_only=False
 ):
@@ -229,7 +333,7 @@ def _validate_operation_shape(
     _exact(operation, expected, label)
     if not isinstance(operation["operation"], str) or not operation["operation"]:
         raise ConnectorConfigError(f"{label} operation must be nonempty")
-    for field in ("argument_map", "result_map"):
+    for field in ("argument_map", "context_map", "result_map"):
         mapping = operation[field]
         if not isinstance(mapping, dict):
             raise ConnectorConfigError(f"{label} {field} must be an object")
@@ -240,38 +344,18 @@ def _validate_operation_shape(
             for key, value in mapping.items()
         ):
             raise ConnectorConfigError(f"{label} {field} must map nonempty strings")
-    if len(set(operation["argument_map"].values())) != len(
-        operation["argument_map"]
-    ):
-        raise ConnectorConfigError(f"{label} provider arguments must be unique")
-    if provider == "optix":
-        destinations = []
-        for destination in operation["argument_map"].values():
-            if not destination.startswith("/"):
-                raise ConnectorConfigError(
-                    f"{label} Optix arguments must use JSON-pointer destinations"
-                )
-            parts = destination.split("/")[1:]
-            if not parts or parts[0].isdigit() or any(
-                not part
-                or (part.isdigit() and int(part) > 20)
-                or not (part.isdigit() or _GRAPHQL_NAME.fullmatch(part))
-                for part in parts
-            ):
-                raise ConnectorConfigError(
-                    f"{label} has an invalid Optix argument destination"
-                )
-            destinations.append(tuple(parts))
-        if any(
-            left != right
-            and len(left) < len(right)
-            and right[:len(left)] == left
-            for left in destinations
-            for right in destinations
-        ):
-            raise ConnectorConfigError(
-                f"{label} Optix argument destinations may not overlap"
-            )
+    literals = operation["literal_arguments"]
+    if not isinstance(literals, dict):
+        raise ConnectorConfigError(f"{label} literal_arguments must be an object")
+    try:
+        encoded_literals = canonical_json(literals).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise ConnectorConfigError(f"{label} literals are not JSON-compatible") from exc
+    if len(encoded_literals) > 32 * 1024:
+        raise ConnectorConfigError(f"{label} literals exceed the binding limit")
+    if not set(operation["context_map"]) <= _CONTEXT_ARGUMENTS:
+        raise ConnectorConfigError(f"{label} uses an unsupported derived context argument")
+    _validate_destinations(operation, label)
     transforms = operation["argument_transforms"]
     if not isinstance(transforms, dict) or not set(transforms) <= set(
         operation["argument_map"]
@@ -283,6 +367,9 @@ def _validate_operation_shape(
         raise ConnectorConfigError(f"{label} has an unsupported argument transform")
     if any(not pointer.startswith("/") for pointer in operation["result_map"].values()):
         raise ConnectorConfigError(f"{label} result pointers must start with '/'")
+    for pointer in operation["result_map"].values():
+        _pointer_parts(pointer, f"{label} result field")
+    _validate_item_map(operation, label)
     if operation["error_origin"] not in ("model", "environment"):
         raise ConnectorConfigError(f"{label} error_origin is invalid")
     if provider == "hubspot":
@@ -315,8 +402,9 @@ def _validate_operation_shape(
         variables = set(re.findall(r"\$([_A-Za-z][_0-9A-Za-z]*)", document))
         roots = {
             destination.split("/")[1]
-            for destination in operation["argument_map"].values()
-        }
+            for mapping in (operation["argument_map"], operation["context_map"])
+            for destination in mapping.values()
+        } | set(operation["literal_arguments"])
         if not roots <= variables:
             raise ConnectorConfigError(
                 f"{label} maps an argument absent from its GraphQL document"
@@ -329,6 +417,33 @@ def _validate_operation_shape(
             False,
             True,
         )
+
+
+def _validate_tool_binding(provider, binding, declaration, label):
+    if isinstance(binding, dict) and set(binding) == _WORKFLOW_KEYS:
+        if provider != "hubspot" or declaration["name"] != "hs_recent_activity":
+            raise ConnectorConfigError(f"{label} cannot use a provider workflow")
+        if binding["workflow_kind"] != "hubspot_recent_activity_v1":
+            raise ConnectorConfigError(f"{label} has an unsupported workflow")
+        calls = binding["calls"]
+        if not isinstance(calls, list) or len(calls) != len(_ACTIVITY_LABELS):
+            raise ConnectorConfigError(f"{label} must bind all five activity reads")
+        labels = set()
+        for index, step in enumerate(calls):
+            _exact(step, _WORKFLOW_STEP_KEYS, f"{label}.calls[{index}]")
+            step_label = step["label"]
+            if step_label not in _ACTIVITY_LABELS or step_label in labels:
+                raise ConnectorConfigError(f"{label} has invalid activity labels")
+            labels.add(step_label)
+            _validate_operation_shape(
+                provider, step["binding"], f"{label}.{step_label}", False, True
+            )
+        if labels != _ACTIVITY_LABELS:
+            raise ConnectorConfigError(f"{label} activity workflow is incomplete")
+        return
+    _validate_operation_shape(
+        provider, binding, label, True, declaration["effect"] == "read"
+    )
 
 
 def load_bindings(path=None, declarations=None):
@@ -351,7 +466,7 @@ def load_bindings(path=None, declarations=None):
                 for key in (
                     "account_alias", "account_fingerprint_sha256", "catalog_sha256",
                 )
-            ) or binding["identity"] is not None or binding["tools"]:
+            ) or binding["identity"] is not None or binding["support"] or binding["tools"]:
                 raise ConnectorConfigError(
                     f"unbound provider {provider_name} cannot carry live bindings"
                 )
@@ -369,6 +484,8 @@ def load_bindings(path=None, declarations=None):
             raise ConnectorConfigError(f"invalid OAuth scope for {provider_name}")
         if not isinstance(binding["tools"], dict) or not binding["tools"]:
             raise ConnectorConfigError(f"bound provider {provider_name} needs tool bindings")
+        if not isinstance(binding["support"], dict):
+            raise ConnectorConfigError(f"{provider_name} support bindings must be an object")
         if not isinstance(binding["identity"], dict):
             raise ConnectorConfigError(
                 f"bound provider {provider_name} needs a live identity binding"
@@ -384,41 +501,80 @@ def load_bindings(path=None, declarations=None):
         declared_keys = {
             tool["binding_key"] for tool in declarations["providers"][provider_name]["tools"]
         }
-        if not set(binding["tools"]) <= declared_keys:
+        if provider_name == "hubspot" and set(binding["tools"]) != declared_keys:
+            raise ConnectorConfigError(
+                "hubspot must bind exactly its four declared read tools"
+            )
+        if provider_name != "hubspot" and not set(binding["tools"]) <= declared_keys:
             raise ConnectorConfigError(f"{provider_name} has unknown bound tools")
+        if provider_name == "hubspot":
+            unknown_support = set(binding["support"]) - {"owner_lookup"}
+            if unknown_support:
+                raise ConnectorConfigError("HubSpot has unknown support bindings")
+            if "owner_lookup" in binding["support"]:
+                _validate_operation_shape(
+                    "hubspot", binding["support"]["owner_lookup"],
+                    "hubspot.support.owner_lookup", False, True,
+                )
+        elif binding["support"]:
+            raise ConnectorConfigError(f"{provider_name} does not use support bindings")
         for key, operation in binding["tools"].items():
             declaration = next(
                 tool
                 for tool in declarations["providers"][provider_name]["tools"]
                 if tool["binding_key"] == key
             )
-            _validate_operation_shape(
-                provider_name, operation, f"{provider_name}.{key}", True,
-                declaration["effect"] == "read",
+            _validate_tool_binding(
+                provider_name, operation, declaration, f"{provider_name}.{key}"
             )
     return doc
 
 
-def available(declarations_path=None, bindings_path=None):
+def binding_status(provider, binding, secrets=None):
+    if binding["status"] == "unbound":
+        return "unbound"
+    if secrets is None:
+        try:
+            from .credentials import KeyringSecretStore
+            secrets = KeyringSecretStore()
+        except Exception:
+            return "authorization required"
+    account = binding["account_alias"]
+    if provider == "hubspot":
+        if secrets.get_json(provider, account, "oauth_client") is None or \
+                secrets.get_json(provider, account, "oauth_tokens") is None:
+            return "authorization required"
+    elif secrets.get(provider, account, "api_token") is None:
+        return "authorization required"
+    identity = secrets.get(provider, account, "account_identity")
+    if identity is None:
+        return "authorization required"
+    from .credentials import account_fingerprint
+    if account_fingerprint(identity) != binding["account_fingerprint_sha256"]:
+        return "account mismatch"
+    return "ready"
+
+
+def available(declarations_path=None, bindings_path=None, secrets=None):
     declarations = load_declarations(declarations_path)
-    bindings = load_bindings(bindings_path, declarations)
+    bindings = load_bindings(runtime_bindings_path(bindings_path), declarations)
     return [
         (
             name,
             provider["summary"],
-            bindings["providers"][name]["status"],
+            binding_status(name, bindings["providers"][name], secrets),
         )
         for name, provider in sorted(declarations["providers"].items())
     ]
 
 
-def setup_notes(name, declarations_path=None, bindings_path=None):
+def setup_notes(name, declarations_path=None, bindings_path=None, secrets=None):
     declarations = load_declarations(declarations_path)
-    bindings = load_bindings(bindings_path, declarations)
+    bindings = load_bindings(runtime_bindings_path(bindings_path), declarations)
     if name not in declarations["providers"]:
         raise ConnectorConfigError(f"unknown connector {name!r}")
     provider = declarations["providers"][name]
-    status = bindings["providers"][name]["status"]
+    status = binding_status(name, bindings["providers"][name], secrets)
     return "\n".join(
         [f"{name} - {provider['summary']} [{status}]"]
         + [f"    {line}" for line in provider["setup"]]
