@@ -94,8 +94,37 @@ budget on plan/verify calls they cannot use, and the 14B/32B tiers get room.
 - Deferred: a default `router` block in `agents/8b/config.json`. Turning
   tiering on by default breaks the agent when the small model is not
   installed, so it needs an installed-models check first.
-- Adopt escalation thresholds for `wrong_date` if it proves noisy in
-  interactive use; the design note already records the shape.
+- `wrong_date` escalation thresholds: **measured 2026-08-25, inconclusive, and
+  probably unnecessary.** Two things came out of trying.
+
+  First, reading the code: the recorded incident behind this item is "four
+  corrections for four innocent `list_events` probes". `list_events` is a read
+  and `guard_wrong_date` has been writes-only since it landed, so the incident
+  describes behaviour that the current `is_write()` check already prevents. The
+  writes-only restriction appears to BE the fix this item is asking for a
+  second fix to. Nothing in `evidence/` or `CHANGELOG.md` records the guard
+  being noisy after that change; the claim is asserted in prose in three places
+  and demonstrated in none.
+
+  Second, running it: four dated office tasks (`cal_add`, `cal_freeslot`,
+  `cal_brief`, `remind_msg`) against `llama3.2:1b` with guards on produced zero
+  guard firings of any kind. Not because the guards behaved well, but because
+  the 1B never produced a single valid tool call. `cal_add` spent all 18 calls
+  on invalid ones, zero actions, `parse_failures: 0` and `invalid_calls: 18`.
+  Guards run after argument validation, so nothing ever reached them.
+
+  So the item cannot be settled on this machine with the only installed model.
+  It needs `llama3.1:8b`, which will not fit: the disk is at 98 percent with
+  11 GiB free. **Leaving this open rather than implementing thresholds against
+  a claim that the code appears to have already fixed.** If it is picked up
+  again, fix the docstring first: it reads as a live complaint about behaviour
+  the same function no longer has.
+
+  A separate observation worth keeping from the same run: the 1B produced
+  well-formed JSON every time and omitted a required parameter every time,
+  through eighteen rounds of explicit corrective feedback naming the missing
+  parameters and showing the correct shape. That is not a parsing problem and
+  the harness's feedback was not the limitation.
 
 ### 3. Phase 4: hardware layer (DONE 2026-08-23)
 
