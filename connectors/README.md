@@ -9,6 +9,10 @@ reachable until an operator completes authenticated sandbox discovery, reviews
 the exact provider operations, and installs a secret-free binding in the
 operator-local configuration directory.
 
+For the exact HubSpot pilot status, changed files, takeover procedure, fictional
+records, and acceptance checklist, start with
+[`HUBSPOT_PILOT_HANDOFF.md`](HUBSPOT_PILOT_HANDOFF.md).
+
 ## Architecture
 
 ```text

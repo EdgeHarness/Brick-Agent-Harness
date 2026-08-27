@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+### HubSpot read-only Brix lead pilot
+
+- Added the `brix_hubspot_leads` Agent Lab domain and exactly four normalized
+  HubSpot reads: contact search, one-contact retrieval, recent activity, and the
+  authenticated user's open follow-ups. The domain contains no synthetic CRM
+  service and produces a screen-only section labeled `Draft, not sent`.
+- Upgraded reviewed provider bindings to fixed literals, restricted nested
+  argument destinations, named deterministic conversions, narrow projections,
+  account identity checks, and full catalog/schema pinning. The model cannot
+  choose HubSpot object types, properties, filters, owners, limits, or provider
+  operations.
+- Restricted HubSpot to its official remote MCP server and the reviewed read
+  operations `get_user_details`, `search_crm_objects`, `get_crm_objects`, and
+  optional `search_owners`. HubSpot write and conversation operations are not
+  reachable.
+- Moved Brick's OAuth callback to port 8766, derived portal identity from
+  `get_user_details`, required explicit operator confirmation, kept credentials
+  in the OS keyring, and added atomic installation of reviewed account bindings
+  outside Git.
+- Agent Lab now distinguishes `unbound`, `authorization required`, `account
+  mismatch`, and `ready`; can inspect a ready normalized connector without a
+  model run; shows its account and reviewed effects; and states that inference
+  is local while requested CRM data is exchanged with HubSpot.
+- Added a secret-free Dana/Evan/Morgan fixture and offline coverage for OAuth,
+  schema drift, fixed provider arguments, ownership, result clipping, privacy,
+  the four-tool boundary, and Agent Lab controls. No benchmark protocol,
+  evidence, grader, or result root changed.
+- The implementation is offline-tested but remains deliberately `unbound`.
+  Authenticated developer-account discovery, reviewed local binding, fictional
+  record seeding, restart-token reuse, and before/after no-write verification
+  remain required. See
+  [`connectors/HUBSPOT_PILOT_HANDOFF.md`](connectors/HUBSPOT_PILOT_HANDOFF.md).
+
 ### A first-party connector, and a draft-mode false positive it exposed
 
 `mcp/servers.json` gains `ms365-own`, our own Microsoft 365 server from
