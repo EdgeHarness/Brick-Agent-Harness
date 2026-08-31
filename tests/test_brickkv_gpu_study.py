@@ -1,10 +1,20 @@
 import json
 import io
+import os
+from pathlib import Path
+from types import SimpleNamespace
 import tarfile
 
 import pytest
 
-from perf.brickkv.gpu_prefix_study import parse_prometheus, parse_sse
+from perf.brickkv.gpu_prefix_study import (
+    Server,
+    UnixHTTPConnection,
+    UnixHTTPTransport,
+    parse_prometheus,
+    parse_sse,
+    private_socket_endpoint,
+)
 from perf.brickkv.source_bundle import source_bundle_digest
 from perf.brickkv.safe_extract import extract_stream
 
@@ -81,6 +91,143 @@ def test_prometheus_parser_rejects_partial_or_nonfinite_pairs():
             "vllm:prefix_cache_queries_total NaN\n"
             "vllm:prefix_cache_hits_total 0\n"
         )
+
+
+def test_unix_transport_rejects_every_unreviewed_target():
+    transport = UnixHTTPTransport(Path("/tmp/vllm.sock"), "test-key")
+    for method, path in (
+        ("GET", "http://127.0.0.1/metrics"),
+        ("GET", "/invocations"),
+        ("POST", "/metrics"),
+        ("DELETE", "/v1/models"),
+    ):
+        with pytest.raises(ValueError, match="unreviewed"):
+            transport.open(method, path, 1)
+
+
+def test_unix_transport_checks_endpoint_before_opening(monkeypatch):
+    opened = []
+
+    def reject_dead_process():
+        raise RuntimeError("vLLM process is not alive")
+
+    monkeypatch.setattr(
+        "perf.brickkv.gpu_prefix_study.UnixHTTPConnection",
+        lambda *_args, **_kwargs: opened.append(True),
+    )
+    transport = UnixHTTPTransport(
+        Path("/private/vllm.sock"), "test-key", reject_dead_process
+    )
+    with pytest.raises(RuntimeError, match="not alive"):
+        transport.open("GET", "/metrics", 1)
+    assert opened == []
+
+
+def test_unix_transport_preserves_allowed_request_and_owns_auth(monkeypatch):
+    calls = []
+
+    class FakeResponse:
+        status = 200
+
+    class FakeConnection:
+        def __init__(self, socket_path, timeout):
+            calls.append(("init", socket_path, timeout))
+
+        def request(self, method, path, body=None, headers=None):
+            calls.append(("request", method, path, body, headers))
+
+        def getresponse(self):
+            return FakeResponse()
+
+        def close(self):
+            calls.append(("close",))
+
+    monkeypatch.setattr(
+        "perf.brickkv.gpu_prefix_study.UnixHTTPConnection",
+        FakeConnection,
+    )
+    transport = UnixHTTPTransport(Path("/private/vllm.sock"), "real-key")
+    connection, response = transport.open(
+        "GET",
+        "/metrics",
+        4,
+        headers={"Authorization": "Bearer replaced"},
+    )
+    assert response.status == 200
+    assert calls[1] == (
+        "request",
+        "GET",
+        "/metrics",
+        None,
+        {"Authorization": "Bearer real-key"},
+    )
+    connection.close()
+    assert calls[-1] == ("close",)
+
+
+def test_unix_connection_uses_only_the_selected_socket(monkeypatch):
+    calls = []
+    unix_family = object()
+
+    class FakeSocket:
+        def settimeout(self, timeout):
+            calls.append(("timeout", timeout))
+
+        def connect(self, path):
+            calls.append(("connect", path))
+
+        def close(self):
+            calls.append(("close",))
+
+    def fake_socket(family, kind):
+        calls.append(("socket", family, kind))
+        return FakeSocket()
+
+    monkeypatch.setattr(
+        "perf.brickkv.gpu_prefix_study.socket.socket", fake_socket
+    )
+    monkeypatch.setattr(
+        "perf.brickkv.gpu_prefix_study.socket.AF_UNIX",
+        unix_family,
+        raising=False,
+    )
+    connection = UnixHTTPConnection(Path("/private/vllm.sock"), 3.5)
+    connection.connect()
+    assert calls == [
+        ("socket", unix_family, __import__("socket").SOCK_STREAM),
+        ("timeout", 3.5),
+        ("connect", os.fspath(Path("/private/vllm.sock"))),
+    ]
+
+
+def test_vllm_command_has_private_uds_and_no_tcp_flags(tmp_path):
+    args = SimpleNamespace(
+        model=tmp_path / "model",
+        served_model="brickkv-test",
+        context=8192,
+        gpu_memory_utilization=0.9,
+        mode="on",
+    )
+    server = Server(args, tmp_path / "server.log")
+    server.socket_path = Path("/private/vllm.sock")
+    command = server._command()
+    assert command[command.index("--uds") + 1] == str(server.socket_path)
+    assert "--host" not in command
+    assert "--port" not in command
+    assert "--enable-prefix-caching" in command
+    assert server.api_key not in command
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permission fixture")
+def test_private_socket_endpoint_is_owned_and_mode_0700():
+    directory, endpoint = private_socket_endpoint()
+    try:
+        assert endpoint.parent == directory
+        assert not endpoint.exists()
+        assert directory.stat().st_uid == os.geteuid()
+        assert directory.stat().st_mode & 0o777 == 0o700
+    finally:
+        directory.rmdir()
 
 
 def test_gpu_source_bundle_binds_the_executed_files():

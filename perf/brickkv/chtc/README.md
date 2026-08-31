@@ -34,14 +34,16 @@ Official references checked on 2026-08-30:
    mkdir -p logs
    ```
 
-5. From the exact source tree being submitted, compute the transferred runner
+5. Confirm that the pinned vLLM image supports `vllm serve --uds`. The study
+   fails closed; it never falls back to a TCP listener.
+6. From the exact source tree being submitted, compute the transferred runner
    digest:
 
    ```bash
    SOURCE_BUNDLE_DIGEST=$(python -m perf.brickkv.source_bundle)
    ```
 
-6. Submit from the repository root. Replace every example value:
+7. Submit from the repository root. Replace every example value:
 
    ```bash
    condor_submit perf/brickkv/chtc/vllm-apc.sub \
@@ -66,10 +68,15 @@ For each GPU type, one job runs five warm-up process blocks followed by ten
 measured blocks. Within each block, prefix caching off and on are randomized.
 If any run-to-run p95 TTFT coefficient of variation exceeds 8%, the job adds
 ten repetitions for both modes. Generated text and prompts are not saved.
-Every vLLM process binds a random loopback port and uses a fresh in-memory API
-key. Readiness requires an authenticated model-catalog response for the exact
-served model name. Results include raw timing records, prefix-cache counter
-deltas, output hashes, paired bootstrap intervals, and an integrity manifest.
+Every vLLM process binds only a Unix-domain socket inside a fresh mode-0700
+directory and uses a fresh in-memory API key. No TCP fallback exists. Every
+request rechecks process liveness plus endpoint type and ownership; the client
+permits only the reviewed relative paths. This protects even vLLM endpoints
+that do not enforce its API key from different-UID processes on the execute
+node. Root and same-UID isolation remain external scheduler/container controls.
+Readiness also requires the exact served model name. Results include raw timing
+records, prefix-cache counter deltas, output hashes, paired bootstrap intervals,
+and an integrity manifest.
 
 Do not claim a GPU or cache-performance result until both jobs complete and
 their attested `DeviceName`, source bundle, container digest, model archive

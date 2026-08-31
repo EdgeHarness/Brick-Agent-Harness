@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### GPU evidence transport no longer trusts loopback TCP
+
+The CHTC vLLM study now uses a Unix-domain socket inside a fresh owner-only
+directory instead of a bind-close TCP port. Its stdlib client accepts only four
+reviewed relative endpoints, follows no redirects or proxies, retains the
+per-process `/v1` API key, and checks process liveness plus socket ownership
+before evidence-bearing requests. There is no TCP fallback. The evidence
+schema records the new endpoint boundary, and focused tests reject the old
+network shapes. The pinned vLLM container must support `vllm serve --uds`.
+
 ### BrickKV adds transactional prompt-cache reuse for patched GenieX
 
 Brick can now opt into a managed GenieX cache protocol without changing the

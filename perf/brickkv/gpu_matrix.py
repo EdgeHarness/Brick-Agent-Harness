@@ -22,6 +22,7 @@ from perf.brickkv.run_matrix import (
     write_integrity_manifest,
 )
 from perf.brickkv.source_bundle import source_bundle_digest
+from perf.brickkv.gpu_prefix_study import ENDPOINT_BINDING
 
 
 MODES = ("off", "on")
@@ -123,7 +124,7 @@ def validate_gpu_evidence(payload: dict, mode: str, expected: dict):
         "prefix_caching": mode == "on",
         "prefix_hash_algorithm": "sha256" if mode == "on" else None,
         "served_model_digest": expected["served_model_digest"],
-        "endpoint_binding": "random_loopback_authenticated_v1",
+        "endpoint_binding": ENDPOINT_BINDING,
         "gpu_memory_utilization": expected["gpu_memory_utilization"],
         "server_timeout_s": expected["server_timeout"],
         "request_timeout_s": expected["request_timeout"],

@@ -1,5 +1,6 @@
 import pytest
 
+from perf.brickkv.gpu_prefix_study import ENDPOINT_BINDING
 from perf.brickkv.gpu_matrix import (
     gpu_mode_order,
     gpu_process_metrics,
@@ -80,7 +81,7 @@ def evidence(mode, ttft):
             "prefix_caching": mode == "on",
             "prefix_hash_algorithm": "sha256" if mode == "on" else None,
             "served_model_digest": "sha256:" + "e" * 64,
-            "endpoint_binding": "random_loopback_authenticated_v1",
+            "endpoint_binding": ENDPOINT_BINDING,
             "gpu_memory_utilization": 0.9,
             "server_timeout_s": 1200,
             "request_timeout_s": 600,
@@ -117,6 +118,13 @@ def test_gpu_evidence_rejects_schema_drift_and_duplicate_steps():
     payload["records"][1]["trace"] = payload["records"][0]["trace"]
     payload["records"][1]["step"] = payload["records"][0]["step"]
     with pytest.raises(ValueError, match="duplicate"):
+        validate_gpu_evidence(payload, "on", expected())
+
+    payload = evidence("on", 70)
+    payload["configuration"]["endpoint_binding"] = (
+        "random_loopback_authenticated_v1"
+    )
+    with pytest.raises(ValueError, match="configuration"):
         validate_gpu_evidence(payload, "on", expected())
 
 

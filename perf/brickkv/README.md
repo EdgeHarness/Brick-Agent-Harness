@@ -55,10 +55,15 @@ vLLM implements the GenieX transactional protocol. Quantized Snapdragon and
 GPU absolute latency must not be presented as an apples-to-apples hardware
 ranking.
 
-Each vLLM process listens on a random loopback port. Its `/v1` API uses a fresh
+Each vLLM process listens only on a Unix-domain socket inside a fresh,
+owner-only directory. No TCP port is opened. The client accepts only the
+reviewed health, model-catalog, metrics, and chat paths and never resolves a
+URL, follows a redirect, or uses a proxy. The `/v1` API also uses a fresh
 in-memory key that is neither placed on the command line nor written to
-evidence. The runner verifies the authenticated model catalog before recording
-measurements. Prompts and generated text are not persisted.
+evidence. The runner verifies process liveness, socket ownership, and the exact
+served model before and during measurement. This requires a pinned vLLM image
+whose `vllm serve` supports `--uds`. Prompts and generated text are not
+persisted.
 
 ## Statistical outputs
 

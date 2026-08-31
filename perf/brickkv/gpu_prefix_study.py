@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import importlib.metadata
 import json
 import math
@@ -18,16 +19,22 @@ import re
 import secrets
 import signal
 import socket
+import stat
 import subprocess
 import sys
+import tempfile
 import time
-import urllib.error
-import urllib.request
 
 from perf.brickkv.run_matrix import write_json_exclusive
 
 
 SCHEMA = "brickkv.vllm/1"
+ENDPOINT_BINDING = "private_unix_socket_api_key_v1"
+MAX_HTTP_BODY_BYTES = 16 * 1024 * 1024
+_ALLOWED_ENDPOINTS = {
+    "GET": frozenset({"/health", "/v1/models", "/metrics"}),
+    "POST": frozenset({"/v1/chat/completions"}),
+}
 COUNTERS = (
     "vllm:prefix_cache_queries_total",
     "vllm:prefix_cache_hits_total",
@@ -144,25 +151,78 @@ def parse_sse(lines, started_ns: int, cancel_after_first=False):
     }
 
 
-def request_headers(api_key: str | None = None) -> dict[str, str]:
-    return {"Authorization": f"Bearer {api_key}"} if api_key else {}
+class UnixHTTPConnection(http.client.HTTPConnection):
+    """HTTP/1.1 over one explicitly selected Unix-domain socket."""
+
+    def __init__(self, socket_path: Path, timeout: float):
+        super().__init__("localhost", timeout=timeout)
+        self.socket_path = os.fspath(socket_path)
+
+    def connect(self):
+        client = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        client.settimeout(self.timeout)
+        try:
+            client.connect(self.socket_path)
+        except BaseException:
+            client.close()
+            raise
+        self.sock = client
 
 
-def open_request(request, timeout: float):
-    # Proxy environment variables must not redirect loopback model traffic
-    # outside the assigned experiment container.
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    return opener.open(request, timeout=timeout)
+class UnixHTTPTransport:
+    """Closed-path transport that never resolves, redirects, or uses a proxy."""
+
+    def __init__(self, socket_path: Path, api_key: str, endpoint_check=None):
+        if not isinstance(api_key, str) or not api_key:
+            raise ValueError("vLLM API key must be nonempty")
+        self.socket_path = Path(socket_path)
+        self.api_key = api_key
+        self.endpoint_check = endpoint_check
+
+    def open(self, method: str, path: str, timeout: float, body=None,
+             headers=None):
+        method = str(method).upper()
+        if path not in _ALLOWED_ENDPOINTS.get(method, frozenset()):
+            raise ValueError("unreviewed vLLM endpoint")
+        if self.endpoint_check is not None:
+            self.endpoint_check()
+        request_headers = {
+            **(headers or {}),
+            # Callers cannot replace the attempt-local credential.
+            "Authorization": f"Bearer {self.api_key}",
+        }
+        connection = UnixHTTPConnection(self.socket_path, timeout)
+        try:
+            connection.request(method, path, body=body, headers=request_headers)
+            response = connection.getresponse()
+            if not 200 <= response.status < 300:
+                response.read(MAX_HTTP_BODY_BYTES + 1)
+                raise RuntimeError(
+                    f"vLLM endpoint returned HTTP {response.status}"
+                )
+            return connection, response
+        except BaseException:
+            connection.close()
+            raise
 
 
-def http_text(url: str, timeout: float, api_key: str | None = None) -> str:
-    request = urllib.request.Request(url, headers=request_headers(api_key))
-    with open_request(request, timeout) as response:
-        return response.read().decode("utf-8", "replace")
+def http_text(transport: UnixHTTPTransport, path: str, timeout: float) -> str:
+    connection, response = transport.open("GET", path, timeout)
+    try:
+        content_length = response.getheader("Content-Length")
+        if content_length is not None and int(content_length) > MAX_HTTP_BODY_BYTES:
+            raise RuntimeError("vLLM response exceeds the bounded body limit")
+        payload = response.read(MAX_HTTP_BODY_BYTES + 1)
+        if len(payload) > MAX_HTTP_BODY_BYTES:
+            raise RuntimeError("vLLM response exceeds the bounded body limit")
+        return payload.decode("utf-8", "replace")
+    finally:
+        connection.close()
 
 
-def stream_chat(base_url: str, model: str, messages: list[dict], cache_salt: str,
-                max_tokens: int, timeout: float, api_key: str,
+def stream_chat(transport: UnixHTTPTransport, model: str,
+                messages: list[dict], cache_salt: str,
+                max_tokens: int, timeout: float,
                 cancel_after_first=False):
     body = json.dumps({
         "model": model,
@@ -174,22 +234,42 @@ def stream_chat(base_url: str, model: str, messages: list[dict], cache_salt: str
         "stream_options": {"include_usage": True},
         "cache_salt": cache_salt,
     }).encode()
-    request = urllib.request.Request(
-        base_url + "/v1/chat/completions",
-        data=body,
-        headers={"Content-Type": "application/json",
-                 **request_headers(api_key)},
-    )
     started = time.perf_counter_ns()
-    with open_request(request, timeout) as response:
-        result = parse_sse(response, started, cancel_after_first)
-    return result
+    connection, response = transport.open(
+        "POST",
+        "/v1/chat/completions",
+        timeout,
+        body=body,
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        content_type = response.getheader("Content-Type") or ""
+        if not content_type.lower().startswith("text/event-stream"):
+            raise RuntimeError("vLLM stream has an unexpected content type")
+        return parse_sse(response, started, cancel_after_first)
+    finally:
+        connection.close()
 
 
-def random_loopback_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as candidate:
-        candidate.bind(("127.0.0.1", 0))
-        return int(candidate.getsockname()[1])
+def private_socket_endpoint():
+    if os.name != "posix" or not hasattr(socket, "AF_UNIX"):
+        raise RuntimeError("the CHTC GPU study requires POSIX Unix sockets")
+    directory = Path(tempfile.mkdtemp(prefix="bkv-"))
+    metadata = directory.lstat()
+    mode = stat.S_IMODE(metadata.st_mode)
+    if (
+        stat.S_ISLNK(metadata.st_mode)
+        or not stat.S_ISDIR(metadata.st_mode)
+        or mode != 0o700
+        or metadata.st_uid != os.geteuid()
+    ):
+        raise RuntimeError("private vLLM endpoint directory is not owner-only")
+    socket_path = directory / "vllm.sock"
+    # Linux sockaddr_un.sun_path is 108 bytes including its terminator.
+    if len(os.fsencode(socket_path)) >= 108:
+        directory.rmdir()
+        raise RuntimeError("private vLLM socket path exceeds the POSIX limit")
+    return directory, socket_path
 
 
 def terminate_study(_signum, _frame):
@@ -236,17 +316,15 @@ class Server:
         self.log_path = log_path
         self.process = None
         self._log = None
-        self.port = random_loopback_port()
+        self.socket_directory = None
+        self.socket_path = None
+        self.transport = None
         self.api_key = secrets.token_urlsafe(32)
 
-    @property
-    def base_url(self):
-        return f"http://127.0.0.1:{self.port}"
-
-    def __enter__(self):
+    def _command(self):
         command = [
             "vllm", "serve", str(self.args.model),
-            "--host", "127.0.0.1", "--port", str(self.port),
+            "--uds", str(self.socket_path),
             "--served-model-name", self.args.served_model,
             "--dtype", "bfloat16", "--max-model-len", str(self.args.context),
             "--gpu-memory-utilization", str(self.args.gpu_memory_utilization),
@@ -258,34 +336,53 @@ class Server:
                             "--prefix-caching-hash-algo", "sha256"))
         else:
             command.append("--no-enable-prefix-caching")
-        self._log = self.log_path.open("xb")
-        environment = os.environ.copy()
-        environment["VLLM_API_KEY"] = self.api_key
-        self.process = subprocess.Popen(
-            command,
-            stdin=subprocess.DEVNULL,
-            stdout=self._log,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-            env=environment,
-        )
+        return command
+
+    def _check_endpoint(self):
+        if self.process is None or self.process.poll() is not None:
+            code = None if self.process is None else self.process.returncode
+            raise RuntimeError(f"vLLM process is not alive: {code}")
+        directory = self.socket_directory.lstat()
+        if (
+            stat.S_ISLNK(directory.st_mode)
+            or not stat.S_ISDIR(directory.st_mode)
+            or stat.S_IMODE(directory.st_mode) != 0o700
+            or directory.st_uid != os.geteuid()
+        ):
+            raise RuntimeError("private vLLM endpoint directory changed")
+        endpoint = self.socket_path.lstat()
+        if not stat.S_ISSOCK(endpoint.st_mode) or endpoint.st_uid != os.geteuid():
+            raise RuntimeError("vLLM endpoint is not an owned Unix socket")
+
+    def __enter__(self):
+        self.socket_directory, self.socket_path = private_socket_endpoint()
+        command = self._command()
         try:
+            self._log = self.log_path.open("xb")
+            environment = os.environ.copy()
+            environment["VLLM_API_KEY"] = self.api_key
+            self.process = subprocess.Popen(
+                command,
+                stdin=subprocess.DEVNULL,
+                stdout=self._log,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+                env=environment,
+            )
+            self.transport = UnixHTTPTransport(
+                self.socket_path, self.api_key, self._check_endpoint
+            )
             deadline = time.monotonic() + self.args.server_timeout
-            health = self.base_url + "/health"
             while time.monotonic() < deadline:
                 if self.process.poll() is not None:
                     raise RuntimeError(
                         f"vLLM exited during startup with {self.process.returncode}"
                     )
                 try:
-                    http_text(health, 2.0)
-                    # vLLM intentionally leaves /health unauthenticated. A
-                    # successful keyed /v1 call binds readiness to this run.
-                    http_text(
-                        self.base_url + "/v1/models", 2.0, self.api_key
-                    )
+                    http_text(self.transport, "/health", 2.0)
+                    http_text(self.transport, "/v1/models", 2.0)
                     return self
-                except (OSError, urllib.error.URLError):
+                except (OSError, http.client.HTTPException, RuntimeError):
                     time.sleep(1.0)
             raise RuntimeError(
                 "vLLM server did not become healthy before the timeout"
@@ -310,6 +407,17 @@ class Server:
                 self.process.wait(timeout=10)
         if self._log is not None:
             self._log.close()
+        if self.socket_path is not None:
+            try:
+                endpoint = self.socket_path.lstat()
+            except FileNotFoundError:
+                pass
+            else:
+                if not stat.S_ISSOCK(endpoint.st_mode):
+                    raise RuntimeError("refusing to remove a non-socket endpoint")
+                self.socket_path.unlink()
+        if self.socket_directory is not None:
+            self.socket_directory.rmdir()
 
 
 def initial(trace):
@@ -330,7 +438,7 @@ def traces(append_turns):
     }
 
 
-def run_workload(args, base_url, api_key):
+def run_workload(args, transport):
     records = []
     for trace, steps in traces(args.append_turns).items():
         driver = initial(trace)
@@ -352,14 +460,14 @@ def run_workload(args, base_url, api_key):
                 ]
             cancel = trace == "cancellation_decode" and step == 1
             before = parse_prometheus(
-                http_text(base_url + "/metrics", 10, api_key)
+                http_text(transport, "/metrics", 10)
             )
             result = stream_chat(
-                base_url, args.served_model, messages, salts[role],
-                args.max_tokens, args.request_timeout, api_key, cancel,
+                transport, args.served_model, messages, salts[role],
+                args.max_tokens, args.request_timeout, cancel,
             )
             after = parse_prometheus(
-                http_text(base_url + "/metrics", 10, api_key)
+                http_text(transport, "/metrics", 10)
             )
             query_delta = after["queries"] - before["queries"]
             hit_delta = after["hits"] - before["hits"]
@@ -443,16 +551,15 @@ def main(argv=None):
         raise SystemExit("vLLM is not installed in this container") from exc
     server_log = args.output.with_suffix(".server.log")
     with Server(args, server_log) as server:
-        base_url = server.base_url
         models = json.loads(http_text(
-            base_url + "/v1/models", 10, server.api_key
+            server.transport, "/v1/models", 10
         ))
         available = [item.get("id") for item in models.get("data", [])]
         if available != [args.served_model]:
             raise RuntimeError(
                 "vLLM did not advertise exactly the reviewed model ID"
             )
-        records = run_workload(args, base_url, server.api_key)
+        records = run_workload(args, server.transport)
     evidence = {
         "schema_version": SCHEMA,
         "status": "complete",
@@ -472,7 +579,7 @@ def main(argv=None):
             "prefix_caching": args.mode == "on",
             "prefix_hash_algorithm": "sha256" if args.mode == "on" else None,
             "served_model_digest": sha256_text(args.served_model),
-            "endpoint_binding": "random_loopback_authenticated_v1",
+            "endpoint_binding": ENDPOINT_BINDING,
             "gpu_memory_utilization": args.gpu_memory_utilization,
             "server_timeout_s": args.server_timeout,
             "request_timeout_s": args.request_timeout,
