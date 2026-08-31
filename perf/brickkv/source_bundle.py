@@ -1,9 +1,12 @@
 """Deterministically bind every source file executed by the CHTC GPU job."""
 from __future__ import annotations
 
+import argparse
 import hashlib
 from pathlib import Path
+import re
 import stat
+import subprocess
 
 
 SOURCE_FILES = tuple(sorted((
@@ -17,6 +20,7 @@ SOURCE_FILES = tuple(sorted((
     "perf/brickkv/chtc/run_vllm_apc.sh",
     "perf/brickkv/chtc/vllm-apc.sub",
 )))
+REVISION_PATTERN = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 
 
 def _frame(digest, label: bytes, value: bytes):
@@ -26,10 +30,18 @@ def _frame(digest, label: bytes, value: bytes):
     digest.update(value)
 
 
-def source_bundle_digest(root: Path, paths=SOURCE_FILES) -> str:
+def _revision(value: str) -> str:
+    if not isinstance(value, str) or not REVISION_PATTERN.fullmatch(value):
+        raise RuntimeError("source revision must be a full lowercase Git object ID")
+    return value
+
+
+def source_bundle_digest(root: Path, revision: str, paths=SOURCE_FILES) -> str:
     root = root.resolve(strict=True)
+    revision = _revision(revision)
     digest = hashlib.sha256()
-    _frame(digest, b"format", b"brickkv-source-bundle/1")
+    _frame(digest, b"format", b"brickkv-source-bundle/2")
+    _frame(digest, b"source_revision", revision.encode("ascii"))
     for relative in sorted(paths):
         relative_path = Path(relative)
         if relative_path.is_absolute() or ".." in relative_path.parts:
@@ -53,9 +65,46 @@ def source_bundle_digest(root: Path, paths=SOURCE_FILES) -> str:
     return "sha256:" + digest.hexdigest()
 
 
-def main():
+def verify_git_revision(root: Path, revision: str, paths=SOURCE_FILES) -> None:
+    """Require the submitted runner files to be clean files at repository HEAD."""
+    root = root.resolve(strict=True)
+    revision = _revision(revision)
+    head = subprocess.run(
+        ["git", "rev-parse", "--verify", "HEAD^{commit}"],
+        cwd=root,
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    if head.returncode != 0 or head.stdout.decode("ascii", "replace").strip() != revision:
+        raise RuntimeError("source revision is not the repository HEAD commit")
+    status = subprocess.run(
+        [
+            "git", "status", "--porcelain=v1", "--untracked-files=all",
+            "--", *sorted(paths),
+        ],
+        cwd=root,
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        check=False,
+        timeout=30,
+    )
+    if status.returncode != 0:
+        raise RuntimeError("Git could not verify the submitted source files")
+    if status.stdout:
+        raise RuntimeError("submitted source files differ from the source revision")
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--revision", required=True)
+    parser.add_argument("--verify-git", action="store_true")
+    args = parser.parse_args(argv)
     root = Path(__file__).resolve().parents[2]
-    print(source_bundle_digest(root))
+    if args.verify_git:
+        verify_git_revision(root, args.revision)
+    print(source_bundle_digest(root, args.revision))
 
 
 if __name__ == "__main__":

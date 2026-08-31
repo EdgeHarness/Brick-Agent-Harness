@@ -36,11 +36,14 @@ Official references checked on 2026-08-30:
 
 5. Confirm that the pinned vLLM image supports `vllm serve --uds`. The study
    fails closed; it never falls back to a TCP listener.
-6. From the exact source tree being submitted, compute the transferred runner
-   digest:
+6. Commit the exact runner files being submitted, then bind the full HEAD
+   revision and those file bytes into one digest. The command fails if any
+   transferred runner differs from that commit:
 
    ```bash
-   SOURCE_BUNDLE_DIGEST=$(python -m perf.brickkv.source_bundle)
+   SOURCE_REVISION=$(git rev-parse HEAD)
+   SOURCE_BUNDLE_DIGEST=$(python -m perf.brickkv.source_bundle \
+     --revision "$SOURCE_REVISION" --verify-git)
    ```
 
 7. Submit from the repository root. Replace every example value:
@@ -52,13 +55,13 @@ Official references checked on 2026-08-30:
      MODEL_ARCHIVE='osdf:///chtc/staging/u/NETID/brickkv/llama31-8b.tar.zst' \
      MODEL_FILE='llama31-8b.tar.zst' \
      MODEL_ARCHIVE_DIGEST='sha256:MODEL_ARCHIVE_DIGEST' \
-     SOURCE_REVISION='BRICK_GIT_COMMIT' \
+     SOURCE_REVISION="$SOURCE_REVISION" \
      SOURCE_BUNDLE_DIGEST="$SOURCE_BUNDLE_DIGEST"
    ```
 
 The wrapper verifies the assigned GPU, archive digest, container-digest
-declaration, Git revision shape, and exact transferred source bundle before any
-measurement. It extracts only regular files and directories from the model
+declaration, revision-bound transferred source bundle, and exact source bytes
+before any measurement. It extracts only regular files and directories from the model
 archive, requires exactly one `config.json`, and never changes
 `CUDA_VISIBLE_DEVICES`.
 

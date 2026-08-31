@@ -49,7 +49,9 @@ if [[ "sha256:$actual_model_archive_digest" != "$model_archive_digest" ]]; then
   exit 72
 fi
 
-actual_source_bundle_digest=$(python -m perf.brickkv.source_bundle)
+actual_source_bundle_digest=$(
+  python -m perf.brickkv.source_bundle --revision "$source_revision"
+)
 if [[ "$actual_source_bundle_digest" != "$source_bundle_digest" ]]; then
   echo "transferred source bundle digest mismatch" >&2
   exit 75

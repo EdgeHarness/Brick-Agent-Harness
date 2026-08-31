@@ -15,7 +15,10 @@ from perf.brickkv.gpu_prefix_study import (
     parse_sse,
     private_socket_endpoint,
 )
-from perf.brickkv.source_bundle import source_bundle_digest
+from perf.brickkv.source_bundle import (
+    source_bundle_digest,
+    verify_git_revision,
+)
 from perf.brickkv.safe_extract import extract_stream
 
 
@@ -232,9 +235,35 @@ def test_private_socket_endpoint_is_owned_and_mode_0700():
 
 def test_gpu_source_bundle_binds_the_executed_files():
     root = __import__("pathlib").Path(__file__).resolve().parents[1]
-    assert __import__("re").fullmatch(
-        r"sha256:[0-9a-f]{64}", source_bundle_digest(root)
-    )
+    first = source_bundle_digest(root, "a" * 40)
+    second = source_bundle_digest(root, "b" * 40)
+    assert __import__("re").fullmatch(r"sha256:[0-9a-f]{64}", first)
+    assert first != second
+
+
+def test_source_bundle_git_verification_rejects_dirty_runner(tmp_path):
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    runner = repository / "runner.py"
+    runner.write_text("print('safe')\n", encoding="utf-8")
+    for command in (
+        ("git", "init"),
+        ("git", "config", "user.email", "brickkv@example.com"),
+        ("git", "config", "user.name", "BrickKV Test"),
+        ("git", "add", "runner.py"),
+        ("git", "commit", "-m", "fixture"),
+    ):
+        __import__("subprocess").run(
+            command, cwd=repository, check=True, capture_output=True
+        )
+    revision = __import__("subprocess").run(
+        ("git", "rev-parse", "HEAD"), cwd=repository, check=True,
+        capture_output=True, text=True,
+    ).stdout.strip()
+    verify_git_revision(repository, revision, ("runner.py",))
+    runner.write_text("print('changed')\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="differ"):
+        verify_git_revision(repository, revision, ("runner.py",))
 
 
 def _tar_bytes(entries):

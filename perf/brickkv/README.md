@@ -35,15 +35,18 @@ or on and records streaming TTFT plus prefix-cache counter deltas.
 `gpu_matrix.py` supplies the process-level randomization, repetitions,
 confidence interval and integrity manifest.
 
-Before submission, calculate the digest of the exact transferred runner files:
+Before submission, commit the exact transferred runner files, then calculate a
+digest that binds their bytes to the full HEAD revision:
 
 ```bash
-SOURCE_BUNDLE_DIGEST=$(python -m perf.brickkv.source_bundle)
+SOURCE_REVISION=$(git rev-parse HEAD)
+SOURCE_BUNDLE_DIGEST=$(python -m perf.brickkv.source_bundle \
+  --revision "$SOURCE_REVISION" --verify-git)
 ```
 
 The remote wrapper recomputes this digest before model extraction. Evidence
-therefore binds both the Git revision and the exact study code that was
-transferred, including deliberate local changes. The model archive is streamed
+therefore binds the declared Git revision and the exact committed study code
+that was transferred. The model archive is streamed
 through a regular-file-only extractor that rejects absolute paths, traversal,
 links, special files, duplicate files, and archives without exactly one
 `config.json`.

@@ -285,7 +285,9 @@ def paired_apc_improvement(observations, trace, samples=5000, seed=42):
 
 def run_one(args, root, phase, block, mode, environment):
     repository_root = Path(__file__).resolve().parents[2]
-    if source_bundle_digest(repository_root) != args.source_bundle_digest:
+    if source_bundle_digest(
+        repository_root, args.source_revision
+    ) != args.source_bundle_digest:
         raise RuntimeError("GPU study source bundle changed before a process run")
     destination = root / "raw" / phase / f"block-{block:03d}" / f"{mode}.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -339,7 +341,9 @@ def run_one(args, root, phase, block, mode, environment):
         }
         write_json_exclusive(root / "failure.json", failure)
         raise RuntimeError(f"GPU study failed in {phase} block {block}, mode {mode}")
-    if source_bundle_digest(repository_root) != args.source_bundle_digest:
+    if source_bundle_digest(
+        repository_root, args.source_revision
+    ) != args.source_bundle_digest:
         raise RuntimeError("GPU study source bundle changed during a process run")
     raw = destination.read_bytes()
     payload = json.loads(raw.decode("utf-8"))
@@ -447,7 +451,9 @@ def main(argv=None):
         if not path.exists():
             raise SystemExit(f"required path does not exist: {path}")
     repository_root = Path(__file__).resolve().parents[2]
-    if source_bundle_digest(repository_root) != args.source_bundle_digest:
+    if source_bundle_digest(
+        repository_root, args.source_revision
+    ) != args.source_bundle_digest:
         raise SystemExit("transferred GPU study source bundle does not match")
     args.output.mkdir(parents=True)
     environment = os.environ.copy()
@@ -510,7 +516,9 @@ def main(argv=None):
         },
         "observations": warmups + measured,
     }
-    if source_bundle_digest(repository_root) != args.source_bundle_digest:
+    if source_bundle_digest(
+        repository_root, args.source_revision
+    ) != args.source_bundle_digest:
         raise RuntimeError("GPU study source bundle changed before publication")
     write_json_exclusive(args.output / "report.json", report)
     write_integrity_manifest(args.output)
