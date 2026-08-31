@@ -141,6 +141,10 @@ def attempt_factory(tmp_path):
         guards=False,
         profile=None,
         verifier_rounds=2,
+        runtime_protocol="legacy",
+        task_id=None,
+        completion_checker=None,
+        cancel_check=None,
     ):
         counter["value"] += 1
         domain = load_domain(domain_name)
@@ -159,6 +163,7 @@ def attempt_factory(tmp_path):
                 today=domain.default_today,
                 guards=guards,
                 verifier_rounds=verifier_rounds,
+                runtime_protocol=runtime_protocol,
                 **({"profile": profile} if profile is not None else {}),
             ),
             domain=domain,
@@ -169,6 +174,9 @@ def attempt_factory(tmp_path):
             workdir=workdir,
             artifact_dir=workdir / "files",
             hooks=hooks or RunHooks(),
+            authoritative_task_id=task_id,
+            completion_checker=completion_checker,
+            cancel_check=cancel_check,
         )
 
     return make

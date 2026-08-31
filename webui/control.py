@@ -19,6 +19,8 @@ import threading
 import time
 import shutil
 
+from harness.runtime import MAX_CONFIRMATION_DETAIL_BYTES
+
 
 CAPABILITY_BYTES = 32
 MAX_BODY_BYTES = 64 * 1024
@@ -512,6 +514,9 @@ class ConfirmationChannel:
         Named fields rather than an open bag: this event is the security
         prompt, and a call that empties a real mailbox must not look identical
         to one that writes a scratch file."""
+        detail = str(detail)
+        if len(detail.encode("utf-8")) > MAX_CONFIRMATION_DETAIL_BYTES:
+            return False
         confirmation_id = secrets.token_urlsafe(18)
         nonce = secrets.token_urlsafe(32)
         extra = {}
@@ -524,7 +529,7 @@ class ConfirmationChannel:
             confirmation_id=confirmation_id,
             nonce=nonce,
             action=str(action)[:256],
-            detail=str(detail)[:4_096],
+            detail=detail,
             **extra,
         )
         try:

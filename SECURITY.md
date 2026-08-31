@@ -28,6 +28,11 @@ nonce. A missing, malformed, stale, mismatched, timed-out, or denied decision
 fails closed. This remains a human decision seam, not production authorization
 or an operating-system sandbox.
 
+The opt-in receipt-v1 path never truncates an authorization display. The
+complete canonical `external_write` or `shell` request must fit 4,096 UTF-8
+bytes in both the pipeline and browser channel. Oversized requests are rejected
+before a confirmation is emitted and before an executor is entered.
+
 Domain-specific tools may still create `.pptx` and `.xlsx` artifacts inside an
 attempt-owned synthetic workspace. That narrow artifact behavior is not a
 general filesystem sandbox or authorization boundary.
@@ -66,6 +71,7 @@ The following are not production security controls:
 - domain-pack names or SemVer labels;
 - `RunConfig`, `AttemptContext`, `ToolRegistry`, or `ActionPolicy`;
 - model prompts, plans, memories, or completion verification;
+- receipt-v1 lifecycle hashes, receipts, or ledger entries by themselves;
 - any browser confirmation prompt by itself;
 - an attempt workspace path by itself;
 - marker-last evidence publication as an authorization mechanism; or
@@ -81,6 +87,15 @@ development software and must not be remotely exposed.
 Marker-last evidence is designed to detect incomplete or corrupted benchmark
 records and fail closed after process termination. It does not make model actions
 safe and does not claim lossless sudden-power-failure durability.
+
+The opt-in receipt-v1 runtime narrows one failure class: a tool cannot start
+through that pipeline unless a pre-dispatch lifecycle event was flushed and
+fsynced, and a model cannot mint the attempt-local receipt used by its ledger.
+This does not authenticate a user, sandbox trusted Python tools, roll back an
+effect, or make a provider operation idempotent. A journal hash is a local
+fingerprint, not encryption or anonymization. Tool arguments, observations and
+prompts remain absent from that journal, but interactive transcripts and local
+development logs can still contain them. Use synthetic data.
 
 ## Supported safety boundary
 

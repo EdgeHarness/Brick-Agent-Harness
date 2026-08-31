@@ -20,6 +20,7 @@ import subprocess
 import sys
 import threading
 import time
+import tempfile
 import urllib.parse
 import webbrowser
 import zipfile
@@ -34,6 +35,7 @@ STATIC = os.path.join(HERE, "static")
 AGENTS_DIR = os.path.join(PROJECT, "agents")
 OLLAMA_URL = "http://127.0.0.1:11434"
 DEFAULT_PORT = 8765
+CANCEL_ROOT = os.path.join(tempfile.gettempdir(), "brick-agent-lab-cancel")
 
 from agents._shared.run_agent import validate_config  # noqa: E402
 from harness.domain import load_domain  # noqa: E402
@@ -168,6 +170,7 @@ def catalog_for(tag):
 
 
 MCP_MODES = ("draft", "live", "read_only")
+RUNTIME_PROTOCOLS = ("legacy", "receipt_v1")
 
 
 def require_mcp_names(value):
@@ -192,6 +195,18 @@ def require_mcp_mode(value):
         return None
     if value not in MCP_MODES:
         raise RequestError(400, "mcp_mode must be one of " + ", ".join(MCP_MODES))
+    return value
+
+
+def require_runtime_protocol(value):
+    if value is None:
+        return None
+    if value not in RUNTIME_PROTOCOLS:
+        raise RequestError(
+            400,
+            "runtime_protocol must be one of "
+            + ", ".join(RUNTIME_PROTOCOLS),
+        )
     return value
 
 
@@ -509,10 +524,18 @@ def thread_reply(end, status):
     there was no summary, so a conversation where real work happened read as a
     row of shrugs. Report the steps instead: the run drafted a mail, and the
     transcript should say so."""
+    terminal = (end or {}).get("terminal_status")
+    if terminal not in {"completed", "incomplete", "failed", "cancelled"}:
+        terminal = "cancelled" if status == "stopped" else status
+    qualifier = (
+        "[{}] ".format(str(terminal).upper())
+        if terminal in {"incomplete", "failed", "cancelled"}
+        else ""
+    )
     if end and end.get("summary"):
-        return end["summary"]
-    if status == "stopped":
-        return "(stopped before finishing)"
+        return qualifier + end["summary"]
+    if terminal == "cancelled":
+        return "[CANCELLED] (stopped before finishing)"
     done = []
     for action in (end or {}).get("actions") or []:
         name = action.get("tool")
@@ -523,9 +546,9 @@ def thread_reply(end, status):
         else:
             done.append([name, 1])
     if not done:
-        return "(no summary, and no step completed)"
+        return qualifier + "(no summary, and no step completed)"
     steps = ", ".join(n if c == 1 else f"{n} x{c}" for n, c in done)
-    return f"(no summary) Steps completed: {steps}."
+    return qualifier + f"(no summary) Steps completed: {steps}."
 
 
 class Run:
@@ -542,6 +565,7 @@ class Run:
         self.events = EventJournal()
         self.confirmations = ConfirmationLedger(rid)
         self.status = "running"
+        self.terminal_status = None
         self.lock = threading.Lock()
 
     def add(self, event):
@@ -561,10 +585,27 @@ class Run:
                 return
             self.status = "stopped"
             self.confirmations.clear()
+            cancel_file = self.options.get("cancel_file")
+            if cancel_file:
+                try:
+                    with open(cancel_file, "xb") as handle:
+                        handle.write(self.id.encode("ascii"))
+                        handle.flush()
+                        os.fsync(handle.fileno())
+                except FileExistsError:
+                    pass
+                except OSError:
+                    # Cancellation remains best effort here; the owned process
+                    # tree below is the hard containment boundary.
+                    pass
             try:
                 self.proc.stdin.close()
             except (AttributeError, OSError):
                 pass
+        try:
+            self.proc.wait(timeout=1.5)
+        except subprocess.TimeoutExpired:
+            pass
         self.process_tree.terminate()
 
     def register_confirmation(self, event):
@@ -598,8 +639,14 @@ class Runs:
                 raise RuntimeError(f"{self.current.agent} is already running — "
                                    "stop it first (one agent run at a time).")
             run_id = new_capability()[:22]
+            os.makedirs(CANCEL_ROOT, exist_ok=True)
+            cancel_file = os.path.join(CANCEL_ROOT, run_id + ".cancel")
+            if os.path.exists(cancel_file):
+                raise RuntimeError("new run cancellation identity collided")
+            options = dict(options, cancel_file=cancel_file)
             cmd = [sys.executable, "-u", "-m", "webui.runner",
-                   "--run-id", run_id, "--agent", agent, "--task", task]
+                   "--run-id", run_id, "--agent", agent, "--task", task,
+                   "--cancel-file", cancel_file]
             if options.get("domain"):
                 cmd += ["--domain", options["domain"]]
             if options.get("tiers"):
@@ -608,6 +655,8 @@ class Runs:
                 cmd += ["--small", options["small"]]
             if options.get("deep"):
                 cmd += ["--deep", options["deep"]]
+            if options.get("runtime_protocol"):
+                cmd += ["--runtime-protocol", options["runtime_protocol"]]
             if options.get("max_calls") is not None:
                 cmd += ["--max-calls", str(int(options["max_calls"]))]
             if options.get("thread"):
@@ -651,15 +700,41 @@ class Runs:
                     raise ValueError("runner event is not an object")
                 if event.get("t") == "confirmation":
                     run.register_confirmation(event)
+                if event.get("t") == "end":
+                    terminal = event.get("terminal_status")
+                    if terminal in {
+                        "completed", "incomplete", "failed", "cancelled"
+                    }:
+                        run.terminal_status = terminal
                 run.add(event)
             except ValueError:
                 run.add({"t": "stdout", "text": line[:MAX_STDERR_LINE]})
         code = run.proc.wait()
         stderr_thread.join(timeout=0.2)
         run.process_tree.close()
+        cancel_file = run.options.get("cancel_file")
+        if cancel_file:
+            try:
+                os.remove(cancel_file)
+            except FileNotFoundError:
+                pass
+            except OSError:
+                # A stale marker has an unguessable per-run name and cannot
+                # cancel a future run. Cleanup failure is local diagnostics.
+                sys.stderr.write("Agent Lab could not remove a cancel marker\n")
         run.confirmations.clear()
         if run.status == "running":
-            run.status = "finished" if code == 0 else "failed"
+            terminal_status = getattr(run, "terminal_status", None)
+            if code != 0:
+                run.status = "failed"
+            elif terminal_status == "completed":
+                run.status = "finished"
+            elif terminal_status == "cancelled":
+                run.status = "stopped"
+            elif terminal_status in {"failed", "incomplete"}:
+                run.status = terminal_status
+            else:
+                run.status = "finished"
         if code not in (0, -15) and run.status != "stopped":
             tail = "".join(stderr)[-1500:].strip()
             if tail:
@@ -912,7 +987,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     body,
                     required=("agent", "domain", "task", "tiers", "max_calls"),
                     optional=("small", "deep", "mcp", "mcp_mode",
-                              "keep_office_tools", "thread", "model"),
+                              "keep_office_tools", "thread", "model",
+                              "runtime_protocol"),
                 )
                 agent = require_string(body["agent"], "agent", maximum=128)
                 task = require_string(body["task"], "task").strip()
@@ -931,6 +1007,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                                                       "thread", maximum=128),
                     "model": require_optional_string(body.get("model"),
                                                      "model", maximum=200),
+                    "runtime_protocol": require_runtime_protocol(
+                        body.get("runtime_protocol")
+                    ),
                     "mcp": require_mcp_names(body.get("mcp")),
                     "mcp_mode": require_mcp_mode(body.get("mcp_mode")),
                     "keep_office_tools": require_bool(

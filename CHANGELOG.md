@@ -2,6 +2,61 @@
 
 ## Unreleased
 
+### Opt-in receipt-verified runtime without changing the frozen benchmark
+
+CLI and Agent Lab can now select `receipt_v1`. The new path writes a closed,
+hash-chained lifecycle record before tool dispatch, issues an attempt-local
+signed receipt only after executor success, grounds receipts against an
+accepted plan, preflights deterministic role capabilities, and accepts
+completion only from an authoritative domain postcondition. Cancellation,
+failure, incomplete work and completed work have separate terminal states.
+
+The legacy loop, strict grading implementation, `bench/`, and frozen result
+roots are unchanged. `legacy` remains the default. A separate deterministic
+engineering evaluation records two false completions and one unverified
+completion for legacy versus zero of each for receipt-v1 on its four fixed
+acceptance cases, with no valid-success regression in the two valid cases. This
+is control-path evidence, not a model, Brix, security or performance result.
+
+A frozen security diff review reproduced one authorization defect in the new
+path: a 4,096-character confirmation prefix could omit a later recipient or
+target even though the full arguments reached the executor. The implementation
+now rejects an oversized UTF-8 confirmation before the callback and executor;
+the browser channel also rejects rather than truncates. Focused regression
+tests cover multibyte payloads and prove that neither approval nor execution is
+reached.
+
+The same hardening pass now records cancellation that arrives while the final
+tool is running, preserves its real receipt, and ends the run as cancelled
+instead of falling through to a budget terminal. Agent Lab's Stop control sends
+the active run ID, process status follows receipt-v1 terminal status, archived
+failed or incomplete summaries carry an explicit qualifier, and the start
+banner says receipt checks are enabled rather than claiming verification before
+the run ends.
+
+Plain-backend preflight now binds behavior-affecting model configuration and
+enforces declared context and requested capabilities before a model call. The
+acceptance-report validator recomputes its fixed case inventory, outcome
+invariants, summary and promotion gates in addition to checking report and
+source digests.
+
+Claude Code 2.1.251 was located in the VS Code extension, but its OAuth session
+was expired, so no Claude review result is represented by this change.
+
+Final offline validation on the frozen implementation source: 1,277 passed,
+9 skipped, and zero failures. The checked-in deterministic acceptance report
+validated at SHA-256
+`97665c291cce565473159c8a7907aa1ecddedf23831ba45344fac7a2f5ca08dd`.
+
+### The MCP self-test now coexists with the official SDK
+
+The official Python MCP SDK installs a top-level package named `mcp`, which
+shadowed Brick's `mcp.selftest_server` module. That made the full connector
+suite fail in the same environment needed by official-SDK connectors. The
+registry now launches `harness.mcp_selftest_server`, a path-based wrapper around
+the unchanged credential-free fixture. The official SDK and Brick connector
+self-test now pass in one environment.
+
 ### Correction: the stuck brake counted two of four failure shapes
 
 An adversarial review of the day's diff found the brake did not do what its

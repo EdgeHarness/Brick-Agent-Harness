@@ -34,6 +34,7 @@ generalization or performance.
 | [`docs/PROJECT_GUIDE.md`](docs/PROJECT_GUIDE.md) | canonical evidence, research and governance rules |
 | [`docs/EXECUTION.md`](docs/EXECUTION.md) | operational handbook and per-session protocol |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | what is implemented, what is simulated, trust boundaries |
+| [`docs/RECEIPT_RUNTIME.md`](docs/RECEIPT_RUNTIME.md) | opt-in durable receipts, completion rules and acceptance evidence |
 | [`docs/FIXES.md`](docs/FIXES.md) | defect and remediation register, mapped to the gates |
 | [`docs/BRIX_DISCOVERY.md`](docs/BRIX_DISCOVERY.md) | the non-sensitive Brix discovery boundary |
 | [`bench/README.md`](bench/README.md) | the benchmark, and why current output is exploratory |
@@ -51,6 +52,7 @@ webui/              loopback development console
 finetune/           live-harness data generator
 training_scripts/   separate LoRA training package
 tests/              offline characterization and architecture tests
+evals/              non-benchmark engineering acceptance checks
 ```
 
 The public runtime boundary is `RunConfig`, `RunHooks`, `ActionPolicy`,
@@ -58,6 +60,12 @@ The public runtime boundary is `RunConfig`, `RunHooks`, `ActionPolicy`,
 tool's effect explicitly, and an attempt rejects a policy that misses an active
 tool. These are software interfaces, not authentication, isolation,
 transactionality or safety guarantees. Domain packs are trusted Python imports.
+
+Interactive CLI and Agent Lab runs may explicitly select the newer
+`receipt_v1` protocol. It adds a durable pre-dispatch record, signed tool
+receipts, a plan-grounded ledger, explicit terminal states, and authoritative
+postconditions. It remains off by default and never changes `bench/`. See
+[`docs/RECEIPT_RUNTIME.md`](docs/RECEIPT_RUNTIME.md).
 
 ## Install and verify
 
@@ -129,6 +137,9 @@ no supported general filesystem or shell.
 `ActionPolicy` is a classification and callback seam, not an OS sandbox or an
 authorization system. Absence of a callback denies. The operator channel binds
 one decision to one `(run_id, confirmation_id, nonce)`; it is not generic stdin.
+For `external_write` and `shell` in `receipt_v1`, the complete canonical action
+must fit the 4,096-byte confirmation channel. A larger action is rejected before
+the approval prompt and before execution; authorization data is never sliced.
 
 Do not put real Brix member, payment, email or document data here.
 Authentication, tenant isolation, privacy controls, retention and audit policy

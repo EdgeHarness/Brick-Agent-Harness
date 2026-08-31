@@ -15,7 +15,7 @@ if PROJECT not in sys.path:
     sys.path.insert(0, PROJECT)
 
 from agents._shared.run_agent import build_llm, validate_config  # noqa: E402
-from harness.agent import run_harness  # noqa: E402
+from harness.runtime_dispatch import run  # noqa: E402
 from harness.domain import load_domain  # noqa: E402
 from harness import chat  # noqa: E402
 from harness import mcp_bridge, mcp_config, profiles  # noqa: E402
@@ -96,6 +96,12 @@ def main(argv=None):
     parser.add_argument("--tiers", action="store_true")
     parser.add_argument("--small", default=None)
     parser.add_argument("--deep", default=None)
+    parser.add_argument(
+        "--runtime-protocol",
+        choices=("legacy", "receipt_v1"),
+        default=None,
+    )
+    parser.add_argument("--cancel-file", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--mcp", default=None)
     parser.add_argument(
         "--mcp-mode", default=None,
@@ -165,6 +171,11 @@ def main(argv=None):
         verifier_rounds=profile.verify_rounds,
         guards=True,
         profile=profile,
+        runtime_protocol=(
+            args.runtime_protocol
+            or config_data.get("runtime_protocol")
+            or "legacy"
+        ),
     )
 
     state = {"call": 0}
@@ -267,6 +278,20 @@ def main(argv=None):
         prompt_profile=domain.prompt_profile,
         prompt_rules=prompt_rules,
         hooks=RunHooks(on_note=on_note, on_tool=on_tool),
+        authoritative_task_id=next(
+            (
+                candidate.id
+                for candidate in domain.tasks
+                if connected is None
+                and candidate.prompt.strip() == args.task.strip()
+            ),
+            None,
+        ),
+        cancel_check=(
+            (lambda: os.path.isfile(args.cancel_file))
+            if args.cancel_file
+            else None
+        ),
     )
     attempt_holder["attempt"] = attempt
     log_dir = str(paths.logs)
@@ -309,6 +334,7 @@ def main(argv=None):
         domain=domain.name,
         domain_version=domain.version,
         budget=run_config.max_calls,
+        runtime_protocol=run_config.runtime_protocol,
         profile=profile.to_dict(),
         task=args.task,
         endpoint=OLLAMA_URL,
@@ -331,7 +357,7 @@ def main(argv=None):
     emit("world", **world_snapshot(domain, attempt))
 
     try:
-        episode = run_harness(llm, args.task, attempt)
+        episode = run(llm, args.task, attempt)
     except Exception:
         # Detailed diagnostics stay on the local terminal.  The stdout JSONL
         # stream is browser-visible and therefore carries only a generic error.
@@ -357,6 +383,11 @@ def main(argv=None):
             "router_fallback": router_fallback,
             "transcript": episode.transcript,
             "finished": episode.finished,
+            "runtime_protocol": episode.runtime_protocol,
+            "terminal_status": episode.terminal_status,
+            "completion": episode.completion,
+            "ledger": episode.ledger,
+            "lifecycle_path": episode.lifecycle_path,
             "summary": episode.done_summary,
         }
     )
@@ -380,6 +411,10 @@ def main(argv=None):
     emit(
         "end",
         finished=episode.finished,
+        runtime_protocol=episode.runtime_protocol,
+        terminal_status=episode.terminal_status,
+        completion=episode.completion,
+        ledger=episode.ledger,
         summary=episode.done_summary,
         calls=llm.calls,
         budget=run_config.max_calls,

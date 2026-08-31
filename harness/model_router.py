@@ -26,6 +26,7 @@ import time
 from types import MappingProxyType
 
 from .llm import LLM
+from .router_contract import RouterContract
 
 
 def _freeze(value):
@@ -51,11 +52,15 @@ def default_roles(base="llama3.1:8b", small=None, deep="qwen2.5:14b"):
     """
     light = small or base
     return {
-        "driver":   {"model": base,  "temperature": 0.0, "num_predict": 700, "keep_alive": "30m"},
-        "router":   {"model": light, "temperature": 0.0, "num_predict": 250, "keep_alive": "30m"},
-        "verifier": {"model": light, "temperature": 0.0, "num_predict": 250, "keep_alive": "30m"},
+        "driver":   {"model": base,  "temperature": 0.0, "num_predict": 700, "keep_alive": "30m",
+                     "capabilities": ("chat", "json_object")},
+        "router":   {"model": light, "temperature": 0.0, "num_predict": 250, "keep_alive": "30m",
+                     "capabilities": ("chat", "json_object")},
+        "verifier": {"model": light, "temperature": 0.0, "num_predict": 250, "keep_alive": "30m",
+                     "capabilities": ("chat", "json_object")},
         "deep":     {"model": deep,  "temperature": 0.2, "num_predict": 900, "keep_alive": "0",
-                     "on_demand": True},
+                     "on_demand": True,
+                     "capabilities": ("chat", "json_object")},
     }
 
 
@@ -100,12 +105,16 @@ class ModelRouter:
                 f"default role {default_role!r} is not configured"
             )
         self.roles = MappingProxyType(frozen_roles)
+        if type(num_ctx) is not int or num_ctx < 1:
+            raise ValueError("num_ctx must be a positive integer")
         self.num_ctx = num_ctx
         self.default_role = default_role
         self.log_path = log_path
         self.stream_hook = stream_hook
         self.call_log = []          # one record per model call
         self._clients = {}          # (model, keep_alive) -> LLM, reused
+        self.contract = RouterContract(self.roles, self.num_ctx)
+        self.manifest_digest = self.contract.digest
         self.reset_usage()
 
     # --- usage, aggregated across every tier so the budget check still works --
@@ -130,10 +139,18 @@ class ModelRouter:
         """Tags configured without ``on_demand``; not a residency measurement."""
         return sorted({s["model"] for s in self.roles.values() if not s.get("on_demand")})
 
+    def preflight(self, role, required=("chat",), min_context=1):
+        """Resolve one role under the immutable capability manifest."""
+        return self.contract.decide(
+            role, required=required, min_context=min_context
+        )
+
     def chat(self, messages, force_json=False, num_predict=None, role=None):
         if role is not None and role not in self.roles:
             raise ValueError(f"unknown model role {role!r}")
         resolved_role = role or self.default_role
+        required = ("chat", "json_object") if force_json else ("chat",)
+        decision = self.preflight(resolved_role, required=required)
         spec = self.roles[resolved_role]
         llm = self._client(resolved_role, spec)
         np = num_predict if num_predict is not None else spec.get("num_predict", 700)
@@ -154,6 +171,8 @@ class ModelRouter:
 
         rec = {"ts": round(time.time(), 3), "role": role or self.default_role,
                "model": spec["model"], "adapter": spec.get("adapter"),
+               "router_contract": decision.contract_digest,
+               "route_digest": decision.decision_digest,
                "prompt_tokens": d_prompt, "output_tokens": d_out,
                "latency_ms": int(dt * 1000)}
         self.call_log.append(rec)

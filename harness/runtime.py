@@ -18,9 +18,15 @@ from .tools import ToolRegistry
 ConfirmCallback = Callable[[str, str], bool]
 NoteHook = Callable[[str, Any], None]
 ToolHook = Callable[[str, dict, bool, str], None]
+CancelCheck = Callable[[], bool]
+CompletionCheck = Callable[[Any], Any]
 ALLOWED_EFFECTS = frozenset(
     {"read", "state_write", "external_write", "shell"}
 )
+# Authorization data is never truncated. Both the guarded tool pipeline and
+# every concrete confirmation channel reject a larger canonical request before
+# an operator can approve a view that differs from what will execute.
+MAX_CONFIRMATION_DETAIL_BYTES = 4_096
 
 
 @dataclass(frozen=True)
@@ -43,6 +49,9 @@ class RunConfig:
     # callers resolve one per model tag and copy verify_rounds into
     # verifier_rounds themselves.
     profile: Profile = DEFAULT_PROFILE
+    # ``legacy`` preserves the sealed benchmark path. ``receipt_v1`` is the
+    # fail-closed interactive/runtime protocol and must be selected explicitly.
+    runtime_protocol: str = "legacy"
 
     def __post_init__(self):
         if self.condition not in {"raw", "harness"}:
@@ -69,6 +78,10 @@ class RunConfig:
             raise TypeError("history must be a string")
         if not isinstance(self.profile, Profile):
             raise TypeError("profile must be a Profile")
+        if self.runtime_protocol not in {"legacy", "receipt_v1"}:
+            raise ValueError(
+                "unknown runtime_protocol {!r}".format(self.runtime_protocol)
+            )
 
     @property
     def today_human(self):
@@ -194,6 +207,12 @@ class AttemptContext:
     prompt_rules: Optional[str] = None
     hooks: RunHooks = field(default_factory=RunHooks)
     actions: list = field(default_factory=list)
+    # A named domain task supplies an authoritative strict grader. Arbitrary
+    # interactive requests leave this unset and therefore cannot be promoted
+    # from UNKNOWN to complete by a model claim.
+    authoritative_task_id: Optional[str] = None
+    completion_checker: Optional[CompletionCheck] = None
+    cancel_check: Optional[CancelCheck] = None
 
     def __post_init__(self):
         if not isinstance(self.attempt_id, str) or not self.attempt_id:
@@ -207,6 +226,19 @@ class AttemptContext:
         self.policy.validate_tools(self.tools.names())
         if not isinstance(self.hooks, RunHooks):
             raise TypeError("hooks must be RunHooks")
+        if self.authoritative_task_id is not None and (
+            not isinstance(self.authoritative_task_id, str)
+            or not self.authoritative_task_id
+        ):
+            raise ValueError(
+                "authoritative_task_id must be a nonempty string or None"
+            )
+        if self.completion_checker is not None and not callable(
+            self.completion_checker
+        ):
+            raise TypeError("completion_checker must be callable or None")
+        if self.cancel_check is not None and not callable(self.cancel_check):
+            raise TypeError("cancel_check must be callable or None")
         self.workdir = Path(self.workdir)
         self.artifact_dir = Path(self.artifact_dir)
         self.actions = copy.deepcopy(list(self.actions))
@@ -233,3 +265,12 @@ class AttemptContext:
 
     def snapshot(self):
         self.domain.snapshot(self)
+
+    def cancelled(self):
+        """Cooperative cancellation check; exceptions fail closed as cancel."""
+        if self.cancel_check is None:
+            return False
+        try:
+            return bool(self.cancel_check())
+        except Exception:
+            return True
