@@ -46,6 +46,9 @@ Official references checked on 2026-08-30:
      --revision "$SOURCE_REVISION" --verify-git)
    ```
 
+   This compares every runner byte directly with its blob in the claimed
+   commit; it does not trust Git status or index hints.
+
 7. Submit from the repository root. Replace every example value:
 
    ```bash
@@ -59,10 +62,12 @@ Official references checked on 2026-08-30:
      SOURCE_BUNDLE_DIGEST="$SOURCE_BUNDLE_DIGEST"
    ```
 
-The wrapper verifies the assigned GPU, archive digest, container-digest
-declaration, revision-bound transferred source bundle, and exact source bytes
-before any measurement. It extracts only regular files and directories from the model
-archive, requires exactly one `config.json`, and never changes
+The wrapper verifies the assigned GPU, archive digest, complete immutable
+container reference, revision-bound transferred source bundle, and exact
+source bytes before any measurement. The final integrity-covered report keeps
+the complete credential-free OCI reference and a per-file source manifest, not
+only their aggregate digests. It extracts only regular files and directories
+from the model archive, requires exactly one `config.json`, and never changes
 `CUDA_VISIBLE_DEVICES`.
 
 ## Measurement behavior
@@ -79,10 +84,16 @@ that do not enforce its API key from different-UID processes on the execute
 node. Root and same-UID isolation remain external scheduler/container controls.
 Readiness also requires the exact served model name. Results include raw timing
 records, prefix-cache counter deltas, output hashes, paired bootstrap intervals,
-and an integrity manifest.
+and an integrity manifest. Every study process starts a dedicated Linux session
+and process group beneath a child-subreaper supervisor. A timeout terminates
+the group, and the supervisor adopts and removes workers that changed sessions;
+an otherwise successful run is rejected if any worker remains. The report cannot
+pass its publication gate unless APC-on runs show positive cache queries and an
+append-only cache hit, while APC-off runs show zero cache hits.
 
 Do not claim a GPU or cache-performance result until both jobs complete and
 their attested `DeviceName`, source bundle, container digest, model archive
-digest, and integrity manifest have been checked. Nsight capture is deliberately
+digest, full container reference, per-file source manifest, APC activity, and
+integrity manifest have been checked. Nsight capture is deliberately
 not part of the statistical job; add one separate diagnostic job only if CHTC
 permits profiling.

@@ -16,7 +16,9 @@ from perf.brickkv.gpu_prefix_study import (
     private_socket_endpoint,
 )
 from perf.brickkv.source_bundle import (
+    SOURCE_FILES,
     source_bundle_digest,
+    source_bundle_manifest,
     verify_git_revision,
 )
 from perf.brickkv.safe_extract import extract_stream
@@ -235,17 +237,26 @@ def test_private_socket_endpoint_is_owned_and_mode_0700():
 
 def test_gpu_source_bundle_binds_the_executed_files():
     root = __import__("pathlib").Path(__file__).resolve().parents[1]
-    first = source_bundle_digest(root, "a" * 40)
+    manifest = source_bundle_manifest(root, "a" * 40)
+    first = manifest["source_bundle_digest"]
     second = source_bundle_digest(root, "b" * 40)
     assert __import__("re").fullmatch(r"sha256:[0-9a-f]{64}", first)
     assert first != second
+    assert manifest["schema_version"] == "brickkv.source-manifest/1"
+    assert manifest["source_revision"] == "a" * 40
+    assert [item["path"] for item in manifest["files"]] == sorted(SOURCE_FILES)
+    assert all(item["bytes"] >= 0 for item in manifest["files"])
+    assert all(
+        __import__("re").fullmatch(r"sha256:[0-9a-f]{64}", item["sha256"])
+        for item in manifest["files"]
+    )
 
 
 def test_source_bundle_git_verification_rejects_dirty_runner(tmp_path):
     repository = tmp_path / "repository"
     repository.mkdir()
     runner = repository / "runner.py"
-    runner.write_text("print('safe')\n", encoding="utf-8")
+    runner.write_bytes(b"print('safe')\n")
     for command in (
         ("git", "init"),
         ("git", "config", "user.email", "brickkv@example.com"),
@@ -261,7 +272,32 @@ def test_source_bundle_git_verification_rejects_dirty_runner(tmp_path):
         capture_output=True, text=True,
     ).stdout.strip()
     verify_git_revision(repository, revision, ("runner.py",))
-    runner.write_text("print('changed')\n", encoding="utf-8")
+    runner.write_bytes(b"print('changed')\n")
+    with pytest.raises(RuntimeError, match="differ"):
+        verify_git_revision(repository, revision, ("runner.py",))
+
+
+def test_source_bundle_verification_ignores_assume_unchanged_hint(tmp_path):
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    runner = repository / "runner.py"
+    runner.write_bytes(b"print('safe')\n")
+    for command in (
+        ("git", "init"),
+        ("git", "config", "user.email", "brickkv@example.com"),
+        ("git", "config", "user.name", "BrickKV Test"),
+        ("git", "add", "runner.py"),
+        ("git", "commit", "-m", "fixture"),
+        ("git", "update-index", "--assume-unchanged", "runner.py"),
+    ):
+        __import__("subprocess").run(
+            command, cwd=repository, check=True, capture_output=True
+        )
+    revision = __import__("subprocess").run(
+        ("git", "rev-parse", "HEAD"), cwd=repository, check=True,
+        capture_output=True, text=True,
+    ).stdout.strip()
+    runner.write_bytes(b"print('hidden change')\n")
     with pytest.raises(RuntimeError, match="differ"):
         verify_git_revision(repository, revision, ("runner.py",))
 

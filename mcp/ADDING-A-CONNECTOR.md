@@ -227,7 +227,9 @@ Only two cases:
 [selftest_server.py](selftest_server.py) as the template. It is a complete MCP
 server in one stdlib file, speaks JSON-RPC 2.0 over stdio, and needs no
 dependencies. Point a registry entry at it with `"command": "python3"` and
-`"args": ["-m", "mcp.your_server"]`.
+`"args": ["${ROOT}/mcp/your_server.py"]`. A direct script path also avoids
+colliding with an installed package that happens to use the same top-level
+module name.
 
 **The server's argument shapes defeat the model.** Some servers take a whole
 API entity under one `body` argument with 25 top-level keys. `arg_hints` and

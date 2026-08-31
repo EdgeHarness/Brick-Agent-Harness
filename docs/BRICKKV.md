@@ -108,9 +108,11 @@ for `geniex serve`.
 
 The six synthetic trace families are append-only, planning removal, invalid
 exchange deletion, context pruning, verifier detour and decode cancellation.
-The current C callback can cancel after token generation begins. Cancellation
-during prefill is covered at the HTTP server context boundary, not claimed by
-the native callback tool.
+The current C callback can cancel only after token generation begins. The
+GenieX API does not expose a primitive that interrupts synchronous prefill.
+An HTTP cancellation observed after prefill forces a reset before any later
+reuse, but prefill interruption and bounded prefill-cancellation latency are
+not measured or claimed.
 
 ## Experiment runners
 
@@ -126,15 +128,22 @@ coefficient of variation exceeds 8 percent, all modes in the block receive ten
 additional repetitions. The process run is the statistical unit.
 
 Evidence stores timings, token counts, cache decisions, output hashes and
-attestation digests. It does not store prompt or generated content.
+attestation digests. GPU reports additionally retain the complete immutable
+container reference and a revision-bound, per-file source manifest. They do not
+store prompt or generated content. Each GPU study owns one Linux session and
+process group under a child subreaper; escaped or residual workers fail the
+run. APC-on evidence must demonstrate
+real query activity and an append-only hit, while APC-off evidence must contain
+zero hits.
 
 ## Acceptance gates
 
 No performance claim is valid until all applicable gates pass:
 
 - zero false hits in at least 1,000 randomized branch mutations;
-- zero cross-session canary leakage;
-- every cancellation or generation failure is equivalent to a cold next call;
+- zero cross-session canary reuse across 1, 2, 4 and 8-session campaigns;
+- every observed decode cancellation or generation failure makes the next
+  call cold; prefill interruption is outside the current API and claim;
 - reset and managed modes preserve normalized tool-call sequences, task
   outcomes and artifact hashes;
 - no deadlock, race, stale provisional state or model use after teardown;

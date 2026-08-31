@@ -23,10 +23,11 @@ from typing import Iterable
 
 MODES = ("reset", "legacy-test", "managed")
 EXPECTED_SCHEMA = "brickkv.replay/1"
-TRACE_NAMES = frozenset({
+TRACE_ORDER = (
     "append_only", "planning_removed", "invalid_deleted", "context_pruning",
     "verifier_detour", "cancellation_decode",
-})
+)
+TRACE_NAMES = frozenset(TRACE_ORDER)
 ATTESTATION_FIELDS = frozenset({
     "source_revision", "sdk_version", "plugin", "plugin_version",
     "model_digest", "tokenizer_digest", "requested_device",
@@ -114,6 +115,25 @@ def _require_attested_text(attestation: dict, key: str) -> str:
     return value
 
 
+def _expected_cache_decision(mode: str, trace: str, step: int) -> tuple[str, str]:
+    if trace == "cancellation_decode" and step == 1:
+        return "aborted", "callback_cancellation"
+    if mode == "reset":
+        return "reset", "reset_each_call"
+    if mode == "legacy-test":
+        return "legacy-test", "raw_keep_cache"
+    if step == 0:
+        return "cold", "first_request"
+    if trace in {"planning_removed", "invalid_deleted", "context_pruning"} \
+            and step == 2:
+        return "reset", "branch"
+    if trace == "verifier_detour" and step in {1, 2}:
+        return "reset", "session_switch"
+    if trace == "cancellation_decode" and step == 2:
+        return "reset", "parent_mismatch"
+    return "reused", "exact_extension"
+
+
 def validate_evidence(
     payload: dict,
     expected_mode: str,
@@ -164,22 +184,24 @@ def validate_evidence(
         str(tokenizer_digest)
     ):
         raise ValueError("attestation contains an invalid tokenizer digest")
-    if not isinstance(attestation["device_warning"], str):
-        raise ValueError("attestation device warning must be text")
+    if attestation["device_warning"] not in {"none", "present"}:
+        raise ValueError("attestation device warning must be none or present")
     requested = attestation["requested_device"]
     resolved = attestation["resolved_device"]
     if attestation["plugin"] == "qairt":
         if resolved != "NPU":
             raise ValueError("QAIRT evidence did not resolve to the NPU")
-        if requested == "npu" and attestation["device_warning"]:
+        if requested == "npu" and attestation["device_warning"] != "none":
             raise ValueError("QAIRT NPU evidence contains an unexpected coercion warning")
+        if requested != "npu" and attestation["device_warning"] != "present":
+            raise ValueError("QAIRT device coercion has no warning evidence")
     else:
         expected_resolved = {
             "cpu": "", "gpu": "GPUOpenCL", "npu": "HTP0", "hybrid": "",
         }[requested]
         if resolved != expected_resolved:
             raise ValueError("llama.cpp evidence contains an unexpected resolved device")
-        if attestation["device_warning"]:
+        if attestation["device_warning"] != "none":
             raise ValueError("llama.cpp evidence contains an unexpected device warning")
     for key, value in (expected_attestation or {}).items():
         if key not in ATTESTATION_FIELDS:
@@ -212,8 +234,6 @@ def validate_evidence(
         if trace not in TRACE_NAMES:
             raise ValueError("measurement record contains an unknown trace")
         observed_traces.add(trace)
-        if record["role"] not in {"driver", "verifier"}:
-            raise ValueError("measurement record contains an unknown role")
         step = record["step"]
         if isinstance(step, bool) or not isinstance(step, int) or step < 0:
             raise ValueError("measurement record contains an invalid step")
@@ -221,6 +241,27 @@ def validate_evidence(
         if step_key in seen_steps:
             raise ValueError("measurement record contains a duplicate trace step")
         seen_steps.add(step_key)
+        expected_role = "verifier" \
+            if trace == "verifier_detour" and step == 1 else "driver"
+        if record["role"] != expected_role:
+            raise ValueError("measurement record has an invalid trace role")
+        expected_cancel = trace == "cancellation_decode" and step == 1
+        if record["callback_cancelled"] != expected_cancel:
+            raise ValueError("measurement record has invalid cancellation placement")
+        expected_decision = _expected_cache_decision(
+            expected_mode, trace, step
+        )
+        if (record["cache_status"], record["cache_reason"]) != expected_decision:
+            raise ValueError("measurement record has an invalid cache decision")
+        if expected_cancel and (
+            record["stop_reason"] != "callback_cancelled"
+            or record["revision"] != ""
+        ):
+            raise ValueError("measurement record has invalid cancellation outcome")
+        if not expected_cancel and (
+            record["stop_reason"] == "callback_cancelled"
+        ):
+            raise ValueError("measurement record has an unexpected cancellation outcome")
         for key in (
             "ttft_us", "prompt_us", "decode_us", "wall_us", "prompt_tokens",
             "generated_tokens", "working_set_bytes",
@@ -232,6 +273,8 @@ def validate_evidence(
             record["result_code"], int
         ):
             raise ValueError("measurement result code must be an integer")
+        if not expected_cancel and record["result_code"] != 0:
+            raise ValueError("completed measurement has a failed result code")
         if not isinstance(record["callback_cancelled"], bool):
             raise ValueError("measurement cancellation flag must be boolean")
         for key in ("cache_reason", "stop_reason"):
@@ -244,6 +287,23 @@ def validate_evidence(
         }[expected_mode]
         if record["cache_status"] not in allowed_status:
             raise ValueError("measurement record contains an invalid cache status")
+        allowed_stop_reasons = {
+            "eos", "length", "user", "stop_sequence", "context_length", "other",
+        }
+        if not expected_cancel and record["stop_reason"] not in allowed_stop_reasons:
+            raise ValueError("completed measurement has an invalid stop reason")
+        for key in (
+            "ttft_us", "prompt_us", "decode_us", "wall_us", "prompt_tokens",
+            "generated_tokens", "working_set_bytes",
+        ):
+            if record[key] <= 0:
+                raise ValueError(f"completed measurement field {key!r} must be positive")
+        if record["wall_us"] < record["ttft_us"]:
+            raise ValueError("measurement wall time is smaller than TTFT")
+        if expected_cancel and (
+            record["generated_tokens"] < configuration["cancel_after_tokens"]
+        ):
+            raise ValueError("cancelled measurement stopped before its callback count")
         revision = record["revision"]
         if expected_mode == "managed" and record["cache_status"] != "aborted":
             if not SHA256_PATTERN.fullmatch(str(revision)):
@@ -270,6 +330,21 @@ def validate_evidence(
             raise ValueError(
                 f"trace {trace!r} has {actual} records; expected {expected_counts[trace]}"
             )
+    expected_steps = {
+        (trace, step)
+        for trace in observed_traces
+        for step in range(expected_counts[trace])
+    }
+    if seen_steps != expected_steps:
+        raise ValueError("replay output does not contain the exact trace-step sequence")
+    expected_sequence = [
+        (trace, step)
+        for trace in TRACE_ORDER if trace in observed_traces
+        for step in range(expected_counts[trace])
+    ]
+    actual_sequence = [(record["trace"], record["step"]) for record in records]
+    if actual_sequence != expected_sequence:
+        raise ValueError("replay output records are not in canonical trace-step order")
 
 
 def process_metrics(payload: dict) -> dict[str, dict[str, float]]:

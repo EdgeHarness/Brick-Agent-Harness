@@ -36,12 +36,13 @@ def _revision(value: str) -> str:
     return value
 
 
-def source_bundle_digest(root: Path, revision: str, paths=SOURCE_FILES) -> str:
+def source_bundle_manifest(root: Path, revision: str, paths=SOURCE_FILES) -> dict:
     root = root.resolve(strict=True)
     revision = _revision(revision)
     digest = hashlib.sha256()
     _frame(digest, b"format", b"brickkv-source-bundle/2")
     _frame(digest, b"source_revision", revision.encode("ascii"))
+    entries = []
     for relative in sorted(paths):
         relative_path = Path(relative)
         if relative_path.is_absolute() or ".." in relative_path.parts:
@@ -62,11 +63,25 @@ def source_bundle_digest(root: Path, revision: str, paths=SOURCE_FILES) -> str:
             raise RuntimeError(f"source bundle entry changed while hashing: {relative}")
         _frame(digest, b"path", relative.encode("utf-8"))
         _frame(digest, b"content", content)
-    return "sha256:" + digest.hexdigest()
+        entries.append({
+            "path": relative,
+            "bytes": len(content),
+            "sha256": "sha256:" + hashlib.sha256(content).hexdigest(),
+        })
+    return {
+        "schema_version": "brickkv.source-manifest/1",
+        "source_revision": revision,
+        "source_bundle_digest": "sha256:" + digest.hexdigest(),
+        "files": entries,
+    }
+
+
+def source_bundle_digest(root: Path, revision: str, paths=SOURCE_FILES) -> str:
+    return source_bundle_manifest(root, revision, paths)["source_bundle_digest"]
 
 
 def verify_git_revision(root: Path, revision: str, paths=SOURCE_FILES) -> None:
-    """Require the submitted runner files to be clean files at repository HEAD."""
+    """Require every submitted runner byte to equal its blob at repository HEAD."""
     root = root.resolve(strict=True)
     revision = _revision(revision)
     head = subprocess.run(
@@ -79,27 +94,39 @@ def verify_git_revision(root: Path, revision: str, paths=SOURCE_FILES) -> None:
     )
     if head.returncode != 0 or head.stdout.decode("ascii", "replace").strip() != revision:
         raise RuntimeError("source revision is not the repository HEAD commit")
-    status = subprocess.run(
-        [
-            "git", "status", "--porcelain=v1", "--untracked-files=all",
-            "--", *sorted(paths),
-        ],
-        cwd=root,
-        stdin=subprocess.DEVNULL,
-        capture_output=True,
-        check=False,
-        timeout=30,
-    )
-    if status.returncode != 0:
-        raise RuntimeError("Git could not verify the submitted source files")
-    if status.stdout:
-        raise RuntimeError("submitted source files differ from the source revision")
+    for relative in sorted(paths):
+        relative_path = Path(relative)
+        if relative_path.is_absolute() or ".." in relative_path.parts:
+            raise RuntimeError(f"unsafe source bundle path: {relative}")
+        path = root / relative_path
+        metadata = path.lstat()
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+            raise RuntimeError(f"source bundle entry is not a regular file: {relative}")
+        committed = subprocess.run(
+            ["git", "show", f"{revision}:{relative}"],
+            cwd=root,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            check=False,
+            timeout=30,
+        )
+        if committed.returncode != 0:
+            raise RuntimeError(
+                f"Git could not read source bundle entry at revision: {relative}"
+            )
+        if path.read_bytes() != committed.stdout:
+            raise RuntimeError("submitted source files differ from the source revision")
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--revision", required=True)
-    parser.add_argument("--verify-git", action="store_true")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--verify-git", action="store_true")
+    mode.add_argument(
+        "--transferred", action="store_true",
+        help="recompute bytes in a Git-free HTCondor input sandbox",
+    )
     args = parser.parse_args(argv)
     root = Path(__file__).resolve().parents[2]
     if args.verify_git:

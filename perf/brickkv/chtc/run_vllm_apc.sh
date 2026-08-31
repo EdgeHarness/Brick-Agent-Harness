@@ -14,6 +14,25 @@ container_digest=$5
 source_revision=$6
 source_bundle_digest=$7
 
+# HTCondor may place the transferred executable at its basename even when the
+# other input paths are preserved. Recreate the canonical source-bundle path
+# from the script that is actually executing, or reject a conflicting copy.
+executing_wrapper=$(readlink -f -- "$0")
+canonical_wrapper=perf/brickkv/chtc/run_vllm_apc.sh
+mkdir -p -- "$(dirname -- "$canonical_wrapper")"
+if [[ -L "$canonical_wrapper" ]]; then
+  echo "canonical wrapper path must not be a symbolic link" >&2
+  exit 76
+elif [[ -e "$canonical_wrapper" ]]; then
+  if [[ "$(readlink -f -- "$canonical_wrapper")" != "$executing_wrapper" ]] &&
+     ! cmp -s -- "$executing_wrapper" "$canonical_wrapper"; then
+    echo "executing wrapper differs from the transferred source bundle" >&2
+    exit 76
+  fi
+else
+  cp -- "$executing_wrapper" "$canonical_wrapper"
+fi
+
 if [[ -z "${CUDA_VISIBLE_DEVICES:-}" || "$CUDA_VISIBLE_DEVICES" == *,* ]]; then
   echo "exactly one HTCondor-assigned CUDA_VISIBLE_DEVICES entry is required" >&2
   exit 65
@@ -34,8 +53,9 @@ if [[ ! "$source_bundle_digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
   echo "SOURCE_BUNDLE_DIGEST must be sha256:<64 lowercase hex>" >&2
   exit 74
 fi
-if [[ "${BRICKKV_CONTAINER_IMAGE:-}" != *@"$container_digest" ]]; then
-  echo "container image is not pinned to the declared digest" >&2
+if [[ ! "${BRICKKV_CONTAINER_IMAGE:-}" =~ ^docker://[A-Za-z0-9.-]+(:[0-9]{1,5})?/[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*@sha256:[0-9a-f]{64}$ ]] ||
+   [[ "$BRICKKV_CONTAINER_IMAGE" != *@"$container_digest" ]]; then
+  echo "container image must be a credential-free immutable docker reference pinned to the declared digest" >&2
   exit 70
 fi
 if [[ ! -f "$model_archive" ]]; then
@@ -50,7 +70,9 @@ if [[ "sha256:$actual_model_archive_digest" != "$model_archive_digest" ]]; then
 fi
 
 actual_source_bundle_digest=$(
-  python -m perf.brickkv.source_bundle --revision "$source_revision"
+  python -m perf.brickkv.source_bundle \
+    --revision "$source_revision" \
+    --transferred
 )
 if [[ "$actual_source_bundle_digest" != "$source_bundle_digest" ]]; then
   echo "transferred source bundle digest mismatch" >&2
@@ -71,6 +93,7 @@ python -m perf.brickkv.gpu_matrix \
   --model "$model_root" \
   --model-archive-digest "$model_archive_digest" \
   --container-digest "$container_digest" \
+  --container-image "$BRICKKV_CONTAINER_IMAGE" \
   --expected-gpu "$expected_gpu" \
   --source-revision "$source_revision" \
   --source-bundle-digest "$source_bundle_digest" \

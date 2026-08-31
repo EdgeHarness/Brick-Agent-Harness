@@ -18,6 +18,14 @@ from perf.brickkv.run_matrix import (
 
 
 def record(trace, mode, ttft, wall=1000):
+    status = {
+        "managed": "reused", "reset": "reset", "legacy-test": "legacy-test"
+    }[mode]
+    reason = {
+        "managed": "exact_extension",
+        "reset": "reset_each_call",
+        "legacy-test": "raw_keep_cache",
+    }[mode]
     return {
         "trace": trace,
         "mode": mode,
@@ -27,8 +35,8 @@ def record(trace, mode, ttft, wall=1000):
         "generated_tokens": 2,
         "prompt_us": 50,
         "decode_us": 100,
-        "cache_status": "reused" if mode == "managed" else "reset",
-        "cache_reason": "exact_extension" if mode == "managed" else "reset_each_call",
+        "cache_status": status,
+        "cache_reason": reason,
         "revision": "sha256:" + "b" * 64 if mode == "managed" else "",
         "role": "driver",
         "step": 0,
@@ -44,6 +52,9 @@ def payload(mode, values=(100, 200)):
     records = [record("append_only", mode, value) for value in values]
     for step, item in enumerate(records):
         item["step"] = step
+        if mode == "managed" and step == 0:
+            item["cache_status"] = "cold"
+            item["cache_reason"] = "first_request"
     return {
         "schema_version": "brickkv.replay/1",
         "status": "complete",
@@ -57,7 +68,7 @@ def payload(mode, values=(100, 200)):
             "tokenizer_digest": "none",
             "requested_device": "npu",
             "resolved_device": "NPU",
-            "device_warning": "",
+            "device_warning": "none",
             "hardware_label": "test-x1e",
             "process_architecture": "arm64",
             "host_processor": "Qualcomm Oryon",
@@ -108,6 +119,16 @@ def test_evidence_validation_rejects_attestation_mismatch_and_unknown_versions()
     with pytest.raises(ValueError, match="verified value"):
         validate_evidence(unknown_sdk, "managed")
 
+    producer_warning = payload("managed", (100,))
+    producer_warning["attestation"]["device_warning"] = "present"
+    with pytest.raises(ValueError, match="unexpected coercion warning"):
+        validate_evidence(producer_warning, "managed")
+
+    malformed_warning = payload("managed", (100,))
+    malformed_warning["attestation"]["device_warning"] = ""
+    with pytest.raises(ValueError, match="must be none or present"):
+        validate_evidence(malformed_warning, "managed")
+
 
 def test_evidence_validation_rejects_partial_and_duplicate_traces():
     partial = payload("managed", (100,))
@@ -122,12 +143,155 @@ def test_evidence_validation_rejects_partial_and_duplicate_traces():
     with pytest.raises(ValueError, match="duplicate"):
         validate_evidence(duplicate, "managed")
 
+    shifted = payload("managed", (100, 200))
+    shifted["records"][0]["step"] = 10
+    shifted["records"][1]["step"] = 11
+    shifted["records"][0]["cache_status"] = "reused"
+    shifted["records"][0]["cache_reason"] = "exact_extension"
+    with pytest.raises(ValueError, match="exact trace-step"):
+        validate_evidence(shifted, "managed")
+
+    reversed_records = payload("managed", (100, 200, 300))
+    reversed_records["records"].reverse()
+    with pytest.raises(ValueError, match="canonical trace-step order"):
+        validate_evidence(reversed_records, "managed")
+
+
+def test_evidence_validation_rejects_failed_or_impossible_measurements():
+    failed = payload("managed", (100,))
+    failed["records"][0]["result_code"] = 999
+    failed["records"][0]["stop_reason"] = "error"
+    with pytest.raises(ValueError, match="failed result code"):
+        validate_evidence(failed, "managed")
+
+    for field in (
+        "ttft_us", "prompt_us", "decode_us", "wall_us", "prompt_tokens",
+        "generated_tokens", "working_set_bytes",
+    ):
+        impossible = payload("managed", (100,))
+        impossible["records"][0][field] = 0
+        with pytest.raises(ValueError, match="must be positive"):
+            validate_evidence(impossible, "managed")
+
+    inverted = payload("managed", (100,))
+    inverted["records"][0]["wall_us"] = 99
+    with pytest.raises(ValueError, match="smaller than TTFT"):
+        validate_evidence(inverted, "managed")
+
+
+@pytest.mark.parametrize(
+    "trace", ("planning_removed", "invalid_deleted", "context_pruning")
+)
+def test_evidence_validation_enforces_branch_reset_sequence(trace):
+    branch = payload("managed", (100,))
+    branch["records"] = [record(trace, "managed", 100) for _ in range(4)]
+    decisions = (
+        ("cold", "first_request"),
+        ("reused", "exact_extension"),
+        ("reset", "branch"),
+        ("reused", "exact_extension"),
+    )
+    for step, (item, (status, reason)) in enumerate(
+        zip(branch["records"], decisions)
+    ):
+        item["step"] = step
+        item["cache_status"] = status
+        item["cache_reason"] = reason
+    validate_evidence(branch, "managed", expected_traces=frozenset({trace}))
+    branch["records"][2]["cache_status"] = "reused"
+    branch["records"][2]["cache_reason"] = "exact_extension"
+    with pytest.raises(ValueError, match="cache decision"):
+        validate_evidence(branch, "managed", expected_traces=frozenset({trace}))
+
+
+@pytest.mark.parametrize(
+    ("mode", "status", "reason"),
+    (
+        ("reset", "reset", "reset_each_call"),
+        ("legacy-test", "legacy-test", "raw_keep_cache"),
+    ),
+)
+def test_evidence_validation_enforces_nonmanaged_decisions(mode, status, reason):
+    evidence = payload(mode, (100, 200))
+    validate_evidence(evidence, mode)
+    assert all(item["cache_status"] == status for item in evidence["records"])
+    assert all(item["cache_reason"] == reason for item in evidence["records"])
+    evidence["records"][0]["cache_reason"] = "exact_extension"
+    with pytest.raises(ValueError, match="cache decision"):
+        validate_evidence(evidence, mode)
+
+
+def test_evidence_validation_enforces_roles_and_cancellation_location():
+    verifier = payload("managed", (100,))
+    verifier["records"] = [
+        record("verifier_detour", "managed", 100) for _ in range(3)
+    ]
+    for step, item in enumerate(verifier["records"]):
+        item["step"] = step
+        item["role"] = "verifier" if step == 1 else "driver"
+        if step == 0:
+            item["cache_status"] = "cold"
+            item["cache_reason"] = "first_request"
+        else:
+            item["cache_status"] = "reset"
+            item["cache_reason"] = "session_switch"
+    validate_evidence(
+        verifier, "managed", expected_traces=frozenset({"verifier_detour"})
+    )
+    verifier["records"][1]["role"] = "driver"
+    with pytest.raises(ValueError, match="trace role"):
+        validate_evidence(
+            verifier, "managed", expected_traces=frozenset({"verifier_detour"})
+        )
+
+    cancellation = payload("managed", (100,))
+    cancellation["records"] = [
+        record("cancellation_decode", "managed", 100) for _ in range(4)
+    ]
+    for step, item in enumerate(cancellation["records"]):
+        item["step"] = step
+    cancellation["records"][0]["cache_status"] = "cold"
+    cancellation["records"][0]["cache_reason"] = "first_request"
+    interrupted = cancellation["records"][1]
+    interrupted["callback_cancelled"] = True
+    interrupted["cache_status"] = "aborted"
+    interrupted["cache_reason"] = "callback_cancellation"
+    interrupted["revision"] = ""
+    interrupted["stop_reason"] = "callback_cancelled"
+    cancellation["records"][2]["cache_status"] = "reset"
+    cancellation["records"][2]["cache_reason"] = "parent_mismatch"
+    validate_evidence(
+        cancellation, "managed",
+        expected_traces=frozenset({"cancellation_decode"}),
+    )
+    interrupted["callback_cancelled"] = False
+    with pytest.raises(ValueError, match="cancellation placement"):
+        validate_evidence(
+            cancellation, "managed",
+            expected_traces=frozenset({"cancellation_decode"}),
+        )
+    interrupted["callback_cancelled"] = True
+    interrupted["cache_reason"] = "first_request"
+    with pytest.raises(ValueError, match="cache decision"):
+        validate_evidence(
+            cancellation, "managed",
+            expected_traces=frozenset({"cancellation_decode"}),
+        )
+    interrupted["cache_reason"] = "callback_cancellation"
+    cancellation["records"][2]["cache_status"] = "reused"
+    cancellation["records"][2]["cache_reason"] = "exact_extension"
+    with pytest.raises(ValueError, match="cache decision"):
+        validate_evidence(
+            cancellation, "managed",
+            expected_traces=frozenset({"cancellation_decode"}),
+        )
+
 
 def test_process_metrics_do_not_treat_calls_as_independent_runs():
     metrics = process_metrics(payload("managed", (100, 300)))
     assert set(metrics) == {"append_only"}
     assert metrics["append_only"]["p95_ttft_us"] == pytest.approx(290)
-    assert metrics["append_only"]["cache_hits"] == 2
+    assert metrics["append_only"]["cache_hits"] == 1
 
 
 def test_summary_cv_and_paired_bootstrap_use_process_blocks():

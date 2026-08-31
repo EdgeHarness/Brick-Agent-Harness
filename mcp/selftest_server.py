@@ -6,7 +6,7 @@ a fresh machine. This server answers it: it speaks the same stdio JSON-RPC an
 npx server speaks, and its tool names are chosen to exercise every branch of
 mcp_bridge's classifier.
 
-    python3 -m mcp.selftest_server            # spoken to over stdin/stdout
+    python3 mcp/selftest_server.py            # spoken to over stdin/stdout
     python3 agents/8b/run_agent.py --mcp selftest --mcp-list
 
 Expected in draft mode:

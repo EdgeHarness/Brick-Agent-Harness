@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+### BrickKV evidence gates now fail closed on inert caches and partial runs
+
+The native lineage test now executes 1,000 deterministic randomized branch
+mutations and separate 1, 2, 4 and 8-session canary campaigns. Snapdragon raw
+evidence must contain the exact trace steps, roles, cancellation outcome and
+per-trace cache-decision sequence, in canonical order, with successful native
+result codes and usable timing, token and memory measurements. The diagnostic
+and validator now share the exact `none|present` device-warning enum, so real
+producer output can pass without weakening NPU attestation. Source preflight
+compares every submitted
+file directly with its blob in the claimed commit, so Git index hints cannot
+hide a changed runner.
+
+The CHTC runner now refuses APC-on evidence without real query activity and an
+append-only hit, and refuses APC-off evidence containing any hit. Each study
+owns one Linux session and process group beneath a child subreaper. Timeout or
+a worker that changes sessions is adopted, signalled through stable pidfds,
+removed and causes the run to be rejected. Group and descendant cleanup run
+independently, and any signalling failure rejects the evidence. The final report
+retains a revision-bound per-file source manifest and the complete immutable,
+credential-free OCI reference in addition to aggregate digests. These are
+evidence-quality controls, not hardware performance results.
+
+### MCP selftest no longer collides with the official SDK package
+
+The registry launches its bundled stdio selftest by direct script path instead
+of importing `mcp.selftest_server`. This keeps the full offline suite valid even
+when the official third-party `mcp` package is installed in the same test
+environment.
+
 ### GPU evidence transport no longer trusts loopback TCP
 
 The CHTC vLLM study now uses a Unix-domain socket inside a fresh owner-only

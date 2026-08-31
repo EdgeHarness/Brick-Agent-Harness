@@ -30,6 +30,7 @@ from perf.brickkv.run_matrix import write_json_exclusive
 
 SCHEMA = "brickkv.vllm/1"
 ENDPOINT_BINDING = "private_unix_socket_api_key_v1"
+PROCESS_CONTAINMENT = "linux_subreaper_pidfd_v3"
 MAX_HTTP_BODY_BYTES = 16 * 1024 * 1024
 _ALLOWED_ENDPOINTS = {
     "GET": frozenset({"/health", "/v1/models", "/metrics"}),
@@ -45,6 +46,21 @@ COUNTERS = (
 
 def sha256_text(value: str) -> str:
     return "sha256:" + hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def valid_container_image(value: str, digest: str) -> bool:
+    repository_component = r"[a-z0-9]+(?:[._-][a-z0-9]+)*"
+    return (
+        isinstance(value, str)
+        and len(value) <= 512
+        and re.fullmatch(
+            r"docker://[A-Za-z0-9.-]+(?::[0-9]{1,5})?/"
+            rf"{repository_component}(?:/{repository_component})*"
+            r"@sha256:[0-9a-f]{64}",
+            value,
+        ) is not None
+        and value.endswith("@" + digest)
+    )
 
 
 def parse_prometheus(text: str) -> dict[str, float]:
@@ -366,7 +382,10 @@ class Server:
                 stdin=subprocess.DEVNULL,
                 stdout=self._log,
                 stderr=subprocess.STDOUT,
-                start_new_session=True,
+                # gpu_matrix is the process-group leader. Inheriting its group
+                # lets the supervisor terminate the study, vLLM, and workers as
+                # one containment unit after a timeout.
+                start_new_session=False,
                 env=environment,
             )
             self.transport = UnixHTTPTransport(
@@ -393,17 +412,11 @@ class Server:
 
     def __exit__(self, *_):
         if self.process is not None and self.process.poll() is None:
-            if os.name == "nt":
-                self.process.terminate()
-            else:
-                os.killpg(self.process.pid, signal.SIGTERM)
+            self.process.terminate()
             try:
                 self.process.wait(timeout=30)
             except subprocess.TimeoutExpired:
-                if os.name == "nt":
-                    self.process.kill()
-                else:
-                    os.killpg(self.process.pid, signal.SIGKILL)
+                self.process.kill()
                 self.process.wait(timeout=10)
         if self._log is not None:
             self._log.close()
@@ -503,6 +516,7 @@ def parse_args(argv=None):
     parser.add_argument("--served-model", default="brickkv-llama-3.1-8b")
     parser.add_argument("--model-archive-digest", required=True)
     parser.add_argument("--container-digest", required=True)
+    parser.add_argument("--container-image", required=True)
     parser.add_argument("--expected-gpu", required=True)
     parser.add_argument("--source-revision", required=True)
     parser.add_argument("--source-bundle-digest", required=True)
@@ -519,6 +533,11 @@ def parse_args(argv=None):
         parser.error("--model-archive-digest must be sha256:<64 lowercase hex>")
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", args.container_digest):
         parser.error("--container-digest must be sha256:<64 lowercase hex>")
+    if not valid_container_image(args.container_image, args.container_digest):
+        parser.error(
+            "--container-image must be a credential-free docker:// reference "
+            "pinned to --container-digest"
+        )
     if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", args.source_revision):
         parser.error("--source-revision must be a full lowercase Git object ID")
     if not re.fullmatch(r"sha256:[0-9a-f]{64}", args.source_bundle_digest):
@@ -542,6 +561,15 @@ def parse_args(argv=None):
 
 def main(argv=None):
     args = parse_args(argv)
+    if (
+        sys.platform != "linux"
+        or os.environ.get("BRICKKV_PROCESS_CONTAINMENT") != PROCESS_CONTAINMENT
+        or os.getpgrp() != os.getpid()
+        or os.getsid(0) != os.getpid()
+    ):
+        raise SystemExit(
+            "GPU study must be the Linux session/group leader under gpu_matrix"
+        )
     signal.signal(signal.SIGTERM, terminate_study)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     gpu = gpu_attestation(args.expected_gpu)
@@ -569,6 +597,7 @@ def main(argv=None):
             "source_bundle_digest": args.source_bundle_digest,
             "model_archive_digest": args.model_archive_digest,
             "container_digest": args.container_digest,
+            "container_image": args.container_image,
             "vllm_version": vllm_version,
             "gpu": gpu,
         },
@@ -580,6 +609,7 @@ def main(argv=None):
             "prefix_hash_algorithm": "sha256" if args.mode == "on" else None,
             "served_model_digest": sha256_text(args.served_model),
             "endpoint_binding": ENDPOINT_BINDING,
+            "process_containment": PROCESS_CONTAINMENT,
             "gpu_memory_utilization": args.gpu_memory_utilization,
             "server_timeout_s": args.server_timeout,
             "request_timeout_s": args.request_timeout,

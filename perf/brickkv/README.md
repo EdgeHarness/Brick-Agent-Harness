@@ -44,9 +44,20 @@ SOURCE_BUNDLE_DIGEST=$(python -m perf.brickkv.source_bundle \
   --revision "$SOURCE_REVISION" --verify-git)
 ```
 
-The remote wrapper recomputes this digest before model extraction. Evidence
-therefore binds the declared Git revision and the exact committed study code
-that was transferred. The model archive is streamed
+The verification reads every tracked blob directly from the claimed commit and
+compares its bytes with the submitted file. Git index hints such as
+`assume-unchanged` cannot hide a modified runner. The Git-free execute sandbox
+uses the separate `--transferred` mode only to recompute those already bound
+bytes.
+
+The remote wrapper binds the wrapper bytes that HTCondor actually executes to
+their canonical manifest path, then recomputes this digest before model
+extraction. The final
+report also retains a revision-bound per-file manifest with each runner's byte
+count and SHA-256. Evidence therefore binds the declared Git revision and the
+exact committed study code that was transferred. It also retains the complete,
+credential-free OCI image reference and verifies that its immutable digest is
+the declared container digest. The model archive is streamed
 through a regular-file-only extractor that rejects absolute paths, traversal,
 links, special files, duplicate files, and archives without exactly one
 `config.json`.
@@ -66,7 +77,12 @@ in-memory key that is neither placed on the command line nor written to
 evidence. The runner verifies process liveness, socket ownership, and the exact
 served model before and during measurement. This requires a pinned vLLM image
 whose `vllm serve` supports `--uds`. Prompts and generated text are not
-persisted.
+persisted. Each study and its vLLM worker tree run in one dedicated Linux
+session and process group under a child-subreaper supervisor. Timeout and
+abnormal-exit handling terminates the group, adopts workers that changed their
+session, sweeps every descendant, and refuses the run if any member remains.
+Publication also requires observed APC
+queries and an append-only cache hit with APC on, plus zero hits with APC off.
 
 ## Statistical outputs
 
