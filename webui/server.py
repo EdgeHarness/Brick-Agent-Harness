@@ -38,6 +38,7 @@ DEFAULT_PORT = 8765
 from agents._shared.run_agent import validate_config  # noqa: E402
 from harness.domain import load_domain  # noqa: E402
 from harness import chat  # noqa: E402
+from harness.kv_cache import PRODUCTION_CACHE_MODES  # noqa: E402
 from harness import mcp_bridge, mcp_config  # noqa: E402
 from harness.storage import agent_runtime_paths  # noqa: E402
 from webui.control import (  # noqa: E402
@@ -608,6 +609,8 @@ class Runs:
                 cmd += ["--small", options["small"]]
             if options.get("deep"):
                 cmd += ["--deep", options["deep"]]
+            if options.get("cache_mode"):
+                cmd += ["--cache-mode", options["cache_mode"]]
             if options.get("max_calls") is not None:
                 cmd += ["--max-calls", str(int(options["max_calls"]))]
             if options.get("thread"):
@@ -912,7 +915,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     body,
                     required=("agent", "domain", "task", "tiers", "max_calls"),
                     optional=("small", "deep", "mcp", "mcp_mode",
-                              "keep_office_tools", "thread", "model"),
+                              "keep_office_tools", "thread", "model",
+                              "cache_mode"),
                 )
                 agent = require_string(body["agent"], "agent", maximum=128)
                 task = require_string(body["task"], "task").strip()
@@ -940,8 +944,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                     "tiers": tiers,
                     "small": require_optional_string(body.get("small"), "small"),
                     "deep": require_optional_string(body.get("deep"), "deep"),
+                    "cache_mode": require_optional_string(
+                        body.get("cache_mode"), "cache_mode", maximum=16
+                    ) or "off",
                     "max_calls": max_calls,
                 }
+                if options["cache_mode"] not in PRODUCTION_CACHE_MODES:
+                    raise RequestError(
+                        400, "cache_mode must be one of "
+                        + ", ".join(PRODUCTION_CACHE_MODES)
+                    )
                 if options["thread"]:
                     chat.append(agent_dir(agent), options["thread"],
                                 "user", task)

@@ -26,6 +26,7 @@ import time
 from types import MappingProxyType
 
 from .llm import LLM
+from .kv_cache import CACHE_OFF, validate_cache_mode
 
 
 def _freeze(value):
@@ -61,7 +62,8 @@ def default_roles(base="llama3.1:8b", small=None, deep="qwen2.5:14b"):
 
 class ModelRouter:
     def __init__(self, roles=None, num_ctx=8192, log_path=None,
-                 default_role="driver", stream_hook=None):
+                 default_role="driver", stream_hook=None,
+                 cache_mode=CACHE_OFF, allow_legacy_test=False):
         if stream_hook is not None and not callable(stream_hook):
             raise TypeError("stream_hook must be callable or None")
         role_source = default_roles() if roles is None else roles
@@ -104,6 +106,10 @@ class ModelRouter:
         self.default_role = default_role
         self.log_path = log_path
         self.stream_hook = stream_hook
+        self.cache_mode = validate_cache_mode(
+            cache_mode, allow_legacy_test=allow_legacy_test
+        )
+        self.allow_legacy_test = allow_legacy_test
         self.call_log = []          # one record per model call
         self._clients = {}          # (model, keep_alive) -> LLM, reused
         self.reset_usage()
@@ -123,14 +129,17 @@ class ModelRouter:
             self._clients[key] = LLM(spec["model"], num_ctx=self.num_ctx,
                                      temperature=spec.get("temperature", 0.0),
                                      keep_alive=spec.get("keep_alive", "30m"),
-                                     stream_hook=self.stream_hook)
+                                     stream_hook=self.stream_hook,
+                                     cache_mode=self.cache_mode,
+                                     allow_legacy_test=self.allow_legacy_test)
         return self._clients[key]
 
     def retained_model_hints(self):
         """Tags configured without ``on_demand``; not a residency measurement."""
         return sorted({s["model"] for s in self.roles.values() if not s.get("on_demand")})
 
-    def chat(self, messages, force_json=False, num_predict=None, role=None):
+    def chat(self, messages, force_json=False, num_predict=None, role=None,
+             cache_request=None, cache_observer=None):
         if role is not None and role not in self.roles:
             raise ValueError(f"unknown model role {role!r}")
         resolved_role = role or self.default_role
@@ -142,7 +151,9 @@ class ModelRouter:
         t0 = time.time()
         content = llm.chat(messages, force_json=force_json, num_predict=np,
                            role=role or self.default_role,
-                           keep_alive=spec.get("keep_alive"))
+                           keep_alive=spec.get("keep_alive"),
+                           cache_request=cache_request,
+                           cache_observer=cache_observer)
         dt = time.time() - t0
 
         d_out = llm.output_tokens - before_out
@@ -156,6 +167,9 @@ class ModelRouter:
                "model": spec["model"], "adapter": spec.get("adapter"),
                "prompt_tokens": d_prompt, "output_tokens": d_out,
                "latency_ms": int(dt * 1000)}
+        cache_metadata = getattr(llm, "last_cache", None)
+        if cache_metadata is not None:
+            rec["cache"] = cache_metadata
         self.call_log.append(rec)
         if self.log_path:
             try:

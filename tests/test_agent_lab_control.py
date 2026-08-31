@@ -96,6 +96,25 @@ def test_api_rejects_missing_and_wrong_capabilities(lab_server):
     assert json.loads(body)["status"] == "idle"
 
 
+def test_agent_lab_rejects_synthetic_only_legacy_cache_mode(lab_server):
+    status, _, body = request(
+        lab_server,
+        "POST",
+        "/api/run",
+        body={
+            "agent": "8b",
+            "domain": "office_demo",
+            "task": "Use only synthetic data.",
+            "tiers": False,
+            "max_calls": None,
+            "cache_mode": "legacy-test",
+        },
+        headers=authorized(lab_server, origin=True, content_type=True),
+    )
+    assert status == 400
+    assert "cache_mode must be one of off, managed" in json.loads(body)["error"]
+
+
 def test_host_and_cross_origin_requests_are_refused(lab_server):
     status, _, _ = request(
         lab_server,
@@ -173,6 +192,14 @@ def test_stop_is_bound_to_the_current_run(lab_server):
     assert status == 200
     assert stopped == [True]
     lab_server.runs.current = None
+
+
+def test_browser_stop_sends_the_active_run_identity():
+    source = (Path(__file__).resolve().parents[1]
+              / "webui" / "static" / "app.js").read_text(
+        encoding="utf-8"
+    )
+    assert "post('/api/stop', { run_id: S.run })" in source
 
 
 def test_reset_is_serialized_with_run_start():

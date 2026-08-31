@@ -4,6 +4,16 @@ import time
 
 import requests
 
+from .kv_cache import (
+    CACHE_LEGACY_TEST,
+    CACHE_MANAGED,
+    CACHE_OFF,
+    ManagedCacheProtocolError,
+    validate_cache_mode,
+    validate_managed_metadata,
+    validate_managed_request,
+)
+
 OLLAMA_URL = "http://127.0.0.1:11434"
 
 
@@ -67,7 +77,8 @@ def model_installed(tag, installed):
 
 class LLM:
     def __init__(self, model, num_ctx=8192, temperature=0.0, timeout=900,
-                 keep_alive="30m", stream_hook=None, retries=0):
+                 keep_alive="30m", stream_hook=None, retries=0,
+                 cache_mode=CACHE_OFF, allow_legacy_test=False):
         if stream_hook is not None and not callable(stream_hook):
             raise TypeError("stream_hook must be callable or None")
         if type(retries) is not int or retries < 0:
@@ -85,6 +96,11 @@ class LLM:
         # Never retried: 4xx, or a response that parses but is malformed -
         # those reproduce identically.
         self.retries = retries
+        self.cache_mode = validate_cache_mode(
+            cache_mode, allow_legacy_test=allow_legacy_test
+        )
+        self._cache_capability_checked = False
+        self.last_cache = None
         self.reset_usage()
 
     def reset_usage(self):
@@ -94,11 +110,16 @@ class LLM:
         self.wall = 0.0
 
     def chat(self, messages, force_json=False, num_predict=700, role=None,
-             keep_alive=None):
+             keep_alive=None, cache_request=None, cache_observer=None):
         # role is accepted so a plain LLM is drop-in interchangeable with the
         # tiered ModelRouter (which selects a model from it); here it only
         # labels the stream events.
         hook = self.stream_hook
+        if cache_observer is not None and not callable(cache_observer):
+            raise TypeError("cache_observer must be callable or None")
+        self._validate_cache_request(cache_request)
+        if self.cache_mode != CACHE_OFF:
+            self._ensure_cache_capability()
         payload = {
             "model": self.model,
             "messages": messages,
@@ -113,10 +134,29 @@ class LLM:
         }
         if force_json:
             payload["format"] = "json"
+        if self.cache_mode == CACHE_MANAGED:
+            payload["brick_cache"] = dict(cache_request)
+        elif self.cache_mode == CACHE_LEGACY_TEST:
+            payload["brick_cache"] = {"mode": CACHE_LEGACY_TEST}
         if hook:
             hook("start", {"model": self.model, "role": role})
         t0 = time.time()
         content, data = self._attempt_with_retries(payload, hook)
+        cache_metadata = None
+        if self.cache_mode == CACHE_MANAGED:
+            cache_metadata = data.get("geniex_cache")
+            if cache_metadata is None:
+                raise ManagedCacheProtocolError(
+                    "managed cache response is missing final GenieX metadata"
+                )
+            validate_managed_metadata(cache_metadata)
+            self.last_cache = dict(cache_metadata)
+            if cache_observer is not None:
+                cache_observer(cache_metadata)
+        else:
+            # Unsolicited provider extensions are not part of off/legacy mode
+            # and must never reach persistent router diagnostics.
+            self.last_cache = None
         self.calls += 1
         self.wall += time.time() - t0
         self.prompt_tokens += data.get("prompt_eval_count", 0)
@@ -126,6 +166,48 @@ class LLM:
                          "output_tokens": data.get("eval_count", 0),
                          "ms": int((time.time() - t0) * 1000)})
         return content
+
+    def _validate_cache_request(self, cache_request):
+        if self.cache_mode == CACHE_OFF:
+            if cache_request is not None:
+                raise ManagedCacheProtocolError(
+                    "cache request supplied while cache mode is off"
+                )
+            return
+        if self.cache_mode == CACHE_LEGACY_TEST:
+            if cache_request is not None:
+                raise ManagedCacheProtocolError(
+                    "legacy-test does not accept managed lineage state"
+                )
+            return
+        validate_managed_request(cache_request)
+
+    def _ensure_cache_capability(self):
+        if self._cache_capability_checked:
+            return
+        try:
+            response = requests.get(f"{OLLAMA_URL}/api/version", timeout=2.0)
+            response.raise_for_status()
+            body = response.json()
+            if not isinstance(body, dict):
+                raise TypeError("version response must be an object")
+            brickkv = body.get("brickkv")
+            if not isinstance(brickkv, dict):
+                modes = []
+            else:
+                modes = brickkv.get("modes")
+                if not isinstance(modes, list) \
+                        or any(not isinstance(mode, str) for mode in modes):
+                    raise TypeError("BrickKV modes must be a string array")
+        except (requests.RequestException, ValueError, TypeError, AttributeError) as exc:
+            raise ManagedCacheProtocolError(
+                "local backend could not prove BrickKV cache support"
+            ) from exc
+        if self.cache_mode not in modes:
+            raise ManagedCacheProtocolError(
+                f"local backend does not support cache mode {self.cache_mode!r}"
+            )
+        self._cache_capability_checked = True
 
     def _attempt_with_retries(self, payload, hook):
         attempt = 0
@@ -164,6 +246,10 @@ class LLM:
                     if not line:
                         continue
                     chunk = json.loads(line)
+                    if chunk.get("error"):
+                        error = ManagedCacheProtocolError(str(chunk["error"]))
+                        error.streamed_partial = bool(parts)
+                        raise error
                     piece = chunk.get("message", {}).get("content", "")
                     if piece:
                         parts.append(piece)

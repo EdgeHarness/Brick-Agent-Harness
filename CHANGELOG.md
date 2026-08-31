@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+### BrickKV adds transactional prompt-cache reuse for patched GenieX
+
+Brick can now opt into a managed GenieX cache protocol without changing the
+model-facing message or tool contract. Each attempt creates independent random
+lineages for the driver, router and verifier. A parent revision advances only
+after the final response proves that generation committed. Missing metadata,
+an unpatched server, a rewritten transcript, a session switch, cancellation or
+generation failure fails closed instead of falling back to raw cache reuse.
+
+`off` remains the default. `managed` is the only cache mode exposed by the CLI
+and Agent Lab. The unsafe raw `GenieX-KeepCache` path is named `legacy-test` and
+is available only to the synthetic performance runner behind an explicit
+environment gate. Agent Lab rejects it.
+
+The change includes an Ollama-to-GenieX transport extension, a C++20
+`brickkv-replay` diagnostic built against the GenieX C API, randomized lineage
+tests, process-level Snapdragon experiment orchestration, and an independent
+vLLM automatic-prefix-cache study for CHTC L40S and A100 blocks. These runners
+do not establish a performance result by themselves. Snapdragon and CHTC
+claims remain prohibited until the recorded hardware gates in
+`docs/BRICKKV.md` pass.
+
 ### Correction: the stuck brake counted two of four failure shapes
 
 An adversarial review of the day's diff found the brake did not do what its

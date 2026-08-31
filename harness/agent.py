@@ -29,6 +29,7 @@ import re
 
 
 from . import guards as _guards
+from .kv_cache import CACHE_MANAGED, CACHE_OFF, CacheCoordinator
 
 # Abstract on purpose: concrete example content in an instruction becomes an
 # attractor that 1B models copy verbatim. Real examples live per-tool in docs.
@@ -118,6 +119,7 @@ class Episode:
         self.tool_errors = 0
         self.done_summary = None
         self.finished = False
+        self.cache = {"mode": CACHE_OFF, "events": []}
         self._note_hook = note_hook
 
     def note(self, kind, content):
@@ -198,13 +200,29 @@ class _AttemptLLM:
         self.delegate = delegate
         self.max_calls = max_calls
         self.calls = 0
+        self.cache_mode = getattr(delegate, "cache_mode", CACHE_OFF)
+        self._cache = (
+            CacheCoordinator() if self.cache_mode == CACHE_MANAGED else None
+        )
 
     def chat(self, *args, **kwargs):
         if self.calls >= self.max_calls:
             raise RuntimeError("attempt LLM-call budget exhausted")
+        if self._cache is not None:
+            role = kwargs.get("role") or "driver"
+            kwargs["cache_request"] = self._cache.request(role)
+            kwargs["cache_observer"] = (
+                lambda metadata, resolved_role=role:
+                self._cache.commit(metadata, resolved_role)
+            )
         result = self.delegate.chat(*args, **kwargs)
         self.calls += 1
         return result
+
+    def cache_diagnostics(self):
+        if self._cache is None:
+            return {"mode": self.cache_mode, "events": []}
+        return self._cache.diagnostics()
 
 
 # ------------------------------------------------------------------- RAW ----
@@ -272,6 +290,7 @@ def run_raw(llm, task_text, attempt):
         messages.append({"role": "user", "content": f"OBSERVATION: {obs}"})
         ep.note("observation", obs)
     attempt.snapshot()
+    ep.cache = llm.cache_diagnostics()
     return ep
 
 
@@ -585,6 +604,7 @@ def run_harness(llm, task_text, attempt):
         messages.append({"role": "user", "content": f"OBSERVATION: {obs}"})
         ep.note("observation", obs)
     attempt.snapshot()
+    ep.cache = llm.cache_diagnostics()
     return ep
 
 

@@ -34,6 +34,7 @@ generalization or performance.
 | [`docs/PROJECT_GUIDE.md`](docs/PROJECT_GUIDE.md) | canonical evidence, research and governance rules |
 | [`docs/EXECUTION.md`](docs/EXECUTION.md) | operational handbook and per-session protocol |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | what is implemented, what is simulated, trust boundaries |
+| [`docs/BRICKKV.md`](docs/BRICKKV.md) | transactional GenieX prompt-cache protocol and experiment runbook |
 | [`docs/FIXES.md`](docs/FIXES.md) | defect and remediation register, mapped to the gates |
 | [`docs/BRIX_DISCOVERY.md`](docs/BRIX_DISCOVERY.md) | the non-sensitive Brix discovery boundary |
 | [`bench/README.md`](bench/README.md) | the benchmark, and why current output is exploratory |

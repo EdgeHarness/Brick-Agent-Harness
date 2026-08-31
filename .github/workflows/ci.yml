@@ -12,6 +12,28 @@ permissions:
   contents: read
 
 jobs:
+  brickkv-lineage-sanitizers:
+    name: BrickKV lineage / ASan + UBSan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Configure independent lineage tests
+        run: >-
+          cmake -S tools/brickkv-replay -B build/brickkv-sanitize
+          -DBRICKKV_BUILD_REPLAY=OFF
+          -DBRICKKV_SANITIZE=ON
+          -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build independent lineage tests
+        run: cmake --build build/brickkv-sanitize --parallel
+
+      - name: Run independent lineage tests
+        run: ctest --test-dir build/brickkv-sanitize --output-on-failure
+
   pytest:
     name: Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
