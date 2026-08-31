@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import time
 
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -11,7 +12,7 @@ PROJECT = os.path.dirname(os.path.dirname(HERE))
 if PROJECT not in sys.path:
     sys.path.insert(0, PROJECT)
 
-from harness.agent import run_harness  # noqa: E402
+from harness.runtime_dispatch import run  # noqa: E402
 from harness.domain import load_domain  # noqa: E402
 from harness.llm import (LLM, OLLAMA_URL, ModelNotInstalled,
                          installed_models, model_installed)  # noqa: E402
@@ -51,6 +52,7 @@ ALLOWED_CONFIG_KEYS = frozenset(
         "note",
         "num_ctx",
         "router",
+        "runtime_protocol",
     }
 )
 REMOVED_CAPABILITY_FLAGS = frozenset(
@@ -84,6 +86,11 @@ def parse_flags(argv):
     parser.add_argument("--tiers", action="store_true")
     parser.add_argument("--small")
     parser.add_argument("--deep")
+    parser.add_argument(
+        "--runtime-protocol",
+        choices=("legacy", "receipt_v1"),
+        help="explicit agent-loop protocol; receipt_v1 fails closed",
+    )
     parser.add_argument("--domain", dest="domain_name")
     parser.add_argument(
         "--mcp",
@@ -117,6 +124,7 @@ def parse_flags(argv):
         "tiers": parsed.tiers or bool(parsed.small) or bool(parsed.deep),
         "small": parsed.small,
         "deep": parsed.deep,
+        "runtime_protocol": parsed.runtime_protocol,
         "domain_name": parsed.domain_name,
         "mcp": parsed.mcp,
         "mcp_mode": parsed.mcp_mode,
@@ -141,6 +149,11 @@ def validate_config(config):
             raise ValueError(
                 f"configured-agent field {required!r} must be nonempty"
             )
+    protocol = config.get("runtime_protocol")
+    if protocol is not None and protocol not in {"legacy", "receipt_v1"}:
+        raise ValueError(
+            "configured-agent runtime_protocol must be legacy or receipt_v1"
+        )
 
 
 def build_llm(config, options, log_dir, stream_hook=None):
@@ -353,6 +366,11 @@ def main(agent_dir=None, argv=None):
         verifier_rounds=profile.verify_rounds,
         guards=True,
         profile=profile,
+        runtime_protocol=(
+            options.get("runtime_protocol")
+            or config_data.get("runtime_protocol")
+            or "legacy"
+        ),
     )
 
     workdir = paths.workspace
@@ -361,7 +379,9 @@ def main(agent_dir=None, argv=None):
         str(paths.memory)
     )
     attempt = AttemptContext(
-        attempt_id=f"{domain.name}:{Path(agent_dir).name}",
+        attempt_id=(
+            f"{domain.name}:{Path(agent_dir).name}:{time.time_ns()}"
+        ),
         config=run_config,
         domain=domain,
         tools=registry,
@@ -372,6 +392,15 @@ def main(agent_dir=None, argv=None):
         artifact_dir=paths.artifacts,
         prompt_profile=domain.prompt_profile,
         prompt_rules=prompt_rules,
+        authoritative_task_id=next(
+            (
+                candidate.id
+                for candidate in domain.tasks
+                if connected is None
+                and candidate.prompt.strip() == task.strip()
+            ),
+            None,
+        ),
     )
     llm, router, router_fallback = build_llm(
         config_data, options, str(paths.logs)
@@ -415,13 +444,16 @@ def main(agent_dir=None, argv=None):
         print(f"  model: {config_data['model']}")
     print(f"  profile: {profile.label}")
     print(f"  budget: {run_config.max_calls} LLM calls")
-    episode = run_harness(llm, task, attempt)
+    print(f"  runtime protocol: {run_config.runtime_protocol}")
+    episode = run(llm, task, attempt)
 
     print("\n--- run finished ---")
     print(
         f"finished cleanly: {episode.finished}   llm calls: {llm.calls}   "
         f"tokens out: {llm.output_tokens}   wall: {llm.wall:.0f}s"
     )
+    if episode.terminal_status:
+        print(f"terminal status: {episode.terminal_status}")
     if router:
         for role, usage in router.usage_by_role().items():
             print(
@@ -457,6 +489,11 @@ def main(agent_dir=None, argv=None):
                 "domain_version": domain.version,
                 "transcript": episode.transcript,
                 "finished": episode.finished,
+                "runtime_protocol": episode.runtime_protocol,
+                "terminal_status": episode.terminal_status,
+                "completion": episode.completion,
+                "ledger": episode.ledger,
+                "lifecycle_path": episode.lifecycle_path,
                 "summary": episode.done_summary,
             },
             handle,

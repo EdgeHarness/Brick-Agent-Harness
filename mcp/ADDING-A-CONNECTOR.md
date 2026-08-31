@@ -227,7 +227,9 @@ Only two cases:
 [selftest_server.py](selftest_server.py) as the template. It is a complete MCP
 server in one stdlib file, speaks JSON-RPC 2.0 over stdio, and needs no
 dependencies. Point a registry entry at it with `"command": "python3"` and
-`"args": ["-m", "mcp.your_server"]`.
+an import name that does not collide with the official SDK, for example
+`"args": ["-m", "your_company_mcp"]`. Brick's fixture is launched through
+`harness.mcp_selftest_server` for this reason.
 
 **The server's argument shapes defeat the model.** Some servers take a whole
 API entity under one `body` argument with 25 top-level keys. `arg_hints` and

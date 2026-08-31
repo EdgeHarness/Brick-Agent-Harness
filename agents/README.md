@@ -53,6 +53,14 @@ From the repository root:
 python agents/8b/run_agent.py "List my simulated Wednesday meetings"
 ```
 
+For the opt-in fail-closed runtime on an exact graded task:
+
+```bash
+python agents/8b/run_agent.py --domain counter_demo \
+  --runtime-protocol receipt_v1 \
+  "Increase the counter by one twice."
+```
+
 The per-agent `run.ps1` files discover `python` or the Windows `py` launcher and
 honor the `PYTHON` override.
 
@@ -76,10 +84,12 @@ Office artifact generation remains confined to synthetic workspaces.
 
 ## Harness and audit limits
 
-The released development harness still has key-only validation, lenient parsing
-and fuzzy repair, a model-authored plan, a fail-open verifier, incomplete
-transcripts, untrusted keyword memory and limited context handling. These are
-current defects scheduled for S1R, not safety controls.
+The default legacy development harness still has key-only validation, lenient
+parsing and fuzzy repair, a model-authored plan, a fail-open verifier,
+incomplete transcripts, untrusted keyword memory and limited context handling.
+`receipt_v1` removes the fail-open completion path for known authoritative
+tasks, but does not turn arbitrary prompts into provable tasks or make the
+application production-safe.
 
 An accepted `done` means the loop stopped; it does not mean the task was
 correct. Logs, state, tool arguments and memory may contain sensitive text and

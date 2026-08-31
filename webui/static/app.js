@@ -1026,6 +1026,7 @@ function onBanner(e) {
   if (e.root) facts.push(`folder: ${e.root}`);
   if (e.yolo) facts.push('confirmations off');
   if (e.tiers) facts.push(`tiers: ${Object.values(e.tiers.roles).join(', ')}`);
+  if (e.runtime_protocol === 'receipt_v1') facts.push('receipt checks enabled');
   n.append(el('div', 'banner-facts', facts.join('  ·  ')));
 
   if (p) {
@@ -1366,7 +1367,15 @@ function onEnd(e) {
      is MAX_CALLS, a cap on model calls. Tokens are capped per-call by
      num_predict and bounded by num_ctx, but neither stops a run, so naming
      tokens here would describe a mechanism the harness does not have. */
-  card.append(el('div', 'endhead', e.finished ? 'Run complete' : 'Out of model calls'));
+  const stopped = e.terminal_status === 'cancelled';
+  const failed = e.terminal_status === 'failed';
+  const incomplete = e.terminal_status === 'incomplete';
+  const ending = e.finished ? 'Run complete'
+    : stopped ? 'Run cancelled'
+      : failed ? 'Run failed'
+        : incomplete ? 'Run incomplete'
+          : 'Out of model calls';
+  card.append(el('div', 'endhead', ending));
 
   // what it did: the model's own sentence, not the harness's tally
   const say = doneSummary || e.summary;
@@ -1538,6 +1547,7 @@ async function startRun() {
     model: $('model').value || null,
     mcp: mcpSelected(),
     mcp_mode: $('opt-mcp-mode').value,
+    runtime_protocol: $('opt-receipts').checked ? 'receipt_v1' : 'legacy',
   };
   resetRun();
   let res;
@@ -1930,7 +1940,11 @@ function mcpSelected() {
 
 /* The popover closes and takes any memory of what is switched on with it, so
    the count stays behind on the bar. */
-const OPT_LABELS = { 'opt-keep-office': 'office', 'opt-tiers': 'tiers' };
+const OPT_LABELS = {
+  'opt-keep-office': 'office',
+  'opt-tiers': 'tiers',
+  'opt-receipts': 'receipts',
+};
 function paintOptDots() {
   const on = Object.keys(OPT_LABELS).filter((id) => $(id).checked).map((id) => OPT_LABELS[id]);
   /* The limit lives in preferences now, but it still changes how a run behaves,
@@ -2056,7 +2070,9 @@ stepsToggle.onchange = () => {
 /* --------------------------------------------------------------- boot --- */
 
 $('run').onclick = startRun;
-$('stop').onclick = () => post('/api/stop').catch(() => {});
+$('stop').onclick = () => {
+  if (S.run) post('/api/stop', { run_id: S.run }).catch(() => {});
+};
 $('viewer-close').onclick = closeViewer;
 $('viewer').onclick = (e) => { if (e.target === $('viewer')) closeViewer(); };
 document.addEventListener('keydown', (e) => {

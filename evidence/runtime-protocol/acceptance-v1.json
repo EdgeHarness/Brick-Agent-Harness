@@ -1,0 +1,234 @@
+{
+  "cases": [
+    {
+      "case_digest": "1e367fe7a0561f332a732bcaf1bd61fb901553fa6756b9cf8fefb5d8a55f8764",
+      "id": "premature_done",
+      "outcomes": {
+        "legacy": {
+          "completion_status": null,
+          "false_completion": true,
+          "finished": true,
+          "lifecycle_valid": null,
+          "llm_calls": 3,
+          "protocol": "legacy",
+          "strict_success": false,
+          "successful_increments": 0,
+          "terminal_status": "completed",
+          "unverified_completion": false
+        },
+        "receipt_v1": {
+          "completion_status": "incomplete",
+          "false_completion": false,
+          "finished": false,
+          "lifecycle_valid": true,
+          "llm_calls": 3,
+          "protocol": "receipt_v1",
+          "strict_success": false,
+          "successful_increments": 0,
+          "terminal_status": "incomplete",
+          "unverified_completion": false
+        }
+      },
+      "set": "development"
+    },
+    {
+      "case_digest": "d59e55df3f92a4fd0cba01f703394305a5d0585c8706fdd34d76978966c6c311",
+      "id": "valid_success",
+      "outcomes": {
+        "legacy": {
+          "completion_status": null,
+          "false_completion": false,
+          "finished": true,
+          "lifecycle_valid": null,
+          "llm_calls": 5,
+          "protocol": "legacy",
+          "strict_success": true,
+          "successful_increments": 2,
+          "terminal_status": "completed",
+          "unverified_completion": false
+        },
+        "receipt_v1": {
+          "completion_status": "complete",
+          "false_completion": false,
+          "finished": true,
+          "lifecycle_valid": true,
+          "llm_calls": 5,
+          "protocol": "receipt_v1",
+          "strict_success": true,
+          "successful_increments": 2,
+          "terminal_status": "completed",
+          "unverified_completion": false
+        }
+      },
+      "set": "development"
+    },
+    {
+      "case_digest": "9ebdd2f086c8c52f473e99d3c05989bb86db0a3afcfeabfddf00dae74671af0d",
+      "id": "malformed_verifier",
+      "outcomes": {
+        "legacy": {
+          "completion_status": null,
+          "false_completion": true,
+          "finished": true,
+          "lifecycle_valid": null,
+          "llm_calls": 3,
+          "protocol": "legacy",
+          "strict_success": false,
+          "successful_increments": 0,
+          "terminal_status": "completed",
+          "unverified_completion": false
+        },
+        "receipt_v1": {
+          "completion_status": "incomplete",
+          "false_completion": false,
+          "finished": false,
+          "lifecycle_valid": true,
+          "llm_calls": 3,
+          "protocol": "receipt_v1",
+          "strict_success": false,
+          "successful_increments": 0,
+          "terminal_status": "incomplete",
+          "unverified_completion": false
+        }
+      },
+      "set": "acceptance"
+    },
+    {
+      "case_digest": "bfd65178bcec8499a91d20dc03e5f72447de5a391ec3db6ac6970bb19fa34d7b",
+      "id": "unplanned_extra_effect",
+      "outcomes": {
+        "legacy": {
+          "completion_status": null,
+          "false_completion": true,
+          "finished": true,
+          "lifecycle_valid": null,
+          "llm_calls": 6,
+          "protocol": "legacy",
+          "strict_success": false,
+          "successful_increments": 3,
+          "terminal_status": "completed",
+          "unverified_completion": false
+        },
+        "receipt_v1": {
+          "completion_status": "complete",
+          "false_completion": false,
+          "finished": true,
+          "lifecycle_valid": true,
+          "llm_calls": 7,
+          "protocol": "receipt_v1",
+          "strict_success": true,
+          "successful_increments": 2,
+          "terminal_status": "completed",
+          "unverified_completion": false
+        }
+      },
+      "set": "acceptance"
+    },
+    {
+      "case_digest": "4a9f5ac1669ce38f0bab03b81444f24b524bbf6a0a8702fc8ff8fa193f863cf9",
+      "id": "interactive_unknown",
+      "outcomes": {
+        "legacy": {
+          "completion_status": null,
+          "false_completion": false,
+          "finished": true,
+          "lifecycle_valid": null,
+          "llm_calls": 4,
+          "protocol": "legacy",
+          "strict_success": null,
+          "successful_increments": 0,
+          "terminal_status": "completed",
+          "unverified_completion": true
+        },
+        "receipt_v1": {
+          "completion_status": "unknown",
+          "false_completion": false,
+          "finished": false,
+          "lifecycle_valid": true,
+          "llm_calls": 4,
+          "protocol": "receipt_v1",
+          "strict_success": null,
+          "successful_increments": 0,
+          "terminal_status": "incomplete",
+          "unverified_completion": false
+        }
+      },
+      "set": "acceptance"
+    },
+    {
+      "case_digest": "d9a2fe819350eb9ff309dbcf7d2df412e0409b49e0c6a518f3131a0a20974e74",
+      "id": "valid_at_budget_boundary",
+      "outcomes": {
+        "legacy": {
+          "completion_status": null,
+          "false_completion": false,
+          "finished": false,
+          "lifecycle_valid": null,
+          "llm_calls": 3,
+          "protocol": "legacy",
+          "strict_success": true,
+          "successful_increments": 2,
+          "terminal_status": "incomplete",
+          "unverified_completion": false
+        },
+        "receipt_v1": {
+          "completion_status": "complete",
+          "false_completion": false,
+          "finished": true,
+          "lifecycle_valid": true,
+          "llm_calls": 3,
+          "protocol": "receipt_v1",
+          "strict_success": true,
+          "successful_increments": 2,
+          "terminal_status": "completed",
+          "unverified_completion": false
+        }
+      },
+      "set": "acceptance"
+    }
+  ],
+  "promotion_gate": {
+    "all_receipt_lifecycles_valid": true,
+    "false_completions_reduced": true,
+    "receipt_false_completions_zero": true,
+    "receipt_unverified_completions_zero": true,
+    "unplanned_extra_effect_prevented": true,
+    "unverified_completions_reduced": true,
+    "valid_success_regressions_zero": true
+  },
+  "promotion_pass": true,
+  "report_digest": "97665c291cce565473159c8a7907aa1ecddedf23831ba45344fac7a2f5ca08dd",
+  "schema_version": "brick.runtime-protocol-acceptance/1",
+  "scope": "deterministic control-path acceptance; not model quality or hardware performance",
+  "source_commit": "620f161c586c702a3495a6c6d1d65bb621515705",
+  "source_digests": {
+    "domains/counter_demo/pack.py": "72af9314c4ed63dbca949aa666afa4d89b482bcb49222c0c00246a279e37e4bf",
+    "domains/counter_demo/tools.py": "1f05f8baf88a2ab04e6710c2d283abf199b3b37f63342a3c4bc0110711f99aa1",
+    "domains/counter_demo/world.py": "1fbaa2eff029daa30cf83c0fd70ba2cffe596c385a3ea9a0f0feba92d8039b6d",
+    "evals/runtime_protocol/run_eval.py": "f99b4eba4b40beedea522d56b3439597a599d737e32de43995fe3c8299f5c031",
+    "harness/agent.py": "dcce07dda727797263585ecae91b88afa5b7cc1f0713f785384a37ae3530e87d",
+    "harness/completion.py": "3c1784a4b933e5fd9e7e189d87c94554668b443f14c0f12148355310763dd2ec",
+    "harness/domain.py": "20fdb4717f8fa66f283736092a26e7cf271c51c55a6cab9cf3d55bf7bf945fc3",
+    "harness/grading.py": "c9f960d6d38d4f82615116821dc3a95a691695e153355c1b45559ae7af665784",
+    "harness/lifecycle.py": "f6bd91bf26e32c2dd099ae13833bd2350198d59710ea4e37bf279aea7877cb30",
+    "harness/managed_agent.py": "8e81f21ce70e2c41acced0b2a2e105f152c66c6d1d3faabdee85c0b0e178520d",
+    "harness/model_router.py": "48739e965bee2b204223709faa1a10e72c07d02b82694eca946cda4db365a3bf",
+    "harness/profiles.py": "3337fe867a74995035656f3da30966f5974857bcad10f1a438df97ff17f890b4",
+    "harness/receipts.py": "091314ca201cac3456765ebac32a1d4bd8f670d993a90dfeb5aeece292e1e7fb",
+    "harness/router_contract.py": "9ccf24d76d9b97983d1b5980ec2266729a1a9a732c993429e2c1b68d0b7de4ec",
+    "harness/runtime.py": "ba8b982e2d975d53932ca780ef288370569fcea15f682e4e0dd0e2e08a56a6a8",
+    "harness/runtime_dispatch.py": "5553b800de02c5c891b056199dad54668d9ac1ee4f731e3ec83e244fc85f9179",
+    "harness/runtime_recipe.py": "ca7140fff82969faed96d83ca2bb0d4f5a16b55344605b036451cba55c919594",
+    "harness/tool_pipeline.py": "a9495ca8827fad13a5f7dc69c96c3bed095ca2ccf07dac27ad4a21726d207d10",
+    "harness/tools.py": "8c3ed7c7d5c77e80f9a824037ddd8497eb30279953296ee21580be3fc641437b"
+  },
+  "source_state": "working tree bound by content digests",
+  "summary": {
+    "acceptance_cases": 4,
+    "legacy_false_completions": 2,
+    "legacy_unverified_completions": 1,
+    "receipt_false_completions": 0,
+    "receipt_unverified_completions": 0,
+    "valid_success_regressions": 0
+  }
+}

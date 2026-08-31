@@ -13,6 +13,8 @@ Brick currently provides:
 - `office_demo@0.1.0`, a synthetic office pack with 12 hand-authored tasks;
 - `counter_demo@0.1.0`, a one-task structural portability fixture;
 - raw and scaffolded loops over attempt-selected domain tools;
+- an opt-in receipt-verified interactive runtime, isolated from the frozen
+  legacy benchmark path;
 - domain-aware CLI, benchmark, report and Agent Lab surfaces;
 - a candidate production marker-last evidence store and S4 attestor; and
 - experimental LoRA generators and training scripts, but no shipped corpus,
@@ -65,6 +67,13 @@ harness/
   llm.py              per-instance Ollama client, counters and stream hook
   model_router.py     optional role routing; adapters remain metadata
   agent.py            raw and harness loops
+  runtime_dispatch.py explicit legacy/receipt-v1 selection
+  managed_agent.py    fail-closed receipt-v1 model loop
+  lifecycle.py        durable hash-chained lifecycle records
+  receipts.py         signed execution receipts and task ledger
+  tool_pipeline.py    pre-dispatch barrier and normalized execution order
+  router_contract.py  versioned fixed-role capability manifest
+  runtime_recipe.py   source-traceable runtime assembly digest
 
 domains/
   office_demo/        office world, tools, graders and versioned S6G generators
@@ -103,6 +112,20 @@ tests/                offline characterization and architecture tests
 
 Only the benchmark exposes both `raw` and `harness`; CLI and Agent Lab run the
 harness condition.
+
+CLI and Agent Lab additionally expose an explicit runtime protocol choice.
+`legacy` remains the default. `receipt_v1` lives behind
+`harness.runtime_dispatch`, requires a durable dispatch record and authentic
+receipt for every grounded tool step, and accepts completion only from a domain
+postcondition. Unknown completion terminates as incomplete. The full contract,
+measured engineering acceptance result, and limitations are in
+[`RECEIPT_RUNTIME.md`](RECEIPT_RUNTIME.md).
+
+The receipt ledger proves that real successful tool calls grounded the accepted
+tool sequence; it does not infer argument-level permission from free-form plan
+text. Exact argument digests bind receipts to executions. External writes and
+shell calls add a complete operator-visible canonical request, and reject it
+before confirmation or execution when it exceeds the shared 4,096-byte bound.
 
 `harness.evidence` is the production S4 storage primitive in the current
 candidate. It creates hash-bound run manifests, canonical attempt identities,
@@ -150,6 +173,9 @@ classification for every tool active in that attempt while allowing unused
 pack classifications. Since Q0, released in `v0.4.0`, a missing confirmation
 callback denies instead of manufacturing consent. The policy is still not
 identity, authorization, an OS sandbox, rollback, or a security boundary.
+The receipt-v1 pipeline nevertheless treats its confirmation representation as
+an authorization invariant: the UI and executor may not receive different
+versions of the action.
 
 `ToolRegistry` deep-freezes stored public specifications and returns defensive
 copies from public accessors. It checks tool names and required/unknown argument

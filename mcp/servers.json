@@ -18,7 +18,7 @@
       "Draft mode should expose list/read/draft/modify and DROP send/reply/login."
     ],
     "command": "python3",
-    "args": ["-m", "mcp.selftest_server"],
+    "args": ["-m", "harness.mcp_selftest_server"],
     "cwd": "${ROOT}",
     "prefix": "mail_",
     "drop": ["login"],
@@ -107,10 +107,10 @@
     "prefix": "",
     "notes": [
       "Runs under the SERVER'S OWN interpreter, not this repository's.",
-      "That is not a preference. This repository already has a local package",
-      "called mcp/ (this registry, the selftest server), and the official MCP",
-      "SDK on PyPI is also called mcp, so installing the server here shadows",
-      "our own package and 'import mcp.selftest_server' stops resolving.",
+      "That is not a preference. The official MCP SDK on PyPI is called mcp,",
+      "so third-party servers should own their dependency set. Brick's local",
+      "selftest uses harness.mcp_selftest_server to avoid that package name,",
+      "but this does not make shared server dependencies safe in general.",
       "A separate process should own its dependencies anyway; the process",
       "boundary is the whole point of MCP.",
       "Development wiring: the path assumes the sibling checkout and a POSIX",

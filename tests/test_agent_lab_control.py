@@ -218,6 +218,19 @@ def test_runner_confirmation_channel_accepts_only_its_exact_run_and_nonce(monkey
     assert emitted[0][1]["nonce"] == "n" * 43
 
 
+def test_runner_confirmation_channel_rejects_oversized_detail_without_emitting():
+    emitted = []
+    channel = control.ConfirmationChannel(
+        io.StringIO(""),
+        lambda event, **fields: emitted.append((event, fields)),
+        "run-a",
+        timeout=0.2,
+    )
+    detail = "\N{ROCKET}" * control.MAX_CONFIRMATION_DETAIL_BYTES
+    assert channel.confirm("send", detail) is False
+    assert emitted == []
+
+
 def test_external_effect_policy_denies_before_executor_and_records_attempt():
     calls = []
     observed = []
@@ -509,15 +522,21 @@ def test_security_headers_are_on_static_and_api_responses(lab_server):
     assert headers["Referrer-Policy"] == "no-referrer"
 
 
-def _pumped_run(events_out, *, thread, journal, code=0, status="running"):
+def _pumped_run(
+    events_out, *, thread, journal, code=0, status="running", stdout_text=""
+):
     """A Run shaped the way _pump reads one, without a subprocess."""
     class FakeProcess:
         stderr = io.StringIO("")
-        stdout = io.StringIO("")
+        stdout = io.StringIO(stdout_text)
 
         @staticmethod
         def wait():
             return code
+
+    def add(event):
+        events_out.append(event)
+        journal.append(event)
 
     return SimpleNamespace(
         id="run-t",
@@ -526,9 +545,10 @@ def _pumped_run(events_out, *, thread, journal, code=0, status="running"):
         process_tree=SimpleNamespace(close=lambda: None),
         confirmations=SimpleNamespace(clear=lambda: None),
         status=status,
+        terminal_status=None,
         options={"thread": thread},
         events=SimpleNamespace(snapshot=lambda: list(enumerate(journal))),
-        add=lambda event: events_out.append(event),
+        add=add,
     )
 
 
@@ -561,7 +581,7 @@ def test_a_run_that_never_summarized_reports_what_it_did(tmp_path, monkeypatch):
     lab.Runs()._pump(_pumped_run([], thread=tid, journal=journal, code=7))
     said = [m["text"] for m in chat.messages(str(tmp_path), tid)
             if m["role"] == "assistant"]
-    assert said == ["(no summary) Steps completed: mail_list_mail x2, "
+    assert said == ["[FAILED] (no summary) Steps completed: mail_list_mail x2, "
                     "mail_draft_mail."]
 
 
@@ -573,13 +593,44 @@ def test_a_run_that_did_nothing_says_so(tmp_path, monkeypatch):
     lab.Runs()._pump(_pumped_run([], thread=tid, journal=[], code=7))
     said = [m["text"] for m in chat.messages(str(tmp_path), tid)
             if m["role"] == "assistant"]
-    assert said == ["(no summary, and no step completed)"]
+    assert said == ["[FAILED] (no summary, and no step completed)"]
 
 
 def test_a_failed_call_is_not_reported_as_a_completed_step():
     assert lab.thread_reply(
         {"actions": [{"tool": "mail_send_mail", "ok": False}]}, "failed"
-    ) == "(no summary, and no step completed)"
+    ) == "[FAILED] (no summary, and no step completed)"
+
+
+def test_receipt_terminal_status_controls_process_status_and_thread_reply(
+    tmp_path, monkeypatch
+):
+    from harness import chat
+
+    monkeypatch.setattr(lab, "agent_dir", lambda agent: str(tmp_path))
+    tid = chat.create(str(tmp_path), "do the thing")
+    end = {
+        "t": "end",
+        "summary": "One step remains.",
+        "terminal_status": "incomplete",
+    }
+    events = []
+    run = _pumped_run(
+        events,
+        thread=tid,
+        journal=[],
+        stdout_text=json.dumps(end) + "\n",
+    )
+    lab.Runs()._pump(run)
+
+    assert run.status == "incomplete"
+    assert events[-1] == {"t": "closed", "status": "incomplete", "code": 0}
+    said = [
+        message["text"]
+        for message in chat.messages(str(tmp_path), tid)
+        if message["role"] == "assistant"
+    ]
+    assert said == ["[INCOMPLETE] One step remains."]
 
 
 def test_a_run_outside_a_conversation_writes_no_turn(tmp_path, monkeypatch):
@@ -611,6 +662,7 @@ def test_the_call_field_cannot_offer_more_than_the_server_accepts():
     source = (root / "webui/static/app.js").read_text(encoding="utf-8")
     assert 'id="opt-calls" min="2" max="80"' in html
     assert "Math.min(80, Math.max(2, n))" in source
+    assert "post('/api/stop', { run_id: S.run })" in source
     assert 'max_calls", minimum=2, maximum=80' in (
         root / "webui/server.py").read_text(encoding="utf-8")
 
