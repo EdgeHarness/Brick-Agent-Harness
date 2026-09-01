@@ -110,6 +110,25 @@ and stop a fresh server for each randomized mode block, preserve its launch
 receipt, perform the required warm-up and measured repetitions, and compare
 reset and managed output hashes before producing statistics.
 
+Before any repeated run, compare one reset replay and one managed replay with
+the fail-closed development gate:
+
+```powershell
+python -m perf.brickkv.server_equivalence `
+  --execute `
+  --reset C:/evidence/brickkv-server-reset.json `
+  --managed C:/evidence/brickkv-server-managed.json `
+  --source-revision BRICK_COMMIT `
+  --output C:/evidence/brickkv-server-equivalence.json
+```
+
+The comparator requires matching source, GenieX, model, runtime-module and
+trace attestations. It compares output digest, finish reason and generated-token
+count for every completed trace step, requires at least one real managed hit,
+and requires that a hit lower prompt-token work. It writes a secret-free failed
+report and exits nonzero on divergence. A pass authorizes only the development
+NPU equivalence gate, never a latency or final research claim.
+
 ## Snapdragon GenieX matrix
 
 `run_matrix.py` launches one `brickkv-replay` process for each mode in a

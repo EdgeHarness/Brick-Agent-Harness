@@ -53,6 +53,7 @@ TRACE_ORDER = (
 MODES = ("reset", "legacy-test", "managed")
 SMOKE_SOURCE_FILES = tuple(sorted((
     "perf/brickkv/geniex_managed_smoke.py",
+    "perf/brickkv/server_equivalence.py",
     "perf/brickkv/geniex_server_replay.py",
     "perf/brickkv/run_matrix.py",
     "perf/brickkv/source_bundle.py",

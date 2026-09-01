@@ -23,12 +23,12 @@ and the next request started cold. That remains direct evidence for disconnect
 rollback in this specific run. It does not repair or outweigh the separately
 reproduced truncation failure.
 
-The controlled reproducer established the boundary precisely:
+The first controlled reproducer established the protocol-v1 truncation boundary:
 
 - after a `finish_reason: length` turn, the managed extension and reset
   extension produced different output digests and different prompt-token use;
-- after an EOS-complete exact-marker turn, the managed and reset extensions
-  matched;
+- one EOS-complete exact-marker extension matched, but this narrow case did not
+  establish multi-turn equivalence;
 - the cause was the QAIRT incremental chat-template path retaining a physical
   turn that was not terminated like the cold full-history template.
 
@@ -38,6 +38,24 @@ reusable; all other stop reasons reset physical state and expose
 `reusable: false`. The following exact extension remains logically traceable
 but does not redundantly reset the already-clean handle. Hardware revalidation
 of that commit is required before this document can record readiness again.
+
+A later disposable protocol-v2 production-path replay at Brick commit
+`92faad3d8939cc4568a25068a026dea8d073c955` exercised all 31 trace records.
+Reset mode was deterministic across two runs, but managed mode differed from
+reset on 11 of 30 completed records, including nine append-only turns. Source
+inspection found a lower runtime defect: QAIRT stopped when it sampled the
+terminal EOG token without evaluating that boundary into the retained KV
+state. The cold chat template included the assistant boundary; the retained
+path did not. This result rejects QAIRT reuse even though the managed lineage
+decisions themselves were correct.
+
+The disposable run used a GenieX artifact from a CI run that failed its ARM64
+race gate, so it is diagnostic evidence only and is not listed as accepted
+evidence below. The runtime fix is isolated in
+`qualcomm/geniex-qairt-plugin#50`, with a CPU fixture asserting that EOG remains
+absent from visible output but is present in KV history. A separate GenieX
+integration branch pins only that backport. A fresh CI artifact and a passing
+automated reset-versus-managed comparison are required before advancing.
 
 ## Attested inputs
 
@@ -106,7 +124,9 @@ complete the final benchmark, or substitute for the planned Llama 3.1 8B
 study. The evidence itself records both
 `performance_claim_authorized: false` and `final_benchmark_complete: false`.
 
-The remaining gates are a policy-compliant Windows ARM64 build of protocol
-version 2, a passing corrected smoke and reset-versus-managed replay on the
-NPU, and access to the licensed Qualcomm AI Hub Llama 3.1 8B QAIRT artifact.
-Only after those gates pass can the repeated fresh-process matrix begin.
+The managed-cache GenieX branch now has a fully green CI run, including the
+native ARM64 race gate. The remaining gates are a green Windows ARM64 build of
+the isolated QAIRT backport, a passing corrected smoke and automated
+reset-versus-managed replay on the NPU, and access to the licensed Qualcomm AI
+Hub Llama 3.1 8B QAIRT artifact. Only after those gates pass can the repeated
+fresh-process matrix begin.

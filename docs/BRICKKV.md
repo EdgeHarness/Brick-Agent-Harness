@@ -13,8 +13,11 @@ The first attested Snapdragon QAIRT protocol smoke is recorded in
 [`BRICKKV_NPU_READINESS.md`](BRICKKV_NPU_READINESS.md). A broader production-
 path replay then found that protocol version 1 could reuse a length-truncated
 turn. That evidence is retained as a reproducible failure record and is
-superseded for readiness. Protocol version 2 must pass the corrected smoke and
-replay before any performance matrix starts.
+superseded for readiness. A later protocol-version-2 diagnostic replay found a
+separate QAIRT defect: the runtime omitted the sampled assistant EOG boundary
+from retained KV, so correct lineage decisions could still produce different
+outputs from reset mode. The focused QAIRT fix and Brick's automated paired
+equivalence gate must both pass on the NPU before any performance matrix starts.
 
 ## Why raw retained state is unsafe
 

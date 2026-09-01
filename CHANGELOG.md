@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### BrickKV now rejects semantically divergent QAIRT cache hits
+
+A 31-request protocol-v2 NPU replay found that correct lineage decisions were
+not sufficient for output correctness. Two reset runs were identical, while
+managed mode differed from reset on 11 of 30 completed records. Source tracing
+showed that QAIRT sampled an assistant end-of-generation token but did not
+evaluate that boundary into retained KV state. The focused runtime correction
+is submitted as `qualcomm/geniex-qairt-plugin#50` with a CPU fixture that keeps
+the terminal token out of visible output while proving it is present in KV.
+
+`server_equivalence.py` now makes the development gate executable. It accepts
+only matching, complete, secret-free reset and managed attestations; compares
+every completed output digest, finish reason and generated-token count;
+requires a real managed hit and measured prompt-token reduction; writes a
+failed report before returning nonzero; and never authorizes a performance or
+final research claim. Future server replay evidence binds the comparator into
+its revision-verified source bundle.
+
 ### BrickKV protocol 2 resets truncated model state
 
 The first broad QAIRT server replay found a correctness flaw that the earlier
