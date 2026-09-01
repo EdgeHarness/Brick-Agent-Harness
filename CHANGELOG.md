@@ -32,6 +32,13 @@ attested regular file, and rechecks those bytes after the traces. Replay schema
 The matrix now carries a fail-closed claim gate for the predeclared append-only
 latency threshold and explicitly never authorizes the broader research claim.
 
+A disposable Snapdragon preflight also showed that the smoke runner's old
+eight-token default could force an otherwise correct short QAIRT response to
+stop at the length limit before EOS. Normal managed smoke requests now allow
+64 tokens, matching the production-path replay default. The dedicated
+one-token truncation case is unchanged, so non-reusable-state recovery remains
+an explicit acceptance gate.
+
 ### BrickKV can measure the attested production GenieX streaming path
 
 The new `geniex_server_replay.py` executes all six fixed cache traces through

@@ -68,6 +68,35 @@ def test_smoke_schema_is_versioned_for_reusable_state():
     assert smoke.SCHEMA == "brickkv.geniex-managed-smoke/2"
 
 
+def test_smoke_managed_requests_allow_a_model_to_reach_eos():
+    captured = {}
+    client = smoke.GenieXLoopbackClient(
+        "http://127.0.0.1:18182",
+        "qualcomm/qwen3_0_6b",
+        30,
+        object(),
+    )
+
+    def post(payload, headers):
+        captured["payload"] = json.loads(payload)
+        captured["headers"] = headers
+        return {}
+
+    client._post = post
+    client.managed(
+        [{"role": "user", "content": "Synthetic request."}],
+        smoke.SESSION_A,
+    )
+
+    # The smoke check proves that completed generations are reusable. A tiny
+    # default can turn a correct backend into a false failure by forcing the
+    # provider's length stop before it emits EOS. The explicit truncation case
+    # below still overrides this budget with one token.
+    assert smoke.DEFAULT_MANAGED_MAX_TOKENS == 64
+    assert captured["payload"]["max_completion_tokens"] == 64
+    assert captured["headers"] == {"GenieX-Cache-Session": smoke.SESSION_A}
+
+
 def test_smoke_cache_record_requires_exact_decision_and_shape():
     clean = response()["geniex_cache"]
     assert validate_cache_metadata(clean, "cold")["reason"] == "first_request"

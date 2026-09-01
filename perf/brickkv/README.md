@@ -11,7 +11,9 @@ checks cold, exact-extension, branch, session-switch, parent-mismatch and
 forced-disconnect recovery decisions. Protocol version 2 also deliberately
 forces a one-token truncation, requires `reusable: false`, and requires the
 next exact extension to report `reset / previous_not_reusable`. It writes only
-cache metadata, token counts and output hashes. Every request verifies that the selected Windows PID
+cache metadata, token counts and output hashes. Ordinary smoke requests allow
+up to 64 tokens so a correct model can emit EOS; only the explicit truncation
+case is capped at one token. Every request verifies that the selected Windows PID
 still owns the exact listener and runs the exact hashed GenieX executable. The
 runner also hashes the model artifact tree and verifies its own source files
 byte-for-byte against the claimed HEAD commit. The output always marks

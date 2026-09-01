@@ -37,6 +37,7 @@ HARDWARE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._()+-]{0,127}")
 CACHE_FIELDS = frozenset({"mode", "status", "revision", "reason", "reusable"})
 CACHE_PROTOCOL_HEADER = "GenieX-Cache-Protocol"
 CACHE_PROTOCOL_VERSION = "2"
+DEFAULT_MANAGED_MAX_TOKENS = 64
 REQUIRED_RUNTIME_MODULES = frozenset({
     "geniex.dll",
     "geniex_core.dll",
@@ -725,7 +726,7 @@ class GenieXLoopbackClient:
         session: str,
         parent: str = "",
         *,
-        max_tokens: int = 8,
+        max_tokens: int = DEFAULT_MANAGED_MAX_TOKENS,
     ) -> dict:
         headers = {"GenieX-Cache-Session": session}
         if parent:
