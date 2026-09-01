@@ -124,9 +124,55 @@ complete the final benchmark, or substitute for the planned Llama 3.1 8B
 study. The evidence itself records both
 `performance_claim_authorized: false` and `final_benchmark_complete: false`.
 
-The managed-cache GenieX branch now has a fully green CI run, including the
-native ARM64 race gate. The remaining gates are a green Windows ARM64 build of
-the isolated QAIRT backport, a passing corrected smoke and automated
-reset-versus-managed replay on the NPU, and access to the licensed Qualcomm AI
-Hub Llama 3.1 8B QAIRT artifact. Only after those gates pass can the repeated
-fresh-process matrix begin.
+At the time of this superseded record, the remaining gates included a fresh
+Windows ARM64 build of the isolated QAIRT correction, a passing corrected smoke
+and automated reset-versus-managed replay on the NPU, and access to the
+licensed Qualcomm AI Hub Llama 3.1 8B QAIRT artifact. The build status has since
+advanced as recorded below; the NPU correctness and licensed-model gates have
+not.
+
+## Corrected ARM64 artifact checkpoint
+
+GenieX integration commit `2f3e16109db2b4200bc0ff843107b23ec1ab7b2b`
+was built by GitHub Actions run
+[`33472872147`](https://github.com/samkwak188/GenieX/actions/runs/33472872147).
+The Windows ARM64 CLI and SDK builds, Windows ARM64 Go tests, Python tests and
+SDK CI test all passed. The run's three failures were Qualcomm Device Cloud
+jobs whose logs reported a missing `QDC_API_KEY`; they are not source or local
+build failures. Follow-up GenieX commit `5c963e87` makes those device cells
+explicitly unavailable when the secret is absent; when the secret exists, the
+same QDC commands still run.
+
+The downloaded `cli-windows-arm64` artifact is bound by these measured hashes:
+
+| Item | SHA-256 |
+| --- | --- |
+| Downloaded `artifact.zip` | `9ae7c84278b76baa607f88fdfcc49bb42cabf081c681fb9fe4b1cd7fc74189d3` |
+| Fresh `geniex.exe` | `4e2421ddd11fc2919c7e3ea04ecd410d4181ed658e2a579cb2fc8d845dff3423` |
+| Fresh `geniex.dll` | `ad98a9615123c8570b30502e4f0211f6e87d1af2c190e2a19e63abc672eedf04` |
+| Fresh QAIRT `geniex_plugin.dll` | `d448470ba2e4186efd7207859212c28b4d281d45b76842c5325abbfca85eaf78` |
+| Fresh QAIRT `geniex_core.dll` | `57c5616b9b08b950e91fd8ef885975f7f7fcacd1384bb140d63fdcc5495d75a2` |
+| Fresh QAIRT `geniex_vlm.dll` | `dc38c5fb31aaca4c16ac2db4efc56ac17c8f83c4ba9837e50f70614d3fd61753` |
+
+The source and evidence runners remain green locally: 156 focused BrickKV
+tests passed with five platform-specific skips, and the GenieX handler and
+service Go packages passed. A terminal security diff scan reviewed all 24
+changed GenieX surfaces, sealed successfully, and reported zero findings.
+
+This artifact has **not** passed the NPU correctness gate on this machine.
+Windows Application Control blocked the fresh `geniex.exe`. A second,
+validation-only package used the previously approved protocol-v2 server shell
+and replaced only QAIRT `geniex_core.dll` with the fresh corrected binary. The
+process started, but the first model request returned HTTP 500. Windows Code
+Integrity events 3033 and 3077 identify the cause precisely: the fresh
+`geniex_core.dll` did not meet the active enterprise signing policy. The exact
+server PID was stopped and port 18182 was confirmed closed.
+
+No policy was disabled or bypassed. The next Snapdragon gate requires the same
+reviewed source to be delivered through a trusted signing/build path, or an
+administrator-approved code-integrity rule for the exact recorded hashes.
+After that, rerun protocol-v2 smoke, paired reset/managed replay and strict
+equivalence before any repeated timing study. This checkpoint authorizes no
+cache-correctness, latency or final research claim. The available Qwen 3 0.6B
+bundle is still only a protocol smoke model; the licensed Llama 3.1 8B QAIRT
+bundle remains required for the planned performance claim.

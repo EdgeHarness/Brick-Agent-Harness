@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+### Corrected ARM64 runtime is built but awaits trusted execution
+
+GenieX integration commit `2f3e1610` produced successful Windows ARM64 CLI,
+SDK, Go, Python and SDK-CI jobs. The downloaded CLI artifact and its critical
+runtime modules are now SHA-256 attested in `docs/BRICKKV_NPU_READINESS.md`.
+The three failed device-cloud jobs lacked `QDC_API_KEY`; they did not fail a
+source test. Follow-up GenieX commit `5c963e87` skips QDC only when that secret
+is unavailable and preserves normal device execution when it is present.
+
+Local Windows Application Control rejected both the fresh CLI and, when tested
+inside the previously approved protocol-v2 shell, the corrected QAIRT core.
+Code Integrity events 3033 and 3077 explain the observed first-request HTTP
+500. No bypass was attempted, no NPU correctness result was produced, and no
+performance claim is authorized. Hardware validation now waits on a trusted
+signed build or an administrator-approved rule for the exact recorded hashes.
+
 ### BrickKV now rejects semantically divergent QAIRT cache hits
 
 A 31-request protocol-v2 NPU replay found that correct lineage decisions were
