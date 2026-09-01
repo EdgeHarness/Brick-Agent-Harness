@@ -123,6 +123,9 @@ python -m perf.brickkv.run_matrix `
   --plugin qairt `
   --plugin-path C:/GX/GenieX/sdk/pkg-geniex/lib `
   --sdk-lib C:/GX/GenieX/sdk/pkg-geniex/lib `
+  --runtime-artifact C:/GX/GenieX/sdk/pkg-geniex/lib/geniex.dll `
+  --runtime-artifact C:/GX/GenieX/sdk/pkg-geniex/lib/qairt/geniex_plugin.dll `
+  --runtime-artifact C:/GX/GenieX/sdk/pkg-geniex/lib/qairt/geniex_core.dll `
   --device npu `
   --hardware-label X1E-78-100 `
   --expected-process-architecture arm64 `
@@ -132,6 +135,18 @@ python -m perf.brickkv.run_matrix `
 
 Review the attestation, raw process records, summary and integrity manifest
 before interpreting a result.
+
+The controller verifies every native runner byte against the claimed Git HEAD,
+passes the revision-bound bundle digest that was embedded at compile time,
+hashes the exact replay executable, and requires each declared runtime artifact
+to be loaded and unchanged. Matrix schema `brickkv.matrix/2` retains the
+per-file source and runtime manifests rather than relying on a revision label.
+The report authorizes only a narrow append-only BrickKV latency claim, and only
+when at least ten paired process runs show a median p95 TTFT improvement of 20
+percent or more, the clustered bootstrap interval excludes zero, prompt-token
+work decreases, decode throughput stays within 5 percent, outputs match reset
+mode, and every variability cell is stable. It always leaves the broader final
+research claim unauthorized.
 
 ## CHTC vLLM matrix
 

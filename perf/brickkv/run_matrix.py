@@ -20,16 +20,23 @@ import subprocess
 import sys
 from typing import Iterable
 
+from perf.brickkv.source_bundle import (
+    NATIVE_SOURCE_FILES,
+    source_bundle_manifest,
+    verify_git_revision,
+)
+
 
 MODES = ("reset", "legacy-test", "managed")
-EXPECTED_SCHEMA = "brickkv.replay/3"
+EXPECTED_SCHEMA = "brickkv.replay/4"
 TRACE_ORDER = (
     "append_only", "planning_removed", "invalid_deleted", "context_pruning",
     "verifier_detour", "cancellation_decode",
 )
 TRACE_NAMES = frozenset(TRACE_ORDER)
 ATTESTATION_FIELDS = frozenset({
-    "source_revision", "sdk_version", "plugin", "plugin_version",
+    "source_revision", "source_bundle_digest", "replay_executable_digest",
+    "runtime_bundle_digest", "sdk_version", "plugin", "plugin_version",
     "model_digest", "tokenizer_digest", "requested_device",
     "resolved_device", "device_warning", "hardware_label",
     "process_architecture", "host_processor", "system_product_name",
@@ -185,6 +192,12 @@ def validate_evidence(
         raise ValueError("attestation contains an unsupported process architecture")
     if not SHA256_PATTERN.fullmatch(str(attestation["model_digest"])):
         raise ValueError("attestation contains an invalid model digest")
+    for key in (
+        "source_bundle_digest", "replay_executable_digest",
+        "runtime_bundle_digest",
+    ):
+        if not SHA256_PATTERN.fullmatch(str(attestation[key])):
+            raise ValueError(f"attestation contains an invalid {key}")
     tokenizer_digest = attestation["tokenizer_digest"]
     if tokenizer_digest != "none" and not SHA256_PATTERN.fullmatch(
         str(tokenizer_digest)
@@ -534,6 +547,67 @@ def needs_extra_repetitions(summary: dict, threshold: float) -> list[dict]:
     return unstable
 
 
+def performance_claim_gate(
+    summary: dict,
+    improvements: dict,
+    mismatches: list[dict],
+    unstable: list[dict],
+    *,
+    minimum_blocks: int = 10,
+    minimum_improvement_percent: float = 20.0,
+    minimum_decode_ratio: float = 0.95,
+) -> dict:
+    """Authorize only the narrow, predeclared append-only cache claim."""
+    reasons = []
+    result = improvements.get("append_only")
+    if result is None:
+        reasons.append("append_only_comparison_missing")
+        result = {}
+    blocks = result.get("paired_process_blocks", 0)
+    if blocks < minimum_blocks:
+        reasons.append("insufficient_process_blocks")
+    if result.get("median_improvement_percent", float("-inf")) \
+            < minimum_improvement_percent:
+        reasons.append("p95_ttft_improvement_below_threshold")
+    interval = result.get("bootstrap_95_ci_percent")
+    if not isinstance(interval, list) or len(interval) != 2 or interval[0] <= 0:
+        reasons.append("p95_ttft_confidence_interval_includes_zero")
+    if result.get("prompt_tokens_avoided_median", 0) <= 0:
+        reasons.append("no_measured_prompt_token_reduction")
+    try:
+        reset_decode = summary["reset"]["append_only"][
+            "decode_tokens_per_s_median"
+        ]
+        managed_decode = summary["managed"]["append_only"][
+            "decode_tokens_per_s_median"
+        ]
+        decode_ratio = managed_decode / reset_decode if reset_decode > 0 else 0.0
+    except (KeyError, TypeError, ZeroDivisionError):
+        decode_ratio = 0.0
+    if decode_ratio < minimum_decode_ratio:
+        reasons.append("material_decode_throughput_regression")
+    if mismatches:
+        reasons.append("synthetic_output_or_result_mismatch")
+    if unstable:
+        reasons.append("run_to_run_variability_above_threshold")
+    return {
+        "scope": "append_only synthetic Snapdragon BrickKV p95 TTFT",
+        "authorized": not reasons,
+        "final_research_claim_authorized": False,
+        "criteria": {
+            "minimum_process_blocks": minimum_blocks,
+            "minimum_p95_ttft_improvement_percent": minimum_improvement_percent,
+            "bootstrap_95_ci_lower_bound_must_exceed_zero": True,
+            "minimum_decode_throughput_ratio": minimum_decode_ratio,
+            "prompt_token_reduction_required": True,
+            "synthetic_output_equivalence_required": True,
+            "stable_cells_required": True,
+        },
+        "observed_decode_throughput_ratio": decode_ratio,
+        "reasons": reasons,
+    }
+
+
 def sha256_file(path: Path) -> str:
     before = path.lstat()
     if stat.S_ISLNK(before.st_mode) or not stat.S_ISREG(before.st_mode):
@@ -551,6 +625,47 @@ def sha256_file(path: Path) -> str:
     ):
         raise RuntimeError(f"evidence entry changed while hashing: {path}")
     return digest.hexdigest()
+
+
+def runtime_bundle_manifest(paths: list[Path]) -> dict:
+    """Hash the exact runtime modules with the native runner's framing."""
+    if not paths:
+        raise RuntimeError("at least one runtime artifact is required")
+    entries = []
+    names = set()
+    for path in paths:
+        metadata = path.lstat()
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+            raise RuntimeError(f"runtime artifact is not a regular non-link file: {path}")
+        name = path.name.lower()
+        if not re.fullmatch(r"[a-z0-9._+-]{1,128}", name):
+            raise RuntimeError(f"runtime artifact has an unsafe file name: {path.name}")
+        if name in names:
+            raise RuntimeError(f"runtime artifact file name is duplicated: {path.name}")
+        names.add(name)
+        before = (metadata.st_size, metadata.st_mtime_ns)
+        digest = "sha256:" + sha256_file(path)
+        after_metadata = path.lstat()
+        after = (after_metadata.st_size, after_metadata.st_mtime_ns)
+        if (
+            stat.S_ISLNK(after_metadata.st_mode)
+            or not stat.S_ISREG(after_metadata.st_mode)
+            or before != after
+        ):
+            raise RuntimeError(f"runtime artifact changed while hashing: {path}")
+        entries.append({"name": name, "bytes": metadata.st_size, "sha256": digest})
+    entries.sort(key=lambda item: item["name"])
+    material = bytearray(b"brickkv-runtime-bundle/1\0")
+    for entry in entries:
+        material.extend(entry["name"].encode("ascii"))
+        material.append(0)
+        material.extend(entry["sha256"].encode("ascii"))
+        material.append(0)
+    return {
+        "schema_version": "brickkv.runtime-bundle/1",
+        "runtime_bundle_digest": "sha256:" + hashlib.sha256(material).hexdigest(),
+        "files": entries,
+    }
 
 
 def write_json_exclusive(path: Path, payload: dict) -> None:
@@ -611,7 +726,11 @@ def _run_one(args, root: Path, phase: str, block: int, mode: str,
         str(args.append_turns), "--cancel-after-tokens",
         str(args.cancel_after_tokens), "--hardware-label", args.hardware_label,
         "--source-revision", args.source_revision,
+        "--source-bundle-digest", args.source_bundle_digest,
+        "--replay-digest", args.replay_digest,
     ]
+    for artifact in args.runtime_artifact:
+        command.extend(("--runtime-artifact", str(artifact)))
     if args.tokenizer:
         command.extend(("--tokenizer", str(args.tokenizer)))
     try:
@@ -665,6 +784,9 @@ def _run_one(args, root: Path, phase: str, block: int, mode: str,
     payload = json.loads(destination.read_text(encoding="utf-8"))
     expected_attestation = {
         "source_revision": args.source_revision,
+        "source_bundle_digest": args.source_bundle_digest,
+        "replay_executable_digest": args.replay_digest,
+        "runtime_bundle_digest": args.runtime_bundle_digest,
         "plugin": args.plugin,
         "requested_device": args.device,
         "hardware_label": args.hardware_label,
@@ -712,6 +834,10 @@ def parse_args(argv=None):
     parser.add_argument("--plugin-path", type=Path, required=True)
     parser.add_argument("--sdk-lib", type=Path, required=True)
     parser.add_argument(
+        "--runtime-artifact", type=Path, action="append", required=True,
+        help="exact loaded GenieX/runtime module; repeat for every required module",
+    )
+    parser.add_argument(
         "--device", choices=("cpu", "gpu", "npu", "hybrid"), default="npu"
     )
     parser.add_argument("--hardware-label", required=True)
@@ -758,8 +884,31 @@ def main(argv=None):
     ):
         if not path.exists():
             raise SystemExit(f"{label} does not exist: {path}")
+    replay_metadata = args.replay.lstat()
+    if stat.S_ISLNK(replay_metadata.st_mode) or not stat.S_ISREG(
+        replay_metadata.st_mode
+    ):
+        raise SystemExit("replay executable must be one regular non-link file")
+    for path, label in (
+        (args.plugin_path, "plugin path"), (args.sdk_lib, "SDK library path"),
+    ):
+        metadata = path.lstat()
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+            raise SystemExit(f"{label} must be one non-link directory")
+    for path in args.runtime_artifact:
+        if not path.exists():
+            raise SystemExit(f"runtime artifact does not exist: {path}")
     if args.tokenizer and not args.tokenizer.exists():
         raise SystemExit(f"tokenizer artifact does not exist: {args.tokenizer}")
+    source_root = Path(__file__).resolve().parents[2]
+    verify_git_revision(source_root, args.source_revision, NATIVE_SOURCE_FILES)
+    source_manifest = source_bundle_manifest(
+        source_root, args.source_revision, NATIVE_SOURCE_FILES
+    )
+    runtime_manifest = runtime_bundle_manifest(args.runtime_artifact)
+    args.source_bundle_digest = source_manifest["source_bundle_digest"]
+    args.replay_digest = "sha256:" + sha256_file(args.replay)
+    args.runtime_bundle_digest = runtime_manifest["runtime_bundle_digest"]
     args.output.mkdir(parents=True, exist_ok=False)
 
     environment = os.environ.copy()
@@ -795,8 +944,25 @@ def main(argv=None):
         }))
     }
     mismatches = correctness_mismatches(measured, "reset", "managed")
+    claim_gate = performance_claim_gate(
+        summary, improvements, mismatches, unstable
+    )
+    verify_git_revision(source_root, args.source_revision, NATIVE_SOURCE_FILES)
+    if source_bundle_manifest(
+        source_root, args.source_revision, NATIVE_SOURCE_FILES
+    ) != source_manifest:
+        raise RuntimeError("native study source bundle changed during the matrix")
+    if "sha256:" + sha256_file(args.replay) != args.replay_digest:
+        raise RuntimeError("replay executable changed during the matrix")
+    if runtime_bundle_manifest(args.runtime_artifact) != runtime_manifest:
+        raise RuntimeError("runtime artifacts changed during the matrix")
     report = {
-        "schema_version": "brickkv.matrix/1",
+        "schema_version": "brickkv.matrix/2",
+        "provenance": {
+            "source": source_manifest,
+            "replay_executable_digest": args.replay_digest,
+            "runtime": runtime_manifest,
+        },
         "statistical_unit": "one brickkv-replay process",
         "warmup_blocks": args.warmups,
         "measurement_blocks": len({item["block"] for item in measured}),
@@ -809,6 +975,7 @@ def main(argv=None):
             "passed": not mismatches,
             "mismatches": mismatches,
         },
+        "performance_claim_gate": claim_gate,
         "observations": observations,
     }
     write_json_exclusive(args.output / "report.json", report)

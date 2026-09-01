@@ -8,8 +8,10 @@ from perf.brickkv.run_matrix import (
     mode_order,
     needs_extra_repetitions,
     paired_bootstrap_improvement,
+    performance_claim_gate,
     percentile,
     process_metrics,
+    runtime_bundle_manifest,
     summarize_observations,
     validate_evidence,
     write_json_exclusive,
@@ -57,11 +59,14 @@ def payload(mode, values=(100, 200)):
             item["cache_status"] = "cold"
             item["cache_reason"] = "first_request"
     return {
-        "schema_version": "brickkv.replay/3",
+        "schema_version": "brickkv.replay/4",
         "status": "complete",
         "created_at": "2026-08-30T12:00:00Z",
         "attestation": {
             "source_revision": "c" * 40,
+            "source_bundle_digest": "sha256:" + "1" * 64,
+            "replay_executable_digest": "sha256:" + "2" * 64,
+            "runtime_bundle_digest": "sha256:" + "3" * 64,
             "sdk_version": "1.2.3",
             "plugin": "qairt",
             "plugin_version": "2.0.0",
@@ -130,6 +135,35 @@ def test_evidence_validation_rejects_attestation_mismatch_and_unknown_versions()
     malformed_warning["attestation"]["device_warning"] = ""
     with pytest.raises(ValueError, match="must be none or present"):
         validate_evidence(malformed_warning, "managed")
+
+
+def test_runtime_bundle_manifest_is_order_independent_and_content_bound(tmp_path):
+    first = tmp_path / "runtime-a.dll"
+    second = tmp_path / "runtime-b.dll"
+    first.write_bytes(b"one")
+    second.write_bytes(b"two")
+    forward = runtime_bundle_manifest([first, second])
+    reverse = runtime_bundle_manifest([second, first])
+    assert forward == reverse
+    assert forward["runtime_bundle_digest"] == (
+        "sha256:c1e2a53eb4f63e167531868d3137155f"
+        "34a9b72a34a60d4f6b27b6e2dcbd8115"
+    )
+    second.write_bytes(b"changed")
+    assert runtime_bundle_manifest([first, second]) != forward
+
+
+def test_runtime_bundle_manifest_rejects_duplicate_names(tmp_path):
+    left = tmp_path / "left"
+    right = tmp_path / "right"
+    left.mkdir()
+    right.mkdir()
+    (left / "geniex.dll").write_bytes(b"one")
+    (right / "GENIEX.DLL").write_bytes(b"two")
+    with pytest.raises(RuntimeError, match="duplicated"):
+        runtime_bundle_manifest([
+            left / "geniex.dll", right / "GENIEX.DLL",
+        ])
 
 
 def test_evidence_validation_enforces_plugin_context_semantics():
@@ -380,6 +414,37 @@ def test_correctness_gate_detects_a_managed_output_divergence():
         "trace": "append_only",
         "reason": "output digest sequence differs",
     }]
+
+
+def test_performance_claim_gate_is_narrow_and_fail_closed():
+    summary = {
+        "reset": {"append_only": {"decode_tokens_per_s_median": 100.0}},
+        "managed": {"append_only": {"decode_tokens_per_s_median": 98.0}},
+    }
+    improvements = {
+        "append_only": {
+            "paired_process_blocks": 10,
+            "median_improvement_percent": 25.0,
+            "bootstrap_95_ci_percent": [10.0, 30.0],
+            "prompt_tokens_avoided_median": 100.0,
+        }
+    }
+    passed = performance_claim_gate(summary, improvements, [], [])
+    assert passed["authorized"] is True
+    assert passed["final_research_claim_authorized"] is False
+
+    failed = performance_claim_gate(
+        summary,
+        {"append_only": dict(
+            improvements["append_only"],
+            bootstrap_95_ci_percent=[-1.0, 30.0],
+        )},
+        [{"reason": "mismatch"}],
+        [{"cv": 0.2}],
+    )
+    assert failed["authorized"] is False
+    assert "p95_ttft_confidence_interval_includes_zero" in failed["reasons"]
+    assert "synthetic_output_or_result_mismatch" in failed["reasons"]
 
 
 def test_integrity_manifest_hashes_files_but_not_itself(tmp_path):

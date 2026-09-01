@@ -23,6 +23,15 @@ cold extension. The NPU shim also accepts cache metadata only on one terminal
 streaming chunk and preserves the provider's actual finish reason. The evidence
 schemas are versioned accordingly.
 
+The native replay evidence is now revision-bound rather than accepting a Git
+label at face value. CMake embeds the full source revision and deterministic
+native-source bundle digest. At run time, the executable independently hashes
+its own image, verifies that every declared runtime module is loaded from the
+attested regular file, and rechecks those bytes after the traces. Replay schema
+4 and matrix schema 2 retain the source, executable, and runtime manifests.
+The matrix now carries a fail-closed claim gate for the predeclared append-only
+latency threshold and explicitly never authorizes the broader research claim.
+
 ### BrickKV can measure the attested production GenieX streaming path
 
 The new `geniex_server_replay.py` executes all six fixed cache traces through

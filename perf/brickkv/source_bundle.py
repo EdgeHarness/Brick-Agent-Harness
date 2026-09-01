@@ -20,6 +20,18 @@ SOURCE_FILES = tuple(sorted((
     "perf/brickkv/chtc/run_vllm_apc.sh",
     "perf/brickkv/chtc/vllm-apc.sub",
 )))
+NATIVE_SOURCE_FILES = tuple(sorted((
+    "perf/__init__.py",
+    "perf/brickkv/__init__.py",
+    "perf/brickkv/run_matrix.py",
+    "perf/brickkv/source_bundle.py",
+    "tools/brickkv-replay/CMakeLists.txt",
+    "tools/brickkv-replay/include/brickkv/lineage.hpp",
+    "tools/brickkv-replay/include/brickkv/runtime_config.hpp",
+    "tools/brickkv-replay/src/lineage.cpp",
+    "tools/brickkv-replay/src/main.cpp",
+    "tools/brickkv-replay/src/sha256.cpp",
+)))
 REVISION_PATTERN = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 
 
@@ -121,6 +133,7 @@ def verify_git_revision(root: Path, revision: str, paths=SOURCE_FILES) -> None:
 def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--revision", required=True)
+    parser.add_argument("--bundle", choices=("gpu", "native"), default="gpu")
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--verify-git", action="store_true")
     mode.add_argument(
@@ -129,9 +142,10 @@ def main(argv=None):
     )
     args = parser.parse_args(argv)
     root = Path(__file__).resolve().parents[2]
+    paths = NATIVE_SOURCE_FILES if args.bundle == "native" else SOURCE_FILES
     if args.verify_git:
-        verify_git_revision(root, args.revision)
-    print(source_bundle_digest(root, args.revision))
+        verify_git_revision(root, args.revision, paths)
+    print(source_bundle_digest(root, args.revision, paths))
 
 
 if __name__ == "__main__":

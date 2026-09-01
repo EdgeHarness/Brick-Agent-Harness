@@ -30,8 +30,17 @@
 #include <psapi.h>
 #else
 #include <fcntl.h>
+#include <link.h>
 #include <sys/resource.h>
 #include <unistd.h>
+#endif
+
+#ifndef BRICKKV_SOURCE_REVISION
+#define BRICKKV_SOURCE_REVISION ""
+#endif
+
+#ifndef BRICKKV_SOURCE_BUNDLE_DIGEST
+#define BRICKKV_SOURCE_BUNDLE_DIGEST ""
 #endif
 
 namespace {
@@ -51,6 +60,9 @@ struct Options {
     std::string trace = "all";
     std::string hardware_label;
     std::string source_revision;
+    std::string source_bundle_digest;
+    std::string replay_digest;
+    std::vector<std::filesystem::path> runtime_artifacts;
     int context = 8192;
     int max_tokens = 32;
     int append_turns = 12;
@@ -156,6 +168,91 @@ std::string process_architecture() {
 #else
     return "unknown";
 #endif
+}
+
+std::filesystem::path running_executable() {
+#ifdef _WIN32
+    std::vector<wchar_t> buffer(32768U, L'\0');
+    const auto length = GetModuleFileNameW(
+        nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+    if (length == 0 || length >= buffer.size()) {
+        throw std::system_error(
+            static_cast<int>(GetLastError()), std::system_category(),
+            "resolve running replay executable");
+    }
+    return std::filesystem::canonical(
+        std::filesystem::path(std::wstring(buffer.data(), length)));
+#else
+    return std::filesystem::canonical("/proc/self/exe");
+#endif
+}
+
+std::vector<std::filesystem::path> loaded_modules() {
+    std::vector<std::filesystem::path> paths;
+#ifdef _WIN32
+    std::vector<HMODULE> modules(256U);
+    DWORD needed = 0;
+    while (true) {
+        if (!EnumProcessModules(
+                GetCurrentProcess(), modules.data(),
+                static_cast<DWORD>(modules.size() * sizeof(HMODULE)), &needed)) {
+            throw std::system_error(
+                static_cast<int>(GetLastError()), std::system_category(),
+                "enumerate replay modules");
+        }
+        if (needed <= modules.size() * sizeof(HMODULE)) break;
+        modules.resize((needed + sizeof(HMODULE) - 1U) / sizeof(HMODULE));
+    }
+    modules.resize(needed / sizeof(HMODULE));
+    std::vector<wchar_t> buffer(32768U, L'\0');
+    for (const auto module : modules) {
+        const auto length = GetModuleFileNameExW(
+            GetCurrentProcess(), module, buffer.data(),
+            static_cast<DWORD>(buffer.size()));
+        if (length == 0 || length >= buffer.size()) {
+            throw std::system_error(
+                static_cast<int>(GetLastError()), std::system_category(),
+                "resolve replay module path");
+        }
+        paths.push_back(std::filesystem::canonical(
+            std::filesystem::path(std::wstring(buffer.data(), length))));
+    }
+#else
+    struct Collector {
+        static int collect(dl_phdr_info* info, std::size_t, void* opaque) {
+            if (info->dlpi_name && *info->dlpi_name) {
+                auto& output = *static_cast<std::vector<std::filesystem::path>*>(opaque);
+                std::error_code error;
+                auto path = std::filesystem::canonical(info->dlpi_name, error);
+                if (!error) output.push_back(std::move(path));
+            }
+            return 0;
+        }
+    };
+    dl_iterate_phdr(&Collector::collect, &paths);
+#endif
+    return paths;
+}
+
+bool same_file(const std::filesystem::path& left,
+               const std::filesystem::path& right) {
+    std::error_code error;
+    const bool equal = std::filesystem::equivalent(left, right, error);
+    return !error && equal;
+}
+
+void verify_runtime_modules_loaded(
+    const std::vector<std::filesystem::path>& artifacts) {
+    const auto modules = loaded_modules();
+    for (const auto& artifact : artifacts) {
+        if (std::none_of(modules.begin(), modules.end(), [&](const auto& module) {
+                return same_file(artifact, module);
+            })) {
+            throw std::runtime_error(
+                "attested runtime artifact is not loaded: " +
+                artifact.filename().string());
+        }
+    }
 }
 
 std::string trim_text(std::string value) {
@@ -375,7 +472,9 @@ std::string random_session() {
         << "  --mode reset|legacy-test|managed|all\n"
         << "  --trace append_only|planning_removed|invalid_deleted|context_pruning|verifier_detour|cancellation_decode|all\n"
         << "  --output PATH --context N --max-tokens N --append-turns N\n"
-        << "  --cancel-after-tokens N --hardware-label TEXT --source-revision TEXT\n";
+        << "  --cancel-after-tokens N --hardware-label TEXT --source-revision TEXT\n"
+        << "  --source-bundle-digest sha256:HEX --replay-digest sha256:HEX\n"
+        << "  --runtime-artifact PATH (repeat for every required loaded module)\n";
     std::exit(exit_code);
 }
 
@@ -422,6 +521,9 @@ Options parse_options(const int argc, char** argv) {
         else if (key == "--trace") options.trace = value;
         else if (key == "--hardware-label") options.hardware_label = value;
         else if (key == "--source-revision") options.source_revision = value;
+        else if (key == "--source-bundle-digest") options.source_bundle_digest = value;
+        else if (key == "--replay-digest") options.replay_digest = value;
+        else if (key == "--runtime-artifact") options.runtime_artifacts.emplace_back(value);
         else if (key == "--context") options.context = parse_positive(value, key);
         else if (key == "--max-tokens") options.max_tokens = parse_positive(value, key);
         else if (key == "--append-turns") options.append_turns = parse_positive(value, key);
@@ -433,12 +535,27 @@ Options parse_options(const int argc, char** argv) {
     }
     if (options.model.empty() || options.plugin.empty() ||
         options.output.empty() || options.hardware_label.empty() ||
-        options.source_revision.empty()) {
+        options.source_revision.empty() || options.source_bundle_digest.empty() ||
+        options.replay_digest.empty() || options.runtime_artifacts.empty()) {
         usage("--model, --plugin, --output, --hardware-label, and "
-              "--source-revision are required");
+              "all provenance arguments are required");
     }
     if (!full_lowercase_revision(options.source_revision)) {
         usage("--source-revision must be a full lowercase Git object ID");
+    }
+    const auto valid_digest = [](const std::string_view value) {
+        return value.size() == 71U && value.substr(0, 7) == "sha256:" &&
+               std::all_of(value.begin() + 7, value.end(), [](const char ch) {
+                   return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f');
+               });
+    };
+    if (!valid_digest(options.source_bundle_digest) ||
+        !valid_digest(options.replay_digest)) {
+        usage("source bundle and replay digests must be sha256:<64 lowercase hex>");
+    }
+    if (options.source_revision != BRICKKV_SOURCE_REVISION ||
+        options.source_bundle_digest != BRICKKV_SOURCE_BUNDLE_DIGEST) {
+        usage("source provenance does not match the values embedded at build time");
     }
     if (!safe_label(options.hardware_label)) {
         usage("--hardware-label must contain 1-64 letters, digits, '.', '_', or '-'");
@@ -780,6 +897,7 @@ void write_evidence(const Options& options, const std::string& sdk_version,
                     const std::string& plugin_version,
                     const std::string& model_digest,
                     const std::string& tokenizer_digest,
+                    const std::string& runtime_digest,
                     const std::string& processor,
                     const std::string& product_name, const Model& model,
                     const std::vector<Record>& records) {
@@ -799,11 +917,16 @@ void write_evidence(const Options& options, const std::string& sdk_version,
     }
     std::ostringstream out;
     out << "{\n"
-        << "  \"schema_version\": \"brickkv.replay/3\",\n"
+        << "  \"schema_version\": \"brickkv.replay/4\",\n"
         << "  \"status\": \"complete\",\n"
         << "  \"created_at\": " << quoted(utc_now()) << ",\n"
         << "  \"attestation\": {\n"
         << "    \"source_revision\": " << quoted(options.source_revision) << ",\n"
+        << "    \"source_bundle_digest\": "
+        << quoted(options.source_bundle_digest) << ",\n"
+        << "    \"replay_executable_digest\": "
+        << quoted(options.replay_digest) << ",\n"
+        << "    \"runtime_bundle_digest\": " << quoted(runtime_digest) << ",\n"
         << "    \"sdk_version\": " << quoted(sdk_version) << ",\n"
         << "    \"plugin\": " << quoted(options.plugin) << ",\n"
         << "    \"plugin_version\": " << quoted(plugin_version) << ",\n"
@@ -859,6 +982,21 @@ void write_evidence(const Options& options, const std::string& sdk_version,
 int main(const int argc, char** argv) {
     try {
         auto options = parse_options(argc, argv);
+        const auto executable = running_executable();
+        if (brickkv::sha256_file_bytes(executable) != options.replay_digest) {
+            throw std::runtime_error(
+                "running replay executable does not match --replay-digest");
+        }
+        for (auto& artifact : options.runtime_artifacts) {
+            if (std::filesystem::is_symlink(
+                    std::filesystem::symlink_status(artifact))) {
+                throw std::runtime_error(
+                    "runtime artifact must not be a symbolic link");
+            }
+            artifact = std::filesystem::canonical(artifact);
+        }
+        const auto runtime_digest = brickkv::runtime_bundle_digest(
+            options.runtime_artifacts);
         if (std::filesystem::is_symlink(
                 std::filesystem::symlink_status(options.model))) {
             throw std::runtime_error("model root must not be a symbolic link");
@@ -887,6 +1025,7 @@ int main(const int argc, char** argv) {
         const auto product_name = verified_runtime_value(
             system_product_name().c_str(), "system product identity");
         Model model(options);
+        verify_runtime_modules_loaded(options.runtime_artifacts);
         if (brickkv::sha256_file_tree(options.model) != model_digest ||
             (!options.tokenizer.empty() &&
              brickkv::sha256_file_tree(options.tokenizer) != tokenizer_digest)) {
@@ -913,8 +1052,15 @@ int main(const int argc, char** argv) {
             throw std::runtime_error(
                 "model or tokenizer changed during the replay study");
         }
+        if (brickkv::sha256_file_bytes(executable) != options.replay_digest ||
+            brickkv::runtime_bundle_digest(options.runtime_artifacts) !=
+                runtime_digest) {
+            throw std::runtime_error(
+                "replay executable or runtime artifacts changed during the study");
+        }
+        verify_runtime_modules_loaded(options.runtime_artifacts);
         write_evidence(options, sdk_version, plugin_version, model_digest,
-                       tokenizer_digest, processor, product_name, model,
+                       tokenizer_digest, runtime_digest, processor, product_name, model,
                        records);
         std::cout << "wrote " << records.size() << " secret-free records to "
                   << options.output << '\n';

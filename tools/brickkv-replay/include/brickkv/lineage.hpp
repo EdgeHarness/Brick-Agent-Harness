@@ -92,6 +92,9 @@ bool valid_revision(std::string_view value);
 std::string transcript_revision(const Identity& identity,
                                 const std::vector<Message>& messages);
 std::string sha256(std::string_view bytes);
+std::string sha256_file_bytes(const std::filesystem::path& path);
 std::string sha256_file_tree(const std::filesystem::path& root);
+std::string runtime_bundle_digest(
+    const std::vector<std::filesystem::path>& artifacts);
 
 }  // namespace brickkv

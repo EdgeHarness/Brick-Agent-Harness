@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
@@ -166,6 +167,78 @@ std::string sha256(const std::string_view bytes) {
     Sha256State state;
     state.update(bytes);
     return state.finish();
+}
+
+std::string sha256_file_bytes(const std::filesystem::path& path) {
+    namespace fs = std::filesystem;
+    const auto status = fs::symlink_status(path);
+    if (!fs::is_regular_file(status) || fs::is_symlink(status)) {
+        throw std::runtime_error(
+            "artifact must be one regular non-link file: " + path_text(path));
+    }
+    const auto expected_size = fs::file_size(path);
+    const auto expected_write_time = fs::last_write_time(path);
+    std::ifstream input(path, std::ios::binary);
+    if (!input) {
+        throw std::runtime_error("cannot open artifact file: " + path_text(path));
+    }
+    Sha256State state;
+    std::vector<char> buffer(1024U * 1024U);
+    std::uintmax_t observed_size = 0;
+    while (input) {
+        input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+        const auto count = input.gcount();
+        if (count > 0) {
+            state.update(buffer.data(), static_cast<std::size_t>(count));
+            observed_size += static_cast<std::uintmax_t>(count);
+        }
+    }
+    if (!input.eof()) {
+        throw std::runtime_error("failed while reading artifact file: " + path_text(path));
+    }
+    const auto after_status = fs::symlink_status(path);
+    if (!fs::is_regular_file(after_status) || fs::is_symlink(after_status) ||
+        observed_size != expected_size || fs::file_size(path) != expected_size ||
+        fs::last_write_time(path) != expected_write_time) {
+        throw std::runtime_error("artifact changed while hashing: " + path_text(path));
+    }
+    return "sha256:" + state.finish();
+}
+
+std::string runtime_bundle_digest(
+    const std::vector<std::filesystem::path>& artifacts) {
+    if (artifacts.empty()) {
+        throw std::runtime_error("at least one runtime artifact is required");
+    }
+    std::vector<std::pair<std::string, std::string>> entries;
+    for (const auto& path : artifacts) {
+        auto name = path.filename().string();
+        std::transform(name.begin(), name.end(), name.begin(), [](unsigned char ch) {
+            return static_cast<char>(std::tolower(ch));
+        });
+        if (name.empty() || name.size() > 128U ||
+            !std::all_of(name.begin(), name.end(), [](const unsigned char ch) {
+                return std::isalnum(ch) || ch == '.' || ch == '_' || ch == '+' ||
+                       ch == '-';
+            })) {
+            throw std::runtime_error("runtime artifact has an unsafe file name");
+        }
+        entries.emplace_back(std::move(name), sha256_file_bytes(path));
+    }
+    std::sort(entries.begin(), entries.end());
+    for (std::size_t i = 1; i < entries.size(); ++i) {
+        if (entries[i - 1].first == entries[i].first) {
+            throw std::runtime_error("runtime artifact file names must be unique");
+        }
+    }
+    std::string material("brickkv-runtime-bundle/1\0", 25);
+    for (const auto& [name, digest] : entries) {
+        material.append(name);
+        material.push_back('\0');
+        material.append(digest);
+        material.push_back('\0');
+    }
+    return "sha256:" + sha256(material);
 }
 
 std::string transcript_revision(const Identity& identity,

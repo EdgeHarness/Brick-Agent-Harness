@@ -134,8 +134,10 @@ silently falls back to raw retained state.
 using the GenieX C API. It runs reset, raw-retained and managed traces, applies
 the real model chat template, cancels through the token callback, and writes
 versioned secret-free JSON. It is an independent diagnostic, not a replacement
-for `geniex serve`. Its schema version 3 uses the same EOS-only reusable rule
-and `previous_not_reusable` transition as the server protocol.
+for `geniex serve`. Its schema version 4 uses the same EOS-only reusable rule
+and `previous_not_reusable` transition as the server protocol, and binds each
+result to an embedded committed source bundle, the running executable, and the
+exact loaded runtime-module bundle.
 
 The six synthetic trace families are append-only, planning removal, invalid
 exchange deletion, context pruning, verifier detour and decode cancellation.

@@ -8,6 +8,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(BRICKKV_BUILD_REPLAY "Build the GenieX-backed replay executable" ON)
 option(BRICKKV_SANITIZE "Enable AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
 set(BRICKKV_GENIEX_ROOT "" CACHE PATH "Installed GenieX SDK root")
+set(BRICKKV_SOURCE_REVISION "" CACHE STRING "Full Brick Git revision embedded in replay evidence")
+set(BRICKKV_SOURCE_BUNDLE_DIGEST "" CACHE STRING "Revision-bound native source bundle digest")
 
 add_library(brickkv_lineage STATIC
     src/lineage.cpp
@@ -38,6 +40,17 @@ if(BUILD_TESTING)
 endif()
 
 if(BRICKKV_BUILD_REPLAY)
+    string(LENGTH "${BRICKKV_SOURCE_REVISION}" BRICKKV_SOURCE_REVISION_LENGTH)
+    if((NOT BRICKKV_SOURCE_REVISION_LENGTH EQUAL 40 AND
+        NOT BRICKKV_SOURCE_REVISION_LENGTH EQUAL 64) OR
+       NOT BRICKKV_SOURCE_REVISION MATCHES "^[0-9a-f]+$")
+        message(FATAL_ERROR "BRICKKV_SOURCE_REVISION must be a full lowercase Git object ID")
+    endif()
+    string(LENGTH "${BRICKKV_SOURCE_BUNDLE_DIGEST}" BRICKKV_SOURCE_BUNDLE_DIGEST_LENGTH)
+    if(NOT BRICKKV_SOURCE_BUNDLE_DIGEST_LENGTH EQUAL 71 OR
+       NOT BRICKKV_SOURCE_BUNDLE_DIGEST MATCHES "^sha256:[0-9a-f]+$")
+        message(FATAL_ERROR "BRICKKV_SOURCE_BUNDLE_DIGEST must be sha256:<64 lowercase hex>")
+    endif()
     find_path(GENIEX_INCLUDE_DIR geniex.h
         HINTS "${BRICKKV_GENIEX_ROOT}/include"
         REQUIRED)
@@ -45,6 +58,10 @@ if(BRICKKV_BUILD_REPLAY)
         HINTS "${BRICKKV_GENIEX_ROOT}/lib"
         REQUIRED)
     add_executable(brickkv-replay src/main.cpp)
+    target_compile_definitions(brickkv-replay PRIVATE
+        BRICKKV_SOURCE_REVISION="${BRICKKV_SOURCE_REVISION}"
+        BRICKKV_SOURCE_BUNDLE_DIGEST="${BRICKKV_SOURCE_BUNDLE_DIGEST}"
+    )
     target_include_directories(brickkv-replay PRIVATE "${GENIEX_INCLUDE_DIR}")
     target_link_libraries(brickkv-replay PRIVATE brickkv_lineage "${GENIEX_LIBRARY}")
     if(WIN32)

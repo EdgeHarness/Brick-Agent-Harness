@@ -176,9 +176,28 @@ int main() {
                                std::ios::binary);
             file << "same-bytes";
         }
+        {
+            std::ofstream file(fixture_root / "runtime-a.dll", std::ios::binary);
+            file << "one";
+        }
+        {
+            std::ofstream file(fixture_root / "runtime-b.dll", std::ios::binary);
+            file << "two";
+        }
         require(brickkv::sha256_file_tree(fixture_root / "artifact") !=
                     brickkv::sha256_file_tree(fixture_root / "tree"),
                 "artifact digest did not frame the root kind");
+        require(brickkv::sha256_file_bytes(fixture_root / "artifact") ==
+                    "sha256:7ad5509fac1a1be4a59ae87959468840d"
+                    "2808bab1b3cd5676733194aa82ef338",
+                "raw artifact SHA-256 vector failed");
+        require(brickkv::runtime_bundle_digest({
+                    fixture_root / "runtime-b.dll",
+                    fixture_root / "runtime-a.dll",
+                }) ==
+                    "sha256:c1e2a53eb4f63e167531868d3137155f"
+                    "34a9b72a34a60d4f6b27b6e2dcbd8115",
+                "runtime bundle digest vector failed");
         std::filesystem::remove_all(fixture_root);
 
         LineageGate empty_text;
