@@ -67,33 +67,30 @@ every call.
 ### Route A — GenieX (chosen)
 
 Qualcomm's own runtime, and the route this repo now implements. GenieX is the
-open build of Genie: it reaches the Hexagon NPU through AI Engine Direct (QNN),
-and it ships **both** an installer and an OpenAI-compatible server, so neither
-the export step nor the HTTP wrapper this note used to budget for exists any
-more.
+open build of Genie: it reaches the Hexagon NPU through Qualcomm AI Engine
+Direct and ships an OpenAI-compatible server, so Brick does not need a custom
+HTTP serving layer. Model acquisition is separate: public catalogue bundles can
+be pulled directly, while licence-gated Llama assets still require an
+operator-authorized export.
 
 ```powershell
-# installer from github.com/qualcomm/GenieX (Windows ARM64), then:
-geniex pull ai-hub-models/Llama-v3.1-8B-Instruct
-geniex serve --compute npu --nctx 8192      # http://127.0.0.1:18181/v1
+# After exporting the licensed QAIRT bundle through Qualcomm AI Hub:
+geniex pull local/llama_v3_1_8b_instruct `
+  --local-path C:\downloads\llama_v3_1_8b_instruct
+geniex serve --compute npu                  # http://127.0.0.1:18181/v1
 ```
 
-Models published to AI Hub are **pre-compiled per chipset**, so `geniex pull`
-fetches a binary already built for X Elite. That removes the three costs this
-note previously attributed to the Genie route — no AI Hub account, no
-compilation on Qualcomm's cloud, no `qai_hub_models.export` — for any model in
-the bundle catalogue.
+QAIRT bundles are pre-compiled for a target chipset and quantization. Qualcomm's
+[Llama 3.1 8B model card](https://huggingface.co/qualcomm/Llama-v3.1-8B-Instruct)
+explicitly states that licensing prevents distribution of its pre-exported
+assets. The operator must accept the applicable terms, authenticate to Qualcomm
+AI Hub Workbench, compile or export the `GENIEX_QAIRT` artifact for Snapdragon X
+Elite, and then import that local bundle. Public Qwen bundles remain useful for
+protocol smoke tests only; changing to Qwen would not answer the final
+same-model Llama research question.
 
-What survives: **Llama weights are still licence-gated.** If the pull is
-refused, either clear the grant or fall back to
-`ai-hub-models/Qwen2.5-7B-Instruct`, which has a profile registered for exactly
-this case. Prefer Llama where possible — it is the model the balanced profile
-was tuned on, so the NPU run stays a backend comparison rather than a model
-change.
-
-`--compute` also takes `hybrid` (per-tensor HTP+CPU scheduler) against `npu`
-(pinned to one HTP session). Measure both in Phase 2; on a 7–8B the scheduler
-sometimes wins.
+Qualcomm documents QAIRT as NPU-only. `cpu`, `gpu`, and hybrid comparisons belong
+to the separate llama.cpp/GGUF path and must not be presented as QAIRT modes.
 
 ### Route B — Foundry Local (fallback)
 
@@ -126,15 +123,17 @@ Take this only if A and B both fail to produce a usable model.
 dummy OpenAI endpoint and confirm the harness still completes a run. *This
 phase is testable with no NPU involved.*
 
-**Phase 1 — GenieX.** Install, `geniex pull` the Llama 3.1 8B bundle, `geniex
-serve --compute npu --nctx 8192`, start the shim, run `run_agent.py` with no
-flags changed. Success = a run finishes cleanly.
+**Phase 1 — GenieX.** Export the licensed Llama 3.1 8B `GENIEX_QAIRT` bundle
+for Snapdragon X Elite through the authenticated AI Hub workflow, import it
+with `geniex pull --local-path`, start `geniex serve --compute npu`, and run the
+attested BrickKV preflight. Success means the exact Llama artifact completes
+the cache protocol and task checks cleanly.
 
-**Phase 2 — measure.** Same task, same model, three backends: Ollama/CPU,
-GenieX `--compute npu`, GenieX `--compute hybrid`. Record prefill and decode
-separately — they behave very differently here — plus wall time, and CPU
-utilisation during the run. Because the model is identical across all three,
-any difference is the backend.
+**Phase 2 — measure.** On the same Llama QAIRT artifact and NPU server, compare
+reset, raw retained-cache test mode, and managed BrickKV mode. Record TTFT,
+actual prompt tokens, prefill and decode separately, wall time, working-set
+memory, cache decisions and cancellation recovery. Backend comparisons are a
+separate study and cannot replace this cache comparison.
 
 **Phase 3 — re-tune.** AI Hub quantisation is not Q4_0. Re-check JSON validity and
 tool-call reliability before trusting the profile; `parse_failures` and
@@ -142,20 +141,20 @@ tool-call reliability before trusting the profile; `parse_failures` and
 
 ## 5. Known constraints
 
-- **Context is fixed at load, and the default is wrong for us.** `geniex serve`
-  defaults to `--nctx 4096`; every profile in `profiles.py` asks for 8192 or
-  more. The shim cannot fix this — it deliberately does not forward `num_ctx`,
-  because the runtime decides it. Pass `--nctx` to match the profile or long
-  runs truncate silently. On a pre-compiled QNN bundle the ceiling is baked into
-  the binary, so this is a hard limit, not a flag.
+- **QAIRT context is fixed in the bundle.** The official Llama 3.1 8B QAIRT
+  profile is 4,096 tokens. GenieX's `--nctx` flag applies to llama.cpp and does
+  not enlarge a QAIRT bundle. Brick must keep each final-study trace inside the
+  exported limit; a larger window requires a separately compiled bundle.
 - **One model in memory at a time.** GenieX evicts on load, and after
   `--keepalive` seconds idle (default 300). Fine within a run; it means the
   `--tiers` router cannot hold several models resident the way Ollama does.
 - **Quantisation tooling is x86_64-only.** ONNX quantisation utilities do not
   install cleanly on ARM64, so Route C needs a separate x64 Python or a
   different machine to prepare assets.
-- **Llama weights are licence-gated.** Pre-compiled bundles remove the export
-  step but not the grant. See Route A for the fallback.
+- **Llama weights are licence-gated.** Qualcomm does not distribute this
+  model's pre-exported assets. The final run requires an authenticated AI Hub
+  account, accepted terms and an operator-authorized export. There is no valid
+  public-model substitution for the final same-model study.
 - **Model choice narrows.** Only models in the AI Hub bundle catalogue (or GGUF
   at Q4_0, which has the best Hexagon support on the llama.cpp runtime) reach
   the NPU. The agent's `--tiers` router assumes several interchangeable Ollama
@@ -166,9 +165,10 @@ tool-call reliability before trusting the profile; `parse_failures` and
 
 ## 6. What to expect
 
-Qualcomm's published figure for **Llama 3.1 8B on X Elite via Genie is ~9.4
-tok/s** decode. For reference, llama.cpp on the Oryon CPU measured ~20 tok/s
-realistic for the same model class.
+Qualcomm's current model card reports about **10.73 generated tokens/s** for
+Llama 3.1 8B `GENIEX_QAIRT` w4a16 on Snapdragon X Elite, with published TTFT
+from about 0.23 seconds for a short prompt to 7.39 seconds at the 4,096-token
+context limit. Those are vendor reference values, not Brick measurements.
 
 So plan for decode being **comparable at best, likely slower**, and target the
 NPU for what it does win:
@@ -185,9 +185,11 @@ the result will look like a regression when it is a trade.
 
 ## 7. Success criteria
 
-1. `run_agent.py` completes a run with **zero agent-code changes**
-2. Prefill tok/s beats the CPU baseline
-3. CPU utilisation during a run drops materially
+1. The exact exported Llama QAIRT artifact passes the managed-cache preflight.
+2. Reset, legacy-test and managed modes complete the same task and output checks.
+3. Managed mode lowers append-only p95 TTFT by at least 20 percent, with the
+   run-clustered 95 percent confidence interval excluding zero.
+4. No task-success or material decode-throughput regression is observed.
 4. `parse_failures` / `invalid_calls` no worse than the Ollama baseline
 
 ## Related
