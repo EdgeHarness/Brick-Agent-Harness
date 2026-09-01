@@ -155,9 +155,11 @@ The downloaded `cli-windows-arm64` artifact is bound by these measured hashes:
 | Fresh QAIRT `geniex_vlm.dll` | `dc38c5fb31aaca4c16ac2db4efc56ac17c8f83c4ba9837e50f70614d3fd61753` |
 
 The source and evidence runners remain green locally: 156 focused BrickKV
-tests passed with five platform-specific skips, and the GenieX handler and
-service Go packages passed. A terminal security diff scan reviewed all 24
-changed GenieX surfaces, sealed successfully, and reported zero findings.
+tests passed with five platform-specific skips, and the full GenieX CLI Go test
+suite passed. A terminal security diff scan of integration commit `2f3e1610`
+reviewed all 24 changed GenieX surfaces, sealed successfully, and reported zero
+findings. The later `5c963e87` change is the workflow-only credential gate
+described above.
 
 This artifact has **not** passed the NPU correctness gate on this machine.
 Windows Application Control blocked the fresh `geniex.exe`. A second,
