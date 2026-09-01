@@ -12,6 +12,20 @@ evidence schema version 2 records both the study context and the exact
 `runtime_n_ctx` parameter, and validation rejects plugin-incompatible values.
 This fixes the hardware boundary; it is not a performance result.
 
+The companion managed-server smoke runner now exercises the same cache
+decision vocabulary on an explicit loopback GenieX server, including a raw
+client disconnect during a long synthetic request. Its evidence contains only
+cache metadata, token counts and output hashes and always denies performance
+and final-benchmark claims. It hashes the actual CLI and model artifact, binds
+every request to the expected Windows listener PID and process image, and
+verifies the executed runner bytes against the claimed Git HEAD before making
+a pass record. The same process must explicitly use the selected GenieX data
+directory, loopback address and NPU compute mode; the requested catalogue name
+is bound to the hashed model directory inside that data root. Runtime and
+hardware labels remain explicitly identified as operator assertions. The
+runner also verifies that the attested GenieX API, QAIRT plugin and QAIRT core
+DLLs are loaded in that same process and unchanged before publication.
+
 ### BrickKV evidence gates now fail closed on inert caches and partial runs
 
 The native lineage test now executes 1,000 deterministic randomized branch

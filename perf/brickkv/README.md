@@ -3,6 +3,52 @@
 These runners produce process-level measurements for the BrickKV acceptance
 gates. They use synthetic prompts and save no prompt or generated content.
 
+## Managed GenieX NPU smoke
+
+Before an expensive replay matrix, `geniex_managed_smoke.py` verifies the
+patched server on a real NPU. It accepts only an explicit IPv4 loopback origin,
+checks cold, exact-extension, branch, session-switch, parent-mismatch and
+forced-disconnect recovery decisions, and writes only cache metadata, token
+counts and output hashes. Every request verifies that the selected Windows PID
+still owns the exact listener and runs the exact hashed GenieX executable. The
+runner also hashes the model artifact tree and verifies its own source files
+byte-for-byte against the claimed HEAD commit. The output always marks
+performance claims and final benchmark completion as false. A smoke-model pass
+cannot substitute for the Llama 3.1 8B study.
+
+```powershell
+$serverPid = (Get-NetTCPConnection `
+  -LocalAddress 127.0.0.1 -LocalPort 18182 -State Listen).OwningProcess
+
+python -m perf.brickkv.geniex_managed_smoke `
+  --execute `
+  --server http://127.0.0.1:18182 `
+  --server-pid $serverPid `
+  --model qualcomm/qwen3_0_6b `
+  --model-role smoke `
+  --source-revision BRICK_COMMIT `
+  --geniex-revision GENIEX_COMMIT `
+  --runtime-version 2.45.0.260326 `
+  --hardware-label X1E-78-100 `
+  --model-artifact C:/models/geniex-data/models/qualcomm/qwen3_0_6b `
+  --geniex-cli C:/geniex/bin/geniex.exe `
+  --geniex-data-dir C:/models/geniex-data `
+  --runtime-artifact C:/geniex/lib/geniex.dll `
+  --runtime-artifact C:/geniex/lib/qairt/geniex_plugin.dll `
+  --runtime-artifact C:/geniex/lib/qairt/geniex_core.dll `
+  --output C:/evidence/brickkv-managed-smoke.json
+```
+
+`--runtime-version` and `--hardware-label` are bounded operator assertions and
+are named as such in the evidence. Executable, model artifact, listener and
+source attestations are measured by the runner. The runner refuses uncommitted
+changes to itself or its source-verification and exclusive-publication helpers.
+The selected process must have explicit `--data-dir`, `--host` and
+`--compute npu` flags. The model artifact must be the exact
+`<data-dir>/models/<catalogue-name>` directory, and its content must remain
+unchanged through the run. The three required runtime DLLs must be loaded in
+that same process and retain their measured hashes through publication.
+
 ## Snapdragon GenieX matrix
 
 `run_matrix.py` launches one `brickkv-replay` process for each mode in a
