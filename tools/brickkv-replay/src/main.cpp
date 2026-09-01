@@ -1,4 +1,5 @@
 #include "brickkv/lineage.hpp"
+#include "brickkv/runtime_config.hpp"
 
 #include <geniex.h>
 
@@ -515,7 +516,8 @@ class Model {
         input.tokenizer_path = tokenizer_path_.empty() ? nullptr : tokenizer_path_.c_str();
         input.plugin_id = plugin_.c_str();
         input.device_id = device_id_.empty() ? nullptr : device_id_.c_str();
-        input.config.n_ctx = options.context;
+        runtime_n_ctx_ = brickkv::runtime_n_ctx(options.plugin, options.context);
+        input.config.n_ctx = runtime_n_ctx_;
         input.config.n_gpu_layers = device_output.ngl;
         require_success(geniex_llm_create(&input, &handle_), "geniex_llm_create");
     }
@@ -532,6 +534,7 @@ class Model {
     geniex_LLM* get() const { return handle_; }
     const std::string& resolved_device() const { return device_id_; }
     const std::string& device_warning() const { return device_warning_; }
+    int runtime_n_ctx() const { return runtime_n_ctx_; }
 
   private:
     geniex_LLM* handle_ = nullptr;
@@ -540,6 +543,7 @@ class Model {
     std::string plugin_;
     std::string device_id_;
     std::string device_warning_;
+    int runtime_n_ctx_ = 0;
 };
 
 struct CallbackState {
@@ -782,7 +786,7 @@ void write_evidence(const Options& options, const std::string& sdk_version,
     }
     std::ostringstream out;
     out << "{\n"
-        << "  \"schema_version\": \"brickkv.replay/1\",\n"
+        << "  \"schema_version\": \"brickkv.replay/2\",\n"
         << "  \"status\": \"complete\",\n"
         << "  \"created_at\": " << quoted(utc_now()) << ",\n"
         << "  \"attestation\": {\n"
@@ -802,6 +806,7 @@ void write_evidence(const Options& options, const std::string& sdk_version,
         << "    \"system_product_name\": " << quoted(product_name) << "\n"
         << "  },\n"
         << "  \"configuration\": {\"context\": " << options.context
+        << ", \"runtime_n_ctx\": " << model.runtime_n_ctx()
         << ", \"max_tokens\": " << options.max_tokens
         << ", \"append_turns\": " << options.append_turns
         << ", \"cancel_after_tokens\": " << options.cancel_after_tokens << "},\n"

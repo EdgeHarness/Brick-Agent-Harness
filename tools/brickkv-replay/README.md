@@ -58,6 +58,12 @@ Supported modes are `reset`, `legacy-test`, `managed` and `all`. Supported
 traces are `append_only`, `planning_removed`, `invalid_deleted`,
 `context_pruning`, `verifier_detour`, `cancellation_decode` and `all`.
 
+For QAIRT, `--context` records the study's expected context but is not sent as
+an SDK override. QAIRT bundles own their context configuration and reject a
+non-zero `n_ctx`; evidence therefore records `runtime_n_ctx` as `0` (GenieX's
+documented "from model" value). For llama.cpp, `runtime_n_ctx` must equal the
+requested context.
+
 The output attests source, SDK, plugin, model, tokenizer, requested and resolved
 device, native process architecture, host processor, system product, and
 configuration. The model and tokenizer digest the full artifact tree. The

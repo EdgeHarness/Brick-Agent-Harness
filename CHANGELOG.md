@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### BrickKV replay now respects QAIRT-owned context configuration
+
+The first Snapdragon hardware load exposed that `brickkv-replay` forwarded
+`n_ctx` to every GenieX plugin. QAIRT model bundles own this value and reject a
+non-zero override, so QAIRT runs now send GenieX's documented `0` (from-model)
+value while llama.cpp runs continue to receive the requested context. Replay
+evidence schema version 2 records both the study context and the exact
+`runtime_n_ctx` parameter, and validation rejects plugin-incompatible values.
+This fixes the hardware boundary; it is not a performance result.
+
 ### BrickKV evidence gates now fail closed on inert caches and partial runs
 
 The native lineage test now executes 1,000 deterministic randomized branch

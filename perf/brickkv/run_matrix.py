@@ -22,7 +22,7 @@ from typing import Iterable
 
 
 MODES = ("reset", "legacy-test", "managed")
-EXPECTED_SCHEMA = "brickkv.replay/1"
+EXPECTED_SCHEMA = "brickkv.replay/2"
 TRACE_ORDER = (
     "append_only", "planning_removed", "invalid_deleted", "context_pruning",
     "verifier_detour", "cancellation_decode",
@@ -35,7 +35,8 @@ ATTESTATION_FIELDS = frozenset({
     "process_architecture", "host_processor", "system_product_name",
 })
 CONFIGURATION_FIELDS = frozenset({
-    "context", "max_tokens", "append_turns", "cancel_after_tokens",
+    "context", "runtime_n_ctx", "max_tokens", "append_turns",
+    "cancel_after_tokens",
 })
 RECORD_FIELDS = frozenset({
     "trace", "mode", "role", "step", "cache_status", "cache_reason",
@@ -216,10 +217,18 @@ def validate_evidence(
     if not isinstance(configuration, dict):
         raise ValueError("replay output has no configuration")
     _require_exact_fields(configuration, CONFIGURATION_FIELDS, "configuration")
-    for key in CONFIGURATION_FIELDS:
+    for key in CONFIGURATION_FIELDS - {"runtime_n_ctx"}:
         value = configuration[key]
         if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
             raise ValueError(f"configuration field {key!r} must be a positive integer")
+    runtime_n_ctx = configuration["runtime_n_ctx"]
+    if isinstance(runtime_n_ctx, bool) or not isinstance(runtime_n_ctx, int):
+        raise ValueError("configuration field 'runtime_n_ctx' must be an integer")
+    if attestation["plugin"] == "qairt":
+        if runtime_n_ctx != 0:
+            raise ValueError("QAIRT evidence must leave runtime_n_ctx model-defined")
+    elif runtime_n_ctx != configuration["context"]:
+        raise ValueError("llama.cpp runtime_n_ctx must match the requested context")
 
     records = payload.get("records")
     if not isinstance(records, list) or not records:

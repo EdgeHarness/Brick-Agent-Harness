@@ -1,4 +1,5 @@
 #include "brickkv/lineage.hpp"
+#include "brickkv/runtime_config.hpp"
 
 #include <array>
 #include <cstddef>
@@ -151,6 +152,10 @@ void multi_session_canary_campaign() {
 
 int main() {
     try {
+        require(brickkv::runtime_n_ctx("qairt", 4096) == 0,
+                "QAIRT must leave n_ctx under model-bundle control");
+        require(brickkv::runtime_n_ctx("llama_cpp", 8192) == 8192,
+                "llama.cpp must receive the requested n_ctx");
         require(brickkv::sha256("") ==
                     "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                 "SHA-256 empty-string vector failed");

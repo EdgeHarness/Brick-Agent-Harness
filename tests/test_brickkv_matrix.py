@@ -56,7 +56,7 @@ def payload(mode, values=(100, 200)):
             item["cache_status"] = "cold"
             item["cache_reason"] = "first_request"
     return {
-        "schema_version": "brickkv.replay/1",
+        "schema_version": "brickkv.replay/2",
         "status": "complete",
         "created_at": "2026-08-30T12:00:00Z",
         "attestation": {
@@ -76,6 +76,7 @@ def payload(mode, values=(100, 200)):
         },
         "configuration": {
             "context": 8192,
+            "runtime_n_ctx": 0,
             "max_tokens": 32,
             "append_turns": len(values),
             "cancel_after_tokens": 1,
@@ -128,6 +129,23 @@ def test_evidence_validation_rejects_attestation_mismatch_and_unknown_versions()
     malformed_warning["attestation"]["device_warning"] = ""
     with pytest.raises(ValueError, match="must be none or present"):
         validate_evidence(malformed_warning, "managed")
+
+
+def test_evidence_validation_enforces_plugin_context_semantics():
+    qairt_override = payload("managed", (100,))
+    qairt_override["configuration"]["runtime_n_ctx"] = 8192
+    with pytest.raises(ValueError, match="model-defined"):
+        validate_evidence(qairt_override, "managed")
+
+    llama = payload("managed", (100,))
+    llama["attestation"].update({
+        "plugin": "llama_cpp",
+        "requested_device": "cpu",
+        "resolved_device": "",
+    })
+    llama["configuration"]["runtime_n_ctx"] = 4096
+    with pytest.raises(ValueError, match="must match"):
+        validate_evidence(llama, "managed")
 
 
 def test_evidence_validation_rejects_partial_and_duplicate_traces():
