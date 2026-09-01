@@ -2,7 +2,8 @@
 
 `brickkv-replay` is a C++20 diagnostic for the GenieX C API. It applies the real
 chat template, exercises reset, raw retained-cache and managed lineage traces,
-and records versioned JSON without prompt or generated content.
+and records versioned JSON without prompt or generated content. Replay schema
+`brickkv.replay/3` records whether each completed physical state is reusable.
 
 It is not the production server and does not prove a speedup on its own.
 
@@ -57,6 +58,14 @@ existing evidence file.
 Supported modes are `reset`, `legacy-test`, `managed` and `all`. Supported
 traces are `append_only`, `planning_removed`, `invalid_deleted`,
 `context_pruning`, `verifier_detour`, `cancellation_decode` and `all`.
+
+Managed mode retains physical state only after the GenieX runtime reports
+`eos`. A length limit, stop sequence, callback stop, unknown stop or error is
+not reusable. The logical transcript revision is still recorded after a
+completed truncated response, the model is reset immediately, and the next
+exact extension reports `reset / previous_not_reusable`. The raw
+`legacy-test` mode intentionally keeps its unsafe behavior as the comparison
+condition.
 
 For QAIRT, `--context` records the study's expected context but is not sent as
 an SDK override. QAIRT bundles own their context configuration and reject a

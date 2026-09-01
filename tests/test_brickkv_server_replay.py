@@ -24,7 +24,7 @@ def event(value):
     return ("data: " + json.dumps(value, separators=(",", ":")) + "\n\n").encode()
 
 
-def valid_stream(*, cache=True):
+def valid_stream(*, cache=True, finish_reason="stop", reusable=True):
     chunks = [
         event({
             "object": "chat.completion.chunk",
@@ -44,13 +44,18 @@ def valid_stream(*, cache=True):
         }),
         event({
             "object": "chat.completion.chunk",
-            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+            "choices": [{
+                "index": 0,
+                "delta": {},
+                "finish_reason": finish_reason,
+            }],
             **({
                 "geniex_cache": {
                     "mode": "managed",
                     "status": "cold",
                     "revision": REVISION,
                     "reason": "first_request",
+                    "reusable": reusable,
                 }
             } if cache else {}),
         }),
@@ -90,6 +95,16 @@ def test_expected_server_cache_decisions(mode, trace, step, expected):
     assert replay.expected_cache_decision(mode, trace, step) == expected
 
 
+def test_non_reusable_parent_forces_cold_exact_extension():
+    assert replay.expected_cache_decision(
+        "managed", "append_only", 1, prior_reusable=False
+    ) == ("reset", "previous_not_reusable")
+
+
+def test_replay_schema_is_versioned_for_reusable_state():
+    assert replay.SCHEMA == "brickkv.server-replay/2"
+
+
 def test_consume_managed_sse_records_metrics_without_retaining_output_in_record():
     result = replay.consume_sse(
         Lines(*valid_stream()),
@@ -112,6 +127,26 @@ def test_consume_managed_sse_records_metrics_without_retaining_output_in_record(
         "status": "cold",
         "reason": "first_request",
         "revision": REVISION,
+        "reusable": True,
+    }
+
+
+def test_length_limited_stream_commits_only_non_reusable_logical_revision():
+    result = replay.consume_sse(
+        Lines(*valid_stream(finish_reason="length", reusable=False)),
+        mode="managed",
+        trace="append_only",
+        step=0,
+        started_ns=1_000_000,
+        cancel_after_chunks=0,
+        now_ns=clocks(),
+    )
+    assert result["finish_reason"] == "length"
+    assert result["cache"] == {
+        "status": "cold",
+        "reason": "first_request",
+        "revision": REVISION,
+        "reusable": False,
     }
 
 
@@ -159,6 +194,7 @@ def test_consume_sse_cancellation_requires_no_terminal_provider_claim():
         "status": "aborted",
         "reason": "client_disconnect",
         "revision": "",
+        "reusable": False,
     }
     assert "output" not in result
 
@@ -252,6 +288,7 @@ class FakeClient:
         parent,
         max_tokens,
         cancel_after_chunks=0,
+        prior_reusable=True,
     ):
         self.calls.append({
             "messages": [dict(message) for message in messages],
@@ -261,9 +298,12 @@ class FakeClient:
             "session": session,
             "parent": parent,
             "cancel_after_chunks": cancel_after_chunks,
+            "prior_reusable": prior_reusable,
         })
         cancelled = bool(cancel_after_chunks)
-        status, reason = replay.expected_cache_decision(mode, trace, step)
+        status, reason = replay.expected_cache_decision(
+            mode, trace, step, prior_reusable
+        )
         result = {
             "cancelled": cancelled,
             "ttft_us": 10,
@@ -277,12 +317,22 @@ class FakeClient:
                 "status": status,
                 "reason": reason,
                 "revision": "" if cancelled or mode != "managed" else REVISION,
+                "reusable": False if cancelled else mode in {"managed", "legacy-test"},
             },
             "output_digest": REVISION,
             "stream_bytes": 100,
         }
         if not cancelled:
             result["output"] = f"synthetic answer {trace} {step}"
+        return result
+
+
+class FirstTurnTruncatingFakeClient(FakeClient):
+    def stream(self, *args, **kwargs):
+        result = super().stream(*args, **kwargs)
+        if kwargs["mode"] == "managed" and kwargs["step"] == 0:
+            result["finish_reason"] = "length"
+            result["cache"]["reusable"] = False
         return result
 
 
@@ -323,6 +373,23 @@ def test_run_trace_uses_separate_verifier_lineage(monkeypatch):
     ]
 
 
+def test_run_trace_forces_cold_extension_after_truncated_turn(monkeypatch):
+    client = FirstTurnTruncatingFakeClient()
+    monkeypatch.setattr(replay, "windows_process_working_set", lambda pid: 1000)
+    records = replay.run_trace(
+        client,
+        mode="managed",
+        trace="append_only",
+        append_turns=2,
+        max_tokens=64,
+        cancel_after_chunks=2,
+    )
+    assert records[0]["finish_reason"] == "length"
+    assert records[0]["reusable"] is False
+    assert records[1]["cache_reason"] == "previous_not_reusable"
+    assert client.calls[1]["prior_reusable"] is False
+
+
 @pytest.mark.parametrize("mode,expected_resets", (("managed", 1), ("legacy-test", 2)))
 def test_run_trace_recovers_after_cancel_without_retaining_partial_text(
     monkeypatch, mode, expected_resets
@@ -340,7 +407,7 @@ def test_run_trace_recovers_after_cancel_without_retaining_partial_text(
     assert records[1]["cancelled"] is True
     assert records[1]["generated_tokens"] == 0
     assert client.reset_count == expected_resets
-    assert client.calls[2]["messages"][-1]["content"].startswith("Retry")
+    assert "ACK_cancellation_recovered" in client.calls[2]["messages"][-1]["content"]
 
 
 def test_forbidden_evidence_keys_fail_closed():

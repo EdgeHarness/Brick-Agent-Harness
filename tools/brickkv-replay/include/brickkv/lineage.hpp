@@ -38,6 +38,7 @@ struct Request {
 struct Decision {
     std::uint64_t transaction = 0;
     bool reuse = false;
+    bool reset_required = true;
     std::string status;
     std::string reason;
 };
@@ -46,6 +47,7 @@ struct Metadata {
     std::string status;
     std::string reason;
     std::string revision;
+    bool reusable = false;
 };
 
 // A small, sequential reference implementation used by brickkv-replay. It is
@@ -57,7 +59,8 @@ class LineageGate {
     Decision begin(const Request& request, std::uint64_t model_generation);
     Decision bind_generation(std::uint64_t transaction,
                              std::uint64_t model_generation);
-    Metadata commit(std::uint64_t transaction, std::string_view assistant);
+    Metadata commit(std::uint64_t transaction, std::string_view assistant,
+                    bool reusable);
     void abort(std::uint64_t transaction);
     void clear();
 
@@ -68,6 +71,7 @@ class LineageGate {
         Identity identity;
         std::vector<Message> messages;
         std::uint64_t generation = 0;
+        bool reusable = false;
     };
     struct Pending {
         std::uint64_t transaction = 0;

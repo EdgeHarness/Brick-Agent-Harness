@@ -65,7 +65,7 @@ void randomized_branch_campaign() {
         };
         const auto cold = gate.begin(request_for(session, "", base), 17);
         const auto assistant = "answer-" + canary;
-        const auto committed = gate.commit(cold.transaction, assistant);
+        const auto committed = gate.commit(cold.transaction, assistant, true);
 
         base.push_back({"assistant", assistant});
         auto candidate = base;
@@ -139,7 +139,8 @@ void multi_session_canary_campaign() {
                                 std::to_string(width) + "-" +
                                 std::to_string(selected) + "-" +
                                 std::to_string(turn);
-            const auto metadata = gate.commit(decision.transaction, answer);
+            const auto metadata = gate.commit(
+                decision.transaction, answer, true);
             parents[selected] = metadata.revision;
             transcripts[selected].push_back({"assistant", answer});
             transcripts[selected].push_back(
@@ -190,22 +191,40 @@ int main() {
         LineageGate gate;
         std::vector<Message> initial{{"system", "policy"}, {"user", "first"}};
         const auto cold = gate.begin(request("", initial), 1);
-        require(!cold.reuse && cold.status == "cold" &&
+        require(!cold.reuse && cold.reset_required && cold.status == "cold" &&
                     cold.reason == "first_request",
                 "first request was not cold");
-        const auto first = gate.commit(cold.transaction, "answer");
+        const auto first = gate.commit(cold.transaction, "answer", true);
         initial.push_back({"assistant", "answer"});
         auto extension = initial;
         extension.push_back({"user", "second"});
         const auto hit = gate.begin(request(first.revision, extension), 1);
-        require(hit.reuse && hit.reason == "exact_extension",
+        require(hit.reuse && !hit.reset_required &&
+                    hit.reason == "exact_extension",
                 "exact extension did not reuse");
         gate.abort(hit.transaction);
+
+        LineageGate truncated;
+        const auto truncated_cold = truncated.begin(request("", initial), 11);
+        const auto truncated_parent = truncated.commit(
+            truncated_cold.transaction, "partial", false);
+        require(!truncated_parent.reusable,
+                "truncated completion was marked reusable");
+        auto truncated_extension = initial;
+        truncated_extension.push_back({"assistant", "partial"});
+        truncated_extension.push_back({"user", "continue"});
+        const auto after_truncation = truncated.begin(
+            request(truncated_parent.revision, truncated_extension), 12);
+        require(!after_truncation.reuse &&
+                    !after_truncation.reset_required &&
+                    after_truncation.reason == "previous_not_reusable",
+                "truncated parent did not force a cold exact extension");
+        truncated.abort(after_truncation.transaction);
 
         LineageGate reloaded;
         const auto reload_cold = reloaded.begin(request("", initial), 7);
         const auto reload_parent =
-            reloaded.commit(reload_cold.transaction, "answer");
+            reloaded.commit(reload_cold.transaction, "answer", true);
         auto reload_extension = initial;
         reload_extension.push_back({"assistant", "answer"});
         reload_extension.push_back({"user", "next"});
@@ -213,7 +232,8 @@ int main() {
             request(reload_parent.revision, reload_extension), 7);
         const auto downgraded =
             reloaded.bind_generation(planned_hit.transaction, 8);
-        require(!downgraded.reuse && downgraded.reason == "parent_mismatch",
+        require(!downgraded.reuse && downgraded.reset_required &&
+                    downgraded.reason == "parent_mismatch",
                 "model reload did not downgrade a planned hit");
         reloaded.abort(downgraded.transaction);
 
@@ -223,7 +243,7 @@ int main() {
         gate.abort(after_abort.transaction);
 
         const auto fresh = gate.begin(request("", initial), 2);
-        const auto second = gate.commit(fresh.transaction, "again");
+        const auto second = gate.commit(fresh.transaction, "again", true);
         auto edited = initial;
         edited[1].content = "edited";
         edited.push_back({"user", "next"});
@@ -234,7 +254,8 @@ int main() {
 
         LineageGate sessions;
         const auto base = sessions.begin(request("", initial), 3);
-        const auto base_metadata = sessions.commit(base.transaction, "answer");
+        const auto base_metadata = sessions.commit(
+            base.transaction, "answer", true);
         auto switched_request = request(base_metadata.revision, extension);
         switched_request.session = kSessionB;
         const auto switched = sessions.begin(switched_request, 3);

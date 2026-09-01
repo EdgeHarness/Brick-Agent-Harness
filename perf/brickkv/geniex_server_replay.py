@@ -38,7 +38,7 @@ from perf.brickkv.run_matrix import sha256_file, write_json_exclusive
 from perf.brickkv.source_bundle import source_bundle_manifest, verify_git_revision
 
 
-SCHEMA = "brickkv.server-replay/1"
+SCHEMA = "brickkv.server-replay/2"
 CHAT_PATH = "/v1/chat/completions"
 MAX_SSE_LINE_BYTES = 1024 * 1024
 MAX_STREAM_BYTES = 8 * 1024 * 1024
@@ -66,7 +66,9 @@ FORBIDDEN_EVIDENCE_KEYS = frozenset({
 })
 
 
-def expected_cache_decision(mode: str, trace: str, step: int) -> tuple[str, str]:
+def expected_cache_decision(
+    mode: str, trace: str, step: int, prior_reusable: bool = True
+) -> tuple[str, str]:
     if trace == "cancellation_decode" and step == 1:
         return "aborted", "client_disconnect"
     if mode == "reset":
@@ -82,13 +84,23 @@ def expected_cache_decision(mode: str, trace: str, step: int) -> tuple[str, str]
         return "reset", "session_switch"
     if trace == "cancellation_decode" and step == 2:
         return "reset", "parent_mismatch"
+    if not prior_reusable:
+        return "reset", "previous_not_reusable"
     return "reused", "exact_extension"
 
 
 def validate_cache_record(
-    value: object, mode: str, trace: str, step: int
+    value: object,
+    mode: str,
+    trace: str,
+    step: int,
+    *,
+    prior_reusable: bool,
+    expected_reusable: bool,
 ) -> dict:
-    expected_status, expected_reason = expected_cache_decision(mode, trace, step)
+    expected_status, expected_reason = expected_cache_decision(
+        mode, trace, step, prior_reusable
+    )
     if mode != "managed":
         if value is not None:
             raise RuntimeError("unmanaged streaming response exposed cache metadata")
@@ -96,6 +108,7 @@ def validate_cache_record(
             "status": expected_status,
             "reason": expected_reason,
             "revision": "",
+            "reusable": mode == "legacy-test",
         }
     if not isinstance(value, dict) or set(value) != CACHE_FIELDS:
         raise RuntimeError("managed streaming response has an invalid cache record")
@@ -113,10 +126,13 @@ def validate_cache_record(
     revision = value.get("revision")
     if not isinstance(revision, str) or not SHA256_PATTERN.fullmatch(revision):
         raise RuntimeError("managed streaming response has an invalid revision")
+    if value.get("reusable") is not expected_reusable:
+        raise RuntimeError("managed streaming response has invalid reusable state")
     return {
         "status": expected_status,
         "reason": expected_reason,
         "revision": revision,
+        "reusable": expected_reusable,
     }
 
 
@@ -151,6 +167,7 @@ def consume_sse(
     step: int,
     started_ns: int,
     cancel_after_chunks: int,
+    prior_reusable: bool = True,
     now_ns=time.perf_counter_ns,
 ) -> dict:
     """Consume one bounded GenieX SSE response without retaining it in evidence."""
@@ -254,6 +271,7 @@ def consume_sse(
                             "status": "aborted",
                             "reason": "client_disconnect",
                             "revision": "",
+                            "reusable": False,
                         },
                         "output_digest": "sha256:" + hashlib.sha256(
                             output.encode("utf-8")
@@ -269,7 +287,14 @@ def consume_sse(
         raise RuntimeError("GenieX stream returned an unsupported finish reason")
     if usage is None:
         raise RuntimeError("GenieX stream omitted usage")
-    cache = validate_cache_record(cache_value, mode, trace, step)
+    cache = validate_cache_record(
+        cache_value,
+        mode,
+        trace,
+        step,
+        prior_reusable=prior_reusable,
+        expected_reusable=finish_reason == "stop",
+    )
     output = "".join(output_parts)
     return {
         "cancelled": False,
@@ -353,6 +378,7 @@ class GenieXStreamingClient:
         parent: str,
         max_tokens: int,
         cancel_after_chunks: int = 0,
+        prior_reusable: bool = True,
     ) -> dict:
         headers = {
             "Content-Type": "application/json",
@@ -388,6 +414,10 @@ class GenieXStreamingClient:
         try:
             connection.request("POST", CHAT_PATH, body=payload, headers=headers)
             response = connection.getresponse()
+            if mode == "managed" and response.getheader(
+                "GenieX-Cache-Protocol"
+            ) != "2":
+                raise RuntimeError("GenieX did not prove managed-cache protocol 2")
             if response.status != 200:
                 body = response.read(MAX_SSE_LINE_BYTES + 1)
                 raise RuntimeError(
@@ -404,6 +434,7 @@ class GenieXStreamingClient:
                 step=step,
                 started_ns=started_ns,
                 cancel_after_chunks=cancel_after_chunks,
+                prior_reusable=prior_reusable,
             )
         finally:
             connection.close()
@@ -473,11 +504,11 @@ def initial_messages(trace: str) -> list[dict]:
     return [
         {
             "role": "system",
-            "content": "Use only the synthetic facts in this conversation.",
+            "content": "Reply with only the exact synthetic marker requested.",
         },
         {
             "role": "user",
-            "content": f"Summarize synthetic request 1 for trace {trace}.",
+            "content": f"Reply exactly with ACK_{trace}_1.",
         },
     ]
 
@@ -485,7 +516,7 @@ def initial_messages(trace: str) -> list[dict]:
 def next_user(trace: str, step: int) -> str:
     if trace not in TRACE_ORDER or isinstance(step, bool) or step < 0:
         raise ValueError("invalid synthetic trace step")
-    return f"Continue synthetic trace {trace} at step {step + 1}."
+    return f"Reply exactly with ACK_{trace}_{step + 2}."
 
 
 def _trace_steps(trace: str, append_turns: int) -> int:
@@ -504,8 +535,11 @@ def _record_result(
     role: str,
     step: int,
     working_set_bytes: int,
+    prior_reusable: bool,
 ) -> dict:
-    expected_status, expected_reason = expected_cache_decision(mode, trace, step)
+    expected_status, expected_reason = expected_cache_decision(
+        mode, trace, step, prior_reusable
+    )
     cache = result["cache"]
     if (cache["status"], cache["reason"]) != (expected_status, expected_reason):
         raise RuntimeError("stream result and trace cache decision disagree")
@@ -543,6 +577,7 @@ def _record_result(
         "cache_status": cache["status"],
         "cache_reason": cache["reason"],
         "revision": cache["revision"],
+        "reusable": cache["reusable"],
         "ttft_us": result["ttft_us"],
         "decode_stream_us": result["decode_stream_us"],
         "wall_us": result["wall_us"],
@@ -574,13 +609,14 @@ def run_trace(
         "verifier": secrets.token_hex(16),
     }
     parents = {"driver": "", "verifier": ""}
+    reusable = {"driver": True, "verifier": True}
     transcripts = {
         "driver": initial_messages(trace),
         "verifier": [
-            {"role": "system", "content": "Check only synthetic evidence."},
+            {"role": "system", "content": "Reply with only the requested marker."},
             {
                 "role": "user",
-                "content": "Verify the synthetic draft without changing it.",
+                "content": "Reply exactly with ACK_verifier.",
             },
         ],
     }
@@ -598,15 +634,20 @@ def run_trace(
             messages[:] = [
                 {
                     "role": "system",
-                    "content": "Use only the approved synthetic summary.",
+                    "content": "Reply with only the exact synthetic marker requested.",
                 },
                 {
                     "role": "user",
-                    "content": "Continue after deterministic context pruning.",
+                    "content": "Reply exactly with ACK_context_pruned.",
                 },
             ]
 
         cancel = trace == "cancellation_decode" and step == 1
+        if cancel:
+            messages[-1]["content"] = (
+                "Write the synthetic integers from one through sixty in words."
+            )
+        prior_reusable = reusable[role]
         result = client.stream(
             messages,
             mode=mode,
@@ -616,6 +657,7 @@ def run_trace(
             parent=parents[role],
             max_tokens=max_tokens,
             cancel_after_chunks=cancel_after_chunks if cancel else 0,
+            prior_reusable=prior_reusable,
         )
         output = result.pop("output", "")
         if result["cancelled"] != cancel:
@@ -630,6 +672,7 @@ def run_trace(
                 working_set_bytes=windows_process_working_set(
                     client.server_binding.pid
                 ),
+                prior_reusable=prior_reusable,
             )
         )
 
@@ -639,7 +682,7 @@ def run_trace(
                 # the comparison does not carry a partial decode into the retry.
                 client.reset_model()
             messages[-1]["content"] = (
-                "Retry the interrupted synthetic task from a clean state."
+                "Reply exactly with ACK_cancellation_recovered."
             )
             continue
 
@@ -647,6 +690,7 @@ def run_trace(
             raise RuntimeError("completed replay step produced empty output")
         if mode == "managed":
             parents[role] = result["cache"]["revision"]
+            reusable[role] = result["cache"]["reusable"]
         messages.append({"role": "assistant", "content": output})
         if not (trace == "verifier_detour" and role == "verifier"):
             messages.append({"role": "user", "content": next_user(trace, step)})

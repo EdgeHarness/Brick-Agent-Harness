@@ -76,6 +76,7 @@ struct Record {
     std::int64_t wall_us = 0;
     std::uint64_t working_set_bytes = 0;
     bool callback_cancelled = false;
+    bool reusable = false;
 };
 
 struct Generation {
@@ -646,14 +647,14 @@ std::vector<std::string> selected_traces(const std::string& requested) {
 
 std::vector<Message> initial_messages(const std::string& trace) {
     return {
-        {"system", "Use only the synthetic facts in this conversation."},
-        {"user", "Summarize synthetic request 1 for trace " + trace + "."},
+        {"system", "Reply with only the exact synthetic marker requested."},
+        {"user", "Reply exactly with ACK_" + trace + "_1."},
     };
 }
 
 std::string next_user(const std::string& trace, const int step) {
-    return "Continue synthetic trace " + trace + " at step " +
-           std::to_string(step + 1) + ".";
+    return "Reply exactly with ACK_" + trace + "_" +
+           std::to_string(step + 2) + ".";
 }
 
 std::vector<Record> run_trace(Model& model, const Options& options,
@@ -667,8 +668,8 @@ std::vector<Record> run_trace(Model& model, const Options& options,
     std::map<std::string, std::string> parents{{"driver", ""}, {"verifier", ""}};
     std::map<std::string, std::vector<Message>> transcripts{
         {"driver", initial_messages(trace)},
-        {"verifier", {{"system", "Check only synthetic evidence."},
-                      {"user", "Verify the synthetic draft without changing it."}}},
+        {"verifier", {{"system", "Reply with only the requested marker."},
+                      {"user", "Reply exactly with ACK_verifier."}}},
     };
     std::vector<Record> records;
     const int steps = trace == "append_only" ? options.append_turns :
@@ -682,8 +683,10 @@ std::vector<Record> run_trace(Model& model, const Options& options,
             step == 2 && messages.size() >= 6) {
             messages.erase(messages.begin() + 3, messages.begin() + 5);
         } else if (trace == "context_pruning" && step == 2) {
-            messages = {{"system", "Use only the approved synthetic summary."},
-                        {"user", "Continue after deterministic context pruning."}};
+            messages = {
+                {"system", "Reply with only the exact synthetic marker requested."},
+                {"user", "Reply exactly with ACK_context_pruned."},
+            };
         }
 
         bool cancel = trace == "cancellation_decode" && step == 1;
@@ -699,7 +702,7 @@ std::vector<Record> run_trace(Model& model, const Options& options,
                 parents.at(role), identity, messages};
             auto decision = gate.begin(request, generation);
             transaction = decision.transaction;
-            if (!decision.reuse) {
+            if (decision.reset_required) {
                 model.reset();
                 ++generation;
             }
@@ -736,23 +739,33 @@ std::vector<Record> run_trace(Model& model, const Options& options,
         if (cancel) {
             record.cache_status = "aborted";
             record.cache_reason = "callback_cancellation";
+            record.reusable = false;
             if (mode == "managed") gate.abort(transaction);
             model.reset();
             ++generation;
             if (!messages.empty()) {
                 messages.back().content =
-                    "Retry the interrupted synthetic task from a clean state.";
+                    "Reply exactly with ACK_cancellation_recovered.";
             }
             records.push_back(std::move(generated.record));
             continue;
         }
 
         if (mode == "managed") {
-            const auto metadata = gate.commit(transaction, generated.text);
+            const bool reusable = record.result_code == GENIEX_SUCCESS &&
+                                  record.stop_reason == "eos";
+            const auto metadata = gate.commit(
+                transaction, generated.text, reusable);
             parents.at(role) = metadata.revision;
             record.revision = metadata.revision;
+            record.reusable = metadata.reusable;
+            if (!metadata.reusable) {
+                model.reset();
+                ++generation;
+            }
             messages.push_back({"assistant", generated.text});
         } else {
+            record.reusable = mode == "legacy-test";
             messages.push_back({"assistant", generated.text});
         }
         if (!(trace == "verifier_detour" && role == "verifier")) {
@@ -786,7 +799,7 @@ void write_evidence(const Options& options, const std::string& sdk_version,
     }
     std::ostringstream out;
     out << "{\n"
-        << "  \"schema_version\": \"brickkv.replay/2\",\n"
+        << "  \"schema_version\": \"brickkv.replay/3\",\n"
         << "  \"status\": \"complete\",\n"
         << "  \"created_at\": " << quoted(utc_now()) << ",\n"
         << "  \"attestation\": {\n"
@@ -824,6 +837,7 @@ void write_evidence(const Options& options, const std::string& sdk_version,
             << ", \"stop_reason\": " << quoted(record.stop_reason)
             << ", \"callback_cancelled\": "
             << (record.callback_cancelled ? "true" : "false")
+            << ", \"reusable\": " << (record.reusable ? "true" : "false")
             << ", \"ttft_us\": " << record.ttft_us
             << ", \"prompt_us\": " << record.prompt_us
             << ", \"decode_us\": " << record.decode_us

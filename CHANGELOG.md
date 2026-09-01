@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+### BrickKV protocol 2 resets truncated model state
+
+The first broad QAIRT server replay found a correctness flaw that the earlier
+six-decision smoke did not exercise: a response stopped by the token limit was
+committed as reusable even though its retained KV state lacked the same turn
+termination produced by cold full-history templating. The following exact
+extension could therefore diverge from reset mode. The old smoke and replay
+are retained as superseded failure-finding evidence and authorize no
+performance claim.
+
+Managed responses now prove `GenieX-Cache-Protocol: 2` and include an exact
+boolean `reusable` field. Only an EOS-complete generation is reusable. Length,
+stop-sequence, callback and unknown stops preserve the logical transcript
+revision but reset physical model state; the next exact extension reports
+`reset / previous_not_reusable`. Brick, its NPU shim, the attested smoke and
+the production-path replay all fail closed on older servers or inconsistent
+metadata. A non-reusable completion is reset once, not again on the following
+cold extension. The NPU shim also accepts cache metadata only on one terminal
+streaming chunk and preserves the provider's actual finish reason. The evidence
+schemas are versioned accordingly.
+
 ### BrickKV can measure the attested production GenieX streaming path
 
 The new `geniex_server_replay.py` executes all six fixed cache traces through

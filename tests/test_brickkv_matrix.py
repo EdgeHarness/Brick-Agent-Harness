@@ -43,6 +43,7 @@ def record(trace, mode, ttft, wall=1000):
         "result_code": 0,
         "stop_reason": "eos",
         "callback_cancelled": False,
+        "reusable": mode in {"managed", "legacy-test"},
         "working_set_bytes": 1024,
         "output_digest": "sha256:" + "a" * 64,
     }
@@ -56,7 +57,7 @@ def payload(mode, values=(100, 200)):
             item["cache_status"] = "cold"
             item["cache_reason"] = "first_request"
     return {
-        "schema_version": "brickkv.replay/2",
+        "schema_version": "brickkv.replay/3",
         "status": "complete",
         "created_at": "2026-08-30T12:00:00Z",
         "attestation": {
@@ -197,6 +198,20 @@ def test_evidence_validation_rejects_failed_or_impossible_measurements():
         validate_evidence(inverted, "managed")
 
 
+def test_evidence_validation_tracks_non_reusable_truncated_parent():
+    evidence = payload("managed", (100, 200))
+    evidence["records"][0]["stop_reason"] = "length"
+    evidence["records"][0]["reusable"] = False
+    evidence["records"][1]["cache_status"] = "reset"
+    evidence["records"][1]["cache_reason"] = "previous_not_reusable"
+    validate_evidence(evidence, "managed")
+
+    unsafe = payload("managed", (100, 200))
+    unsafe["records"][0]["stop_reason"] = "length"
+    with pytest.raises(ValueError, match="reusable decision"):
+        validate_evidence(unsafe, "managed")
+
+
 @pytest.mark.parametrize(
     "trace", ("planning_removed", "invalid_deleted", "context_pruning")
 )
@@ -272,6 +287,7 @@ def test_evidence_validation_enforces_roles_and_cancellation_location():
     cancellation["records"][0]["cache_reason"] = "first_request"
     interrupted = cancellation["records"][1]
     interrupted["callback_cancelled"] = True
+    interrupted["reusable"] = False
     interrupted["cache_status"] = "aborted"
     interrupted["cache_reason"] = "callback_cancellation"
     interrupted["revision"] = ""

@@ -8,8 +8,10 @@ gates. They use synthetic prompts and save no prompt or generated content.
 Before an expensive replay matrix, `geniex_managed_smoke.py` verifies the
 patched server on a real NPU. It accepts only an explicit IPv4 loopback origin,
 checks cold, exact-extension, branch, session-switch, parent-mismatch and
-forced-disconnect recovery decisions, and writes only cache metadata, token
-counts and output hashes. Every request verifies that the selected Windows PID
+forced-disconnect recovery decisions. Protocol version 2 also deliberately
+forces a one-token truncation, requires `reusable: false`, and requires the
+next exact extension to report `reset / previous_not_reusable`. It writes only
+cache metadata, token counts and output hashes. Every request verifies that the selected Windows PID
 still owns the exact listener and runs the exact hashed GenieX executable. The
 runner also hashes the model artifact tree and verifies its own source files
 byte-for-byte against the claimed HEAD commit. The output always marks
@@ -51,6 +53,11 @@ that same process and retain their measured hashes through publication.
 The kernel process-creation time is also pinned, so a reused Windows PID cannot
 inherit the earlier process identity.
 
+Every managed response must carry `GenieX-Cache-Protocol: 2` and the exact
+five-field cache record, including the boolean `reusable` state. Evidence uses
+`brickkv.geniex-managed-smoke/2`; version-1 smoke evidence is not accepted as
+proof of the corrected truncation behavior.
+
 ## Production-path GenieX replay
 
 `geniex_server_replay.py` runs the six BrickKV synthetic traces through the
@@ -88,6 +95,11 @@ duration, reported token use and process working set. It records only hashes of
 generated output. A cancelled stream has no final usage record, so the evidence
 records the observed output-chunk count and leaves its generated-token count at
 zero instead of inventing a token count.
+
+The replay uses short exact-marker requests so ordinary measured turns can end
+at EOS. It records the server's `reusable` decision and rejects a length-limited
+turn that is marked reusable. Evidence uses `brickkv.server-replay/2` and
+requires protocol header version 2.
 
 One replay file proves trace execution on one bound process. It explicitly does
 not attest that the process was freshly launched and never authorizes a

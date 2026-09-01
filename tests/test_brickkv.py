@@ -1,5 +1,8 @@
 """Offline contract tests for Brick's managed GenieX cache path."""
+from email.message import Message
+import io
 import json
+import urllib.error
 
 import pytest
 import requests
@@ -17,12 +20,26 @@ from harness.llm import LLM
 from npu import ollama_shim
 
 
-def metadata(status, reason, marker="a"):
+def managed_probe_error(*, protocol="2"):
+    headers = Message()
+    if protocol is not None:
+        headers["GenieX-Cache-Protocol"] = protocol
+    return urllib.error.HTTPError(
+        "http://127.0.0.1:18181/v1/chat/completions",
+        400,
+        "bad request",
+        headers,
+        io.BytesIO(b'{"error":"managed caching requires a generative request"}'),
+    )
+
+
+def metadata(status, reason, marker="a", reusable=True):
     return {
         "mode": "managed",
         "status": status,
         "revision": "sha256:" + marker * 64,
         "reason": reason,
+        "reusable": reusable,
     }
 
 
@@ -48,6 +65,13 @@ def test_coordinator_advances_only_after_a_valid_commit():
     coordinator.commit(metadata("reset", "branch", "b"), "driver")
     assert coordinator.request("driver")["parent"] == "sha256:" + "b" * 64
 
+    coordinator.commit(
+        metadata("reset", "previous_not_reusable", "c", reusable=False),
+        "driver",
+    )
+    assert coordinator.request("driver")["parent"] == "sha256:" + "c" * 64
+    assert coordinator.diagnostics()["events"][-1]["reusable"] is False
+
 
 @pytest.mark.parametrize("value", [
     None,
@@ -61,6 +85,139 @@ def test_coordinator_rejects_untrusted_cache_metadata(value):
     coordinator.request("driver")
     with pytest.raises(ManagedCacheProtocolError):
         coordinator.commit(value, "driver")
+
+
+@pytest.mark.parametrize("protocol,expected", (("2", True), ("1", False), (None, False)))
+def test_npu_shim_requires_exact_managed_protocol_version(
+    monkeypatch, protocol, expected
+):
+    def reject(_request, timeout):
+        assert timeout == 10
+        raise managed_probe_error(protocol=protocol)
+
+    monkeypatch.setattr("urllib.request.urlopen", reject)
+    assert ollama_shim.probe_managed_cache(
+        "http://127.0.0.1:18181", "fixture"
+    ) is expected
+
+
+def test_npu_shim_rechecks_protocol_on_every_managed_response():
+    headers = Message()
+    assert ollama_shim._has_managed_protocol(headers) is False
+    headers["GenieX-Cache-Protocol"] = "1"
+    assert ollama_shim._has_managed_protocol(headers) is False
+    headers.replace_header("GenieX-Cache-Protocol", "2")
+    assert ollama_shim._has_managed_protocol(headers) is True
+
+
+def test_npu_shim_closes_response_when_protocol_changes_after_probe(monkeypatch):
+    class UpstreamResponse:
+        def __init__(self):
+            self.headers = Message()
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    response = UpstreamResponse()
+    monkeypatch.setattr(ollama_shim, "UPSTREAM", "http://127.0.0.1:18181")
+    monkeypatch.setattr("urllib.request.urlopen", lambda *_args, **_kwargs: response)
+    with pytest.raises(
+        ollama_shim.ManagedCacheProtocolMismatch,
+        match="managed-cache protocol 2",
+    ):
+        ollama_shim.post_upstream({}, {}, "managed")
+    assert response.closed is True
+
+
+def test_npu_shim_rejects_unversioned_managed_error_response(monkeypatch):
+    upstream_error = managed_probe_error(protocol=None)
+    monkeypatch.setattr(ollama_shim, "UPSTREAM", "http://127.0.0.1:18181")
+
+    def reject(*_args, **_kwargs):
+        raise upstream_error
+
+    monkeypatch.setattr("urllib.request.urlopen", reject)
+    with pytest.raises(
+        ollama_shim.ManagedCacheProtocolMismatch,
+        match="managed-cache protocol 2",
+    ):
+        ollama_shim.post_upstream({}, {}, "managed")
+    assert upstream_error.fp.closed is True
+
+
+class RelayResponse(list):
+    def __init__(self, *chunks):
+        super().__init__(chunks)
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
+class RelayHandler:
+    def __init__(self):
+        self.lines = []
+        self.headers = []
+        self.close_connection = False
+
+    def send_response(self, status):
+        assert status == 200
+
+    def send_header(self, name, value):
+        self.headers.append((name, value))
+
+    def end_headers(self):
+        pass
+
+    def _line(self, value):
+        self.lines.append(value)
+
+
+def sse(value):
+    return ("data: " + json.dumps(value) + "\n").encode()
+
+
+def test_npu_shim_binds_metadata_to_terminal_chunk_and_preserves_stop_reason(
+    monkeypatch,
+):
+    monkeypatch.setattr(ollama_shim, "MANAGED_CACHE_SUPPORTED", True)
+    response = RelayResponse(
+        sse({
+            "choices": [{"delta": {"content": "partial"}, "finish_reason": None}],
+        }),
+        sse({
+            "choices": [{"delta": {}, "finish_reason": "length"}],
+            "geniex_cache": metadata(
+                "cold", "first_request", reusable=False
+            ),
+        }),
+        sse({"choices": [], "usage": {"prompt_tokens": 3, "completion_tokens": 1}}),
+        b"data: [DONE]\n",
+    )
+    handler = RelayHandler()
+    ollama_shim.Handler._relay_stream(handler, response, "fixture", "managed")
+    assert handler.lines[-1]["done_reason"] == "length"
+    assert handler.lines[-1]["geniex_cache"]["reusable"] is False
+    assert "error" not in handler.lines[-1]
+    assert response.closed is True
+
+
+def test_npu_shim_rejects_cache_metadata_before_terminal_chunk(monkeypatch):
+    monkeypatch.setattr(ollama_shim, "MANAGED_CACHE_SUPPORTED", True)
+    response = RelayResponse(
+        sse({
+            "choices": [{"delta": {"content": "partial"}, "finish_reason": None}],
+            "geniex_cache": metadata("cold", "first_request"),
+        }),
+        sse({"choices": [{"delta": {}, "finish_reason": "stop"}]}),
+        b"data: [DONE]\n",
+    )
+    handler = RelayHandler()
+    ollama_shim.Handler._relay_stream(handler, response, "fixture", "managed")
+    assert "terminal streaming chunk" in handler.lines[-1]["error"]
+    assert "geniex_cache" not in handler.lines[-1]
+    assert ollama_shim.MANAGED_CACHE_SUPPORTED is False
 
 
 def test_cache_diagnostics_never_contain_messages():
@@ -151,7 +308,8 @@ def test_llm_forwards_managed_state_and_observes_final_metadata(monkeypatch):
     monkeypatch.setattr(
         "requests.get",
         lambda *_args, **_kwargs: FakeResponse({
-            "version": "npu-shim", "brickkv": {"modes": ["managed"]}
+            "version": "npu-shim",
+            "brickkv": {"modes": ["managed"], "protocol": 2},
         }),
     )
 
@@ -182,7 +340,8 @@ def test_llm_retry_reuses_the_same_uncommitted_parent(monkeypatch):
     monkeypatch.setattr(
         "requests.get",
         lambda *_args, **_kwargs: FakeResponse({
-            "version": "npu-shim", "brickkv": {"modes": ["managed"]}
+            "version": "npu-shim",
+            "brickkv": {"modes": ["managed"], "protocol": 2},
         }),
     )
     calls = []
@@ -214,7 +373,8 @@ def test_stream_without_final_metadata_does_not_advance_parent(monkeypatch):
     monkeypatch.setattr(
         "requests.get",
         lambda *_args, **_kwargs: FakeResponse({
-            "version": "npu-shim", "brickkv": {"modes": ["managed"]}
+            "version": "npu-shim",
+            "brickkv": {"modes": ["managed"], "protocol": 2},
         }),
     )
     response = FakeStreamResponse([
@@ -242,7 +402,8 @@ def test_llm_fails_when_managed_metadata_is_missing(monkeypatch):
     monkeypatch.setattr(
         "requests.get",
         lambda *_args, **_kwargs: FakeResponse({
-            "version": "npu-shim", "brickkv": {"modes": ["managed"]}
+            "version": "npu-shim",
+            "brickkv": {"modes": ["managed"], "protocol": 2},
         }),
     )
     monkeypatch.setattr(
@@ -272,7 +433,7 @@ def test_llm_rejects_wrong_shaped_capability_modes(monkeypatch, modes):
     monkeypatch.setattr(
         "requests.get",
         lambda *_args, **_kwargs: FakeResponse({
-            "version": "npu-shim", "brickkv": {"modes": modes}
+            "version": "npu-shim", "brickkv": {"modes": modes, "protocol": 2}
         }),
     )
     llm = LLM("fixture", cache_mode="managed")
@@ -280,11 +441,26 @@ def test_llm_rejects_wrong_shaped_capability_modes(monkeypatch, modes):
         llm.chat([], cache_request=CacheCoordinator().request("driver"))
 
 
+@pytest.mark.parametrize("protocol", (None, 1, "2", True, 3))
+def test_llm_rejects_wrong_managed_protocol_version(monkeypatch, protocol):
+    monkeypatch.setattr(
+        "requests.get",
+        lambda *_args, **_kwargs: FakeResponse({
+            "version": "npu-shim",
+            "brickkv": {"modes": ["managed"], "protocol": protocol},
+        }),
+    )
+    llm = LLM("fixture", cache_mode="managed")
+    with pytest.raises(ManagedCacheProtocolError, match="managed protocol 2"):
+        llm.chat([], cache_request=CacheCoordinator().request("driver"))
+
+
 def test_llm_rejects_invalid_metadata_before_observer_or_logging(monkeypatch):
     monkeypatch.setattr(
         "requests.get",
         lambda *_args, **_kwargs: FakeResponse({
-            "version": "npu-shim", "brickkv": {"modes": ["managed"]}
+            "version": "npu-shim",
+            "brickkv": {"modes": ["managed"], "protocol": 2},
         }),
     )
     invalid = dict(metadata("cold", "first_request"), unexpected="content")

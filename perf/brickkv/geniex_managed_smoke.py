@@ -26,7 +26,7 @@ from perf.brickkv.run_matrix import sha256_file, write_json_exclusive
 from perf.brickkv.source_bundle import source_bundle_manifest, verify_git_revision
 
 
-SCHEMA = "brickkv.geniex-managed-smoke/1"
+SCHEMA = "brickkv.geniex-managed-smoke/2"
 CHAT_PATH = "/v1/chat/completions"
 MAX_RESPONSE_BYTES = 1024 * 1024
 REVISION_PATTERN = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
@@ -34,7 +34,9 @@ SHA256_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
 MODEL_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,127}")
 VERSION_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._+-]{0,63}")
 HARDWARE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 ._()+-]{0,127}")
-CACHE_FIELDS = frozenset({"mode", "status", "revision", "reason"})
+CACHE_FIELDS = frozenset({"mode", "status", "revision", "reason", "reusable"})
+CACHE_PROTOCOL_HEADER = "GenieX-Cache-Protocol"
+CACHE_PROTOCOL_VERSION = "2"
 REQUIRED_RUNTIME_MODULES = frozenset({
     "geniex.dll",
     "geniex_core.dll",
@@ -51,11 +53,13 @@ DECISIONS = {
     "branch": ("reset", "branch"),
     "session_switch": ("reset", "session_switch"),
     "parent_mismatch": ("reset", "parent_mismatch"),
+    "previous_not_reusable": ("reset", "previous_not_reusable"),
     "post_disconnect": ("cold", "first_request"),
 }
 SESSION_A = "0123456789abcdef0123456789abcdef"
 SESSION_B = "fedcba9876543210fedcba9876543210"
 SESSION_C = "33333333333333333333333333333333"
+SESSION_D = "44444444444444444444444444444444"
 BOGUS_PARENT = "sha256:" + "0" * 64
 
 
@@ -568,7 +572,9 @@ class WindowsServerBinding:
         ]
 
 
-def validate_cache_metadata(value: object, expected_step: str) -> dict:
+def validate_cache_metadata(
+    value: object, expected_step: str, expected_reusable: bool = True
+) -> dict:
     if not isinstance(value, dict) or set(value) != CACHE_FIELDS:
         raise RuntimeError(f"{expected_step} returned an invalid cache record shape")
     status, reason = DECISIONS[expected_step]
@@ -582,18 +588,33 @@ def validate_cache_metadata(value: object, expected_step: str) -> dict:
     revision = value.get("revision")
     if not isinstance(revision, str) or not SHA256_PATTERN.fullmatch(revision):
         raise RuntimeError(f"{expected_step} returned an invalid revision")
+    if value.get("reusable") is not expected_reusable:
+        raise RuntimeError(
+            f"{expected_step} returned reusable={value.get('reusable')!r}; "
+            f"expected {expected_reusable}"
+        )
     return {
         "mode": "managed",
         "status": status,
         "reason": reason,
         "revision": revision,
+        "reusable": expected_reusable,
     }
 
 
-def response_record(response: dict, step: str) -> tuple[dict, str]:
-    cache = validate_cache_metadata(response.get("geniex_cache"), step)
+def response_record(
+    response: dict,
+    step: str,
+    *,
+    expected_reusable: bool = True,
+    expected_finish: str = "stop",
+) -> tuple[dict, str]:
+    cache = validate_cache_metadata(
+        response.get("geniex_cache"), step, expected_reusable
+    )
     try:
         content = response["choices"][0]["message"]["content"]
+        finish_reason = response["choices"][0]["finish_reason"]
         usage = response["usage"]
         prompt_tokens = usage["prompt_tokens"]
         completion_tokens = usage["completion_tokens"]
@@ -601,6 +622,11 @@ def response_record(response: dict, step: str) -> tuple[dict, str]:
         raise RuntimeError(f"{step} returned an invalid OpenAI response") from error
     if not isinstance(content, str):
         raise RuntimeError(f"{step} returned non-text content")
+    if finish_reason != expected_finish:
+        raise RuntimeError(
+            f"{step} returned finish_reason={finish_reason!r}; "
+            f"expected {expected_finish!r}"
+        )
     for label, value in (
         ("prompt_tokens", prompt_tokens),
         ("completion_tokens", completion_tokens),
@@ -612,6 +638,7 @@ def response_record(response: dict, step: str) -> tuple[dict, str]:
         "cache": cache,
         "prompt_tokens": prompt_tokens,
         "completion_tokens": completion_tokens,
+        "finish_reason": finish_reason,
         "output_bytes": len(content.encode("utf-8")),
         "output_sha256": sha256_text(content),
     }, content
@@ -665,6 +692,11 @@ class GenieXLoopbackClient:
                 },
             )
             response = connection.getresponse()
+            if (
+                "GenieX-Cache-Session" in headers
+                and response.getheader(CACHE_PROTOCOL_HEADER) != CACHE_PROTOCOL_VERSION
+            ):
+                raise RuntimeError("GenieX did not prove managed-cache protocol 2")
             raw = response.read(MAX_RESPONSE_BYTES + 1)
             if len(raw) > MAX_RESPONSE_BYTES:
                 raise RuntimeError("GenieX response exceeded the one MiB ceiling")
@@ -688,13 +720,18 @@ class GenieXLoopbackClient:
         self._post(payload, {})
 
     def managed(
-        self, messages: list[dict], session: str, parent: str = ""
+        self,
+        messages: list[dict],
+        session: str,
+        parent: str = "",
+        *,
+        max_tokens: int = 8,
     ) -> dict:
         headers = {"GenieX-Cache-Session": session}
         if parent:
             headers["GenieX-Cache-Parent"] = parent
         result = self._post(
-            self._payload(messages, max_tokens=8, stream=False), headers
+            self._payload(messages, max_tokens=max_tokens, stream=False), headers
         )
         if not isinstance(result, dict):
             raise RuntimeError("GenieX returned a non-object managed response")
@@ -785,6 +822,33 @@ def run_protocol(client: GenieXLoopbackClient) -> tuple[list[dict], dict]:
         "parent_mismatch",
     )
 
+    client.clear_lineage()
+    truncated_messages = [
+        {"role": "system", "content": "Answer with synthetic text only."},
+        {
+            "role": "user",
+            "content": "Write a long synthetic sentence that cannot fit in one token.",
+        },
+    ]
+    truncated, truncated_answer = response_record(
+        client.managed(truncated_messages, SESSION_D, max_tokens=1),
+        "cold",
+        expected_reusable=False,
+        expected_finish="length",
+    )
+    recovered_truncation_messages = truncated_messages + [
+        {"role": "assistant", "content": truncated_answer},
+        {"role": "user", "content": "Reply RECOVERED."},
+    ]
+    recovered_truncation, _ = response_record(
+        client.managed(
+            recovered_truncation_messages,
+            SESSION_D,
+            truncated["cache"]["revision"],
+        ),
+        "previous_not_reusable",
+    )
+
     disconnect = client.force_disconnect()
     post_disconnect_messages = [
         {"role": "system", "content": "Answer briefly."},
@@ -793,7 +857,16 @@ def run_protocol(client: GenieXLoopbackClient) -> tuple[list[dict], dict]:
     recovered, _ = response_record(
         client.managed(post_disconnect_messages, SESSION_C), "post_disconnect"
     )
-    return [first, extension, branch, switched, mismatch, recovered], disconnect
+    return [
+        first,
+        extension,
+        branch,
+        switched,
+        mismatch,
+        truncated,
+        recovered_truncation,
+        recovered,
+    ], disconnect
 
 
 def _architecture() -> str:

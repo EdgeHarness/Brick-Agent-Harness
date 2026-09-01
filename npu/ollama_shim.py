@@ -54,6 +54,17 @@ TIMEOUT = 900
 MANAGED_CACHE_SUPPORTED = False
 _SESSION = re.compile(r"^[0-9a-f]{32}$")
 _REVISION = re.compile(r"^sha256:[0-9a-f]{64}$")
+_MANAGED_PROTOCOL_HEADER = "GenieX-Cache-Protocol"
+_MANAGED_PROTOCOL_VERSION = "2"
+_BRICKKV_PROTOCOL_VERSION = 2
+
+
+class ManagedCacheProtocolMismatch(RuntimeError):
+    """The selected upstream did not prove the protocol used by this shim."""
+
+
+def _has_managed_protocol(headers):
+    return headers.get(_MANAGED_PROTOCOL_HEADER) == _MANAGED_PROTOCOL_VERSION
 
 
 def _normalise(raw):
@@ -122,7 +133,11 @@ def probe_managed_cache(upstream, model):
             return False
     except urllib.error.HTTPError as exc:
         payload = exc.read().decode("utf-8", "replace")
-        return exc.code == 400 and "managed caching requires a generative request" in payload
+        return (
+            exc.code == 400
+            and _has_managed_protocol(exc.headers)
+            and "managed caching requires a generative request" in payload
+        )
     except urllib.error.URLError:
         return False
 
@@ -180,13 +195,27 @@ def to_openai(req):
     return body
 
 
-def post_upstream(body, headers=None):
+def post_upstream(body, headers=None, cache_mode=None):
     data = json.dumps(body).encode()
     request_headers = {"Content-Type": "application/json"}
     request_headers.update(headers or {})
     r = urllib.request.Request(f"{UPSTREAM}/v1/chat/completions", data=data,
                                headers=request_headers)
-    return urllib.request.urlopen(r, timeout=TIMEOUT)
+    try:
+        response = urllib.request.urlopen(r, timeout=TIMEOUT)
+    except urllib.error.HTTPError as exc:
+        if cache_mode == "managed" and not _has_managed_protocol(exc.headers):
+            exc.close()
+            raise ManagedCacheProtocolMismatch(
+                "GenieX did not prove managed-cache protocol 2"
+            ) from exc
+        raise
+    if cache_mode == "managed" and not _has_managed_protocol(response.headers):
+        response.close()
+        raise ManagedCacheProtocolMismatch(
+            "GenieX did not prove managed-cache protocol 2"
+        )
+    return response
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -219,7 +248,10 @@ class Handler(BaseHTTPRequestHandler):
             if os.environ.get("BRICKKV_ALLOW_LEGACY_TEST") == "1":
                 modes.append("legacy-test")
             self._send(200, {"version": "npu-shim",
-                             "brickkv": {"modes": modes}})
+                             "brickkv": {
+                                 "modes": modes,
+                                 "protocol": _BRICKKV_PROTOCOL_VERSION,
+                             }})
         else:
             self._send(404, {"error": "not found"})
 
@@ -242,7 +274,11 @@ class Handler(BaseHTTPRequestHandler):
             self._send(409, {"error": str(exc)})
             return
         try:
-            resp = post_upstream(body, headers)
+            resp = post_upstream(body, headers, cache_mode)
+        except ManagedCacheProtocolMismatch as e:
+            MANAGED_CACHE_SUPPORTED = False
+            self._send(502, {"error": str(e)})
+            return
         except urllib.error.URLError as e:
             self._send(502, {"error": f"GenieX unreachable at {UPSTREAM}: {e}"})
             return
@@ -291,6 +327,8 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         usage = {}
         metadata = None
+        finish_reason = None
+        protocol_error = None
         try:
             for raw in resp:
                 line = raw.decode("utf-8", "replace").strip()
@@ -305,9 +343,21 @@ class Handler(BaseHTTPRequestHandler):
                     continue
                 if chunk.get("usage"):
                     usage = chunk["usage"]  # final include_usage chunk
-                if chunk.get("geniex_cache"):
-                    metadata = chunk["geniex_cache"]
                 choices = chunk.get("choices") or []
+                terminal = choices[0].get("finish_reason") if choices else None
+                chunk_metadata = chunk.get("geniex_cache")
+                if chunk_metadata is not None:
+                    if terminal is None or metadata is not None:
+                        protocol_error = (
+                            "managed-cache metadata was not confined to one "
+                            "terminal streaming chunk"
+                        )
+                    else:
+                        metadata = chunk_metadata
+                if terminal is not None:
+                    if finish_reason is not None:
+                        protocol_error = "GenieX returned multiple terminal chunks"
+                    finish_reason = terminal
                 piece = choices[0].get("delta", {}).get("content", "") if choices else ""
                 if piece:
                     self._line({"model": model,
@@ -315,12 +365,16 @@ class Handler(BaseHTTPRequestHandler):
                                 "done": False})
             final = {"model": model,
                      "message": {"role": "assistant", "content": ""},
-                     "done": True, "done_reason": "stop",
+                     "done": True, "done_reason": finish_reason or "stop",
                      "prompt_eval_count": usage.get("prompt_tokens", 0),
                      "eval_count": usage.get("completion_tokens", 0)}
-            if cache_mode == "managed" and not isinstance(metadata, dict):
+            if cache_mode == "managed" and (
+                protocol_error is not None
+                or finish_reason is None
+                or not isinstance(metadata, dict)
+            ):
                 MANAGED_CACHE_SUPPORTED = False
-                final["error"] = (
+                final["error"] = protocol_error or (
                     "patched GenieX did not return final managed-cache metadata"
                 )
             elif metadata is not None:
@@ -350,7 +404,7 @@ def main():
     UPSTREAM, MODEL = discover()
     if not UPSTREAM:
         sys.exit(f"  no GenieX server answered (tried {GENIEX_DEFAULT}). Start one:\n"
-                 "      geniex serve --compute npu --nctx 8192\n"
+                 "      geniex --data-dir C:/models/geniex-data serve --compute npu\n"
                  "  or pass its endpoint:  python -m npu.ollama_shim http://127.0.0.1:PORT")
     if not MODEL:
         sys.exit(f"  {UPSTREAM} is up but has no model. Pull one first:\n"

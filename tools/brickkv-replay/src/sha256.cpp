@@ -171,7 +171,7 @@ std::string sha256(const std::string_view bytes) {
 std::string transcript_revision(const Identity& identity,
                                 const std::vector<Message>& messages) {
     Sha256State state;
-    state.update(std::string_view("brickkv-replay-lineage/1\0", 25));
+    state.update(std::string_view("brickkv-replay-lineage/2\0", 25));
     for (const auto* field : {&identity.model_digest, &identity.tokenizer_digest,
                               &identity.runtime, &identity.runtime_version,
                               &identity.device, &identity.chat_template,

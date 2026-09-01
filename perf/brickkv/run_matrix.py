@@ -22,7 +22,7 @@ from typing import Iterable
 
 
 MODES = ("reset", "legacy-test", "managed")
-EXPECTED_SCHEMA = "brickkv.replay/2"
+EXPECTED_SCHEMA = "brickkv.replay/3"
 TRACE_ORDER = (
     "append_only", "planning_removed", "invalid_deleted", "context_pruning",
     "verifier_detour", "cancellation_decode",
@@ -41,6 +41,7 @@ CONFIGURATION_FIELDS = frozenset({
 RECORD_FIELDS = frozenset({
     "trace", "mode", "role", "step", "cache_status", "cache_reason",
     "revision", "result_code", "stop_reason", "callback_cancelled",
+    "reusable",
     "ttft_us", "prompt_us", "decode_us", "wall_us", "prompt_tokens",
     "generated_tokens", "working_set_bytes", "output_digest",
 })
@@ -116,7 +117,9 @@ def _require_attested_text(attestation: dict, key: str) -> str:
     return value
 
 
-def _expected_cache_decision(mode: str, trace: str, step: int) -> tuple[str, str]:
+def _expected_cache_decision(
+    mode: str, trace: str, step: int, prior_reusable: bool = True
+) -> tuple[str, str]:
     if trace == "cancellation_decode" and step == 1:
         return "aborted", "callback_cancellation"
     if mode == "reset":
@@ -132,6 +135,8 @@ def _expected_cache_decision(mode: str, trace: str, step: int) -> tuple[str, str
         return "reset", "session_switch"
     if trace == "cancellation_decode" and step == 2:
         return "reset", "parent_mismatch"
+    if not prior_reusable:
+        return "reset", "previous_not_reusable"
     return "reused", "exact_extension"
 
 
@@ -235,6 +240,8 @@ def validate_evidence(
         raise ValueError("replay output has no measurement records")
     seen_steps: set[tuple[str, int]] = set()
     observed_traces: set[str] = set()
+    reusable_by_role: dict[str, bool] = {}
+    active_trace = None
     for record in records:
         if not isinstance(record, dict) or record.get("mode") != expected_mode:
             raise ValueError("replay output contains an unexpected cache mode")
@@ -243,6 +250,9 @@ def validate_evidence(
         if trace not in TRACE_NAMES:
             raise ValueError("measurement record contains an unknown trace")
         observed_traces.add(trace)
+        if trace != active_trace:
+            active_trace = trace
+            reusable_by_role = {"driver": True, "verifier": True}
         step = record["step"]
         if isinstance(step, bool) or not isinstance(step, int) or step < 0:
             raise ValueError("measurement record contains an invalid step")
@@ -257,8 +267,9 @@ def validate_evidence(
         expected_cancel = trace == "cancellation_decode" and step == 1
         if record["callback_cancelled"] != expected_cancel:
             raise ValueError("measurement record has invalid cancellation placement")
+        prior_reusable = reusable_by_role[expected_role]
         expected_decision = _expected_cache_decision(
-            expected_mode, trace, step
+            expected_mode, trace, step, prior_reusable
         )
         if (record["cache_status"], record["cache_reason"]) != expected_decision:
             raise ValueError("measurement record has an invalid cache decision")
@@ -286,6 +297,8 @@ def validate_evidence(
             raise ValueError("completed measurement has a failed result code")
         if not isinstance(record["callback_cancelled"], bool):
             raise ValueError("measurement cancellation flag must be boolean")
+        if not isinstance(record["reusable"], bool):
+            raise ValueError("measurement reusable flag must be boolean")
         for key in ("cache_reason", "stop_reason"):
             if not isinstance(record[key], str) or not record[key]:
                 raise ValueError(f"measurement field {key!r} must be non-empty text")
@@ -301,6 +314,18 @@ def validate_evidence(
         }
         if not expected_cancel and record["stop_reason"] not in allowed_stop_reasons:
             raise ValueError("completed measurement has an invalid stop reason")
+        expected_reusable = (
+            not expected_cancel
+            and (
+                expected_mode == "legacy-test"
+                or (
+                    expected_mode == "managed"
+                    and record["stop_reason"] == "eos"
+                )
+            )
+        )
+        if record["reusable"] is not expected_reusable:
+            raise ValueError("measurement has an invalid reusable decision")
         for key in (
             "ttft_us", "prompt_us", "decode_us", "wall_us", "prompt_tokens",
             "generated_tokens", "working_set_bytes",
@@ -321,6 +346,8 @@ def validate_evidence(
             raise ValueError("non-committed measurement contains a revision")
         if not SHA256_PATTERN.fullmatch(str(record["output_digest"])):
             raise ValueError("measurement record contains an invalid output digest")
+        if expected_mode == "managed" and not expected_cancel:
+            reusable_by_role[expected_role] = record["reusable"]
     if expected_traces is not None and observed_traces != set(expected_traces):
         raise ValueError(
             "replay output trace set does not match the requested experiment"

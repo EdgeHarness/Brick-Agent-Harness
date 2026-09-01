@@ -15,6 +15,7 @@ CACHE_MANAGED = "managed"
 CACHE_LEGACY_TEST = "legacy-test"
 CACHE_MODES = (CACHE_OFF, CACHE_MANAGED, CACHE_LEGACY_TEST)
 PRODUCTION_CACHE_MODES = (CACHE_OFF, CACHE_MANAGED)
+MANAGED_CACHE_PROTOCOL = 2
 
 _SESSION = re.compile(r"^[0-9a-f]{32}$")
 _REVISION = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -25,6 +26,7 @@ _REASONS = frozenset((
     "branch",
     "session_switch",
     "parent_mismatch",
+    "previous_not_reusable",
 ))
 
 
@@ -69,7 +71,7 @@ def validate_managed_metadata(metadata):
         raise ManagedCacheProtocolError(
             "managed cache response is missing final metadata"
         )
-    required = {"mode", "status", "revision", "reason"}
+    required = {"mode", "status", "revision", "reason", "reusable"}
     if set(metadata) != required:
         raise ManagedCacheProtocolError(
             "managed cache metadata must contain exactly "
@@ -81,6 +83,8 @@ def validate_managed_metadata(metadata):
         raise ManagedCacheProtocolError("unknown managed cache status")
     if metadata["reason"] not in _REASONS:
         raise ManagedCacheProtocolError("unknown managed cache reason")
+    if not isinstance(metadata["reusable"], bool):
+        raise ManagedCacheProtocolError("managed cache reusable flag must be boolean")
     if not isinstance(metadata["revision"], str) \
             or not _REVISION.fullmatch(metadata["revision"]):
         raise ManagedCacheProtocolError("invalid managed cache revision")
@@ -141,6 +145,7 @@ class CacheCoordinator:
             "status": metadata["status"],
             "reason": metadata["reason"],
             "revision": metadata["revision"],
+            "reusable": metadata["reusable"],
         })
 
     def diagnostics(self):

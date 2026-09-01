@@ -25,8 +25,12 @@ def response(status="cold", reason="first_request"):
             "status": status,
             "revision": "sha256:" + "a" * 64,
             "reason": reason,
+            "reusable": True,
         },
-        "choices": [{"message": {"content": "synthetic answer"}}],
+        "choices": [{
+            "finish_reason": "stop",
+            "message": {"content": "synthetic answer"},
+        }],
         "usage": {"prompt_tokens": 12, "completion_tokens": 3},
     }
 
@@ -60,6 +64,10 @@ def test_smoke_runner_accepts_explicit_ipv4_loopback_port():
     assert loopback_target("http://127.0.0.1:18182") == ("127.0.0.1", 18182)
 
 
+def test_smoke_schema_is_versioned_for_reusable_state():
+    assert smoke.SCHEMA == "brickkv.geniex-managed-smoke/2"
+
+
 def test_smoke_cache_record_requires_exact_decision_and_shape():
     clean = response()["geniex_cache"]
     assert validate_cache_metadata(clean, "cold")["reason"] == "first_request"
@@ -69,6 +77,17 @@ def test_smoke_cache_record_requires_exact_decision_and_shape():
     extra = dict(clean, provider_debug="unsafe")
     with pytest.raises(RuntimeError, match="shape"):
         validate_cache_metadata(extra, "cold")
+    non_reusable = dict(clean, reusable=False)
+    assert validate_cache_metadata(
+        non_reusable, "cold", expected_reusable=False
+    )["reusable"] is False
+
+
+def test_smoke_response_rejects_finish_reason_mismatch():
+    invalid = response()
+    invalid["choices"][0]["finish_reason"] = "length"
+    with pytest.raises(RuntimeError, match="finish_reason"):
+        response_record(invalid, "cold")
 
 
 def test_smoke_response_record_hashes_output_without_retaining_it():

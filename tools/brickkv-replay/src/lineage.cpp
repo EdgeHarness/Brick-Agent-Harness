@@ -50,7 +50,13 @@ Decision LineageGate::begin(const Request& request,
         pending_.reset();
         committed_.reset();
     }
-    Decision decision{++next_transaction_, false, "reset", "branch"};
+    Decision decision{++next_transaction_, false, true, "reset", "branch"};
+    if (committed_ && !committed_->reusable) {
+        // A non-reusable commit is reset immediately. Keep its logical parent
+        // long enough to explain the next cold decision without resetting the
+        // already-clean model a second time.
+        decision.reset_required = false;
+    }
     if (!committed_ && request.parent.empty()) {
         decision.status = "cold";
         decision.reason = "first_request";
@@ -60,13 +66,19 @@ Decision LineageGate::begin(const Request& request,
         decision.reason = "session_switch";
     } else if (committed_->identity != request.identity) {
         decision.reason = "branch";
-    } else if (committed_->revision != request.parent ||
-               committed_->generation != model_generation) {
+    } else if (committed_->revision != request.parent) {
         decision.reason = "parent_mismatch";
     } else if (strict_extension(committed_->messages, request.messages)) {
-        decision.reuse = true;
-        decision.status = "reused";
-        decision.reason = "exact_extension";
+        if (!committed_->reusable) {
+            decision.reason = "previous_not_reusable";
+        } else if (committed_->generation != model_generation) {
+            decision.reason = "parent_mismatch";
+        } else {
+            decision.reuse = true;
+            decision.reset_required = false;
+            decision.status = "reused";
+            decision.reason = "exact_extension";
+        }
     }
     if (!decision.reuse) {
         committed_.reset();
@@ -84,6 +96,7 @@ Decision LineageGate::bind_generation(const std::uint64_t transaction,
         (!committed_ || committed_->generation != model_generation)) {
         committed_.reset();
         pending_->decision.reuse = false;
+        pending_->decision.reset_required = true;
         pending_->decision.status = "reset";
         pending_->decision.reason = "parent_mismatch";
     }
@@ -92,7 +105,8 @@ Decision LineageGate::bind_generation(const std::uint64_t transaction,
 }
 
 Metadata LineageGate::commit(const std::uint64_t transaction,
-                             const std::string_view assistant) {
+                             const std::string_view assistant,
+                             const bool reusable) {
     if (!pending_ || pending_->transaction != transaction) {
         throw std::logic_error("managed cache transaction is not active");
     }
@@ -100,10 +114,11 @@ Metadata LineageGate::commit(const std::uint64_t transaction,
     messages.push_back(Message{"assistant", std::string(assistant)});
     const auto revision = transcript_revision(pending_->request.identity, messages);
     const auto metadata = Metadata{pending_->decision.status,
-                                   pending_->decision.reason, revision};
+                                   pending_->decision.reason, revision,
+                                   reusable};
     committed_ = Committed{pending_->request.session, revision,
                            pending_->request.identity, std::move(messages),
-                           pending_->generation};
+                           pending_->generation, reusable};
     pending_.reset();
     return metadata;
 }

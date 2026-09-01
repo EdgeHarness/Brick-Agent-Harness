@@ -10,9 +10,11 @@ latency improvement. `off` remains the default until the hardware acceptance
 gates pass.
 
 The first attested Snapdragon QAIRT protocol smoke is recorded in
-[`BRICKKV_NPU_READINESS.md`](BRICKKV_NPU_READINESS.md). It passed all managed
-cache decisions with a public Qwen3 0.6B smoke model, but it is deliberately
-not a performance result or replacement for the Llama 3.1 8B matrix.
+[`BRICKKV_NPU_READINESS.md`](BRICKKV_NPU_READINESS.md). A broader production-
+path replay then found that protocol version 1 could reuse a length-truncated
+turn. That evidence is retained as a reproducible failure record and is
+superseded for readiness. Protocol version 2 must pass the corrected smoke and
+replay before any performance matrix starts.
 
 ## Why raw retained state is unsafe
 
@@ -30,8 +32,14 @@ BrickKV adds a lineage transaction around the mutable state:
    template settings.
 3. Reuse occurs only when the session and parent match and the request is an
    exact extension of the committed transcript.
-4. GenieX commits the new transcript only after generation finishes normally.
-5. A branch, session switch, stale parent, cancellation, disconnect or error
+4. GenieX commits the logical transcript revision only after generation
+   finishes. It marks the resulting physical state reusable only when the
+   runtime reports an EOS-complete turn.
+5. A length limit, stop sequence or callback stop preserves the logical
+   revision but immediately resets the physical model and reports
+   `reusable: false`. The next exact extension is cold with
+   `reset / previous_not_reusable`.
+6. A branch, session switch, stale parent, cancellation, disconnect or error
    resets the model and clears provisional state.
 
 The final normal response or final streaming chunk contains:
@@ -42,13 +50,20 @@ The final normal response or final streaming chunk contains:
     "mode": "managed",
     "status": "cold",
     "revision": "sha256:...",
-    "reason": "first_request"
+    "reason": "first_request",
+    "reusable": true
   }
 }
 ```
 
-A missing final record means the generation did not commit. Brick rejects that
-response and does not advance its parent.
+Managed responses also carry `GenieX-Cache-Protocol: 2`. Brick rejects a
+different or missing protocol version. A missing final record means the
+generation did not commit; Brick rejects that response and does not advance
+its parent. `status` and `reason` describe how the current request started,
+while `reusable` describes whether its completed physical state may be used by
+the next request. For streaming requests, the NPU shim accepts this metadata
+only once and only on the terminal provider chunk; an early, duplicate, or
+missing record disables managed mode instead of manufacturing a commit.
 
 ## Brick modes
 
@@ -79,6 +94,11 @@ Managed GenieX caching currently accepts only scalar text messages with
 tool-call messages, separated reasoning, speculative decoding, unknown roles
 and mixed use with `GenieX-KeepCache`. Brick's current tool protocol is
 text-based, so its normal agent loop remains inside this boundary.
+
+Protocol version 2 deliberately treats only the runtime stop reason `eos` as
+reusable. OpenAI `finish_reason: stop` is not sufficient because it also
+represents provider stop sequences and callback stops. Unknown stop reasons
+fail closed to a physical reset.
 
 Session IDs separate cache lineage; they are not authentication or tenant
 authorization. The server still owns one mutable handle and serializes model
@@ -114,7 +134,8 @@ silently falls back to raw retained state.
 using the GenieX C API. It runs reset, raw-retained and managed traces, applies
 the real model chat template, cancels through the token callback, and writes
 versioned secret-free JSON. It is an independent diagnostic, not a replacement
-for `geniex serve`.
+for `geniex serve`. Its schema version 3 uses the same EOS-only reusable rule
+and `previous_not_reusable` transition as the server protocol.
 
 The six synthetic trace families are append-only, planning removal, invalid
 exchange deletion, context pruning, verifier detour and decode cancellation.

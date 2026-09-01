@@ -8,6 +8,7 @@ from .kv_cache import (
     CACHE_LEGACY_TEST,
     CACHE_MANAGED,
     CACHE_OFF,
+    MANAGED_CACHE_PROTOCOL,
     ManagedCacheProtocolError,
     validate_cache_mode,
     validate_managed_metadata,
@@ -194,8 +195,10 @@ class LLM:
             brickkv = body.get("brickkv")
             if not isinstance(brickkv, dict):
                 modes = []
+                protocol = None
             else:
                 modes = brickkv.get("modes")
+                protocol = brickkv.get("protocol")
                 if not isinstance(modes, list) \
                         or any(not isinstance(mode, str) for mode in modes):
                     raise TypeError("BrickKV modes must be a string array")
@@ -206,6 +209,13 @@ class LLM:
         if self.cache_mode not in modes:
             raise ManagedCacheProtocolError(
                 f"local backend does not support cache mode {self.cache_mode!r}"
+            )
+        if self.cache_mode == CACHE_MANAGED \
+                and (isinstance(protocol, bool)
+                     or protocol != MANAGED_CACHE_PROTOCOL):
+            raise ManagedCacheProtocolError(
+                "local backend does not support BrickKV managed protocol "
+                f"{MANAGED_CACHE_PROTOCOL}"
             )
         self._cache_capability_checked = True
 
