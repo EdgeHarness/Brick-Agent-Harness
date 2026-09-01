@@ -9,6 +9,11 @@ This document describes implemented software. It does not claim a measured
 latency improvement. `off` remains the default until the hardware acceptance
 gates pass.
 
+The first attested Snapdragon QAIRT protocol smoke is recorded in
+[`BRICKKV_NPU_READINESS.md`](BRICKKV_NPU_READINESS.md). It passed all managed
+cache decisions with a public Qwen3 0.6B smoke model, but it is deliberately
+not a performance result or replacement for the Llama 3.1 8B matrix.
+
 ## Why raw retained state is unsafe
 
 GenieX owns one mutable model handle. Raw `GenieX-KeepCache: true` asks that
