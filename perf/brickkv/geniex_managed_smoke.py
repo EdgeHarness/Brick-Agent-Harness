@@ -206,6 +206,55 @@ def _windows_process_image(pid: int) -> Path:
         kernel32.CloseHandle(handle)
 
 
+def _windows_process_creation_time(pid: int) -> int:
+    """Return the kernel process creation FILETIME to defeat PID reuse."""
+    if os.name != "nt":
+        raise RuntimeError("server process creation attestation requires Windows")
+
+    class FileTime(ctypes.Structure):
+        _fields_ = [
+            ("low", wintypes.DWORD),
+            ("high", wintypes.DWORD),
+        ]
+
+    process_query_limited_information = 0x1000
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.GetProcessTimes.argtypes = (
+        wintypes.HANDLE,
+        ctypes.POINTER(FileTime),
+        ctypes.POINTER(FileTime),
+        ctypes.POINTER(FileTime),
+        ctypes.POINTER(FileTime),
+    )
+    kernel32.GetProcessTimes.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel32.CloseHandle.restype = wintypes.BOOL
+    handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+    if not handle:
+        raise RuntimeError(f"cannot inspect GenieX server creation time for {pid}")
+    try:
+        creation = FileTime()
+        exit_time = FileTime()
+        kernel_time = FileTime()
+        user_time = FileTime()
+        if not kernel32.GetProcessTimes(
+            handle,
+            ctypes.byref(creation),
+            ctypes.byref(exit_time),
+            ctypes.byref(kernel_time),
+            ctypes.byref(user_time),
+        ):
+            raise RuntimeError(f"cannot read GenieX server creation time for {pid}")
+        value = (int(creation.high) << 32) | int(creation.low)
+        if value <= 0:
+            raise RuntimeError("Windows returned an invalid process creation time")
+        return value
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def _windows_command_line_argv(command_line: str) -> list[str]:
     if os.name != "nt":
         raise RuntimeError("Windows command-line parsing requires Windows")
@@ -471,12 +520,15 @@ class WindowsServerBinding:
             missing = sorted(REQUIRED_RUNTIME_MODULES - runtime_names)
             raise RuntimeError(f"required runtime artifacts are missing: {missing}")
         self.executable_sha256 = "sha256:" + sha256_file(self.executable)
+        self.creation_time_100ns = _windows_process_creation_time(pid)
         self.checks = 0
         self.runtime_checks = 0
         self.runtime_verified = False
         self.verify()
 
     def verify(self) -> None:
+        if _windows_process_creation_time(self.pid) != self.creation_time_100ns:
+            raise RuntimeError("the selected GenieX server PID was reused")
         actual_image = _windows_process_image(self.pid)
         if os.path.normcase(str(actual_image)) != os.path.normcase(str(self.executable)):
             raise RuntimeError("the selected process is not the attested GenieX executable")
@@ -864,6 +916,7 @@ def main(argv=None) -> None:
             "cli_sha256": server_binding.executable_sha256,
             "loaded_runtime_modules": server_binding.runtime_manifest(),
             "server_pid": server_binding.pid,
+            "server_creation_time_100ns": server_binding.creation_time_100ns,
             "listener_identity_checks": 0,
             "runtime_module_checks": 0,
             "server_origin": args.server.rstrip("/"),

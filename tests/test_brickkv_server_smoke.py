@@ -138,6 +138,7 @@ def test_smoke_server_binding_requires_exact_process_image_and_listener(
     monkeypatch.setattr(
         smoke, "_windows_listener_pids", lambda host, port: {321}
     )
+    monkeypatch.setattr(smoke, "_windows_process_creation_time", lambda pid: 100)
     monkeypatch.setattr(
         smoke,
         "_windows_process_argv",
@@ -173,6 +174,7 @@ def test_smoke_server_binding_rejects_listener_owned_by_another_process(
     monkeypatch.setattr(
         smoke, "_windows_listener_pids", lambda host, port: {999}
     )
+    monkeypatch.setattr(smoke, "_windows_process_creation_time", lambda pid: 100)
     monkeypatch.setattr(
         smoke,
         "_windows_process_argv",
@@ -204,6 +206,7 @@ def test_smoke_server_binding_rejects_different_model_data_directory(
     monkeypatch.setattr(
         smoke, "_windows_listener_pids", lambda host, port: {321}
     )
+    monkeypatch.setattr(smoke, "_windows_process_creation_time", lambda pid: 100)
     monkeypatch.setattr(
         smoke,
         "_windows_process_argv",
@@ -219,6 +222,36 @@ def test_smoke_server_binding_rejects_different_model_data_directory(
         WindowsServerBinding(
             "127.0.0.1", 18182, 321, executable, intended, runtimes
         )
+
+
+def test_smoke_server_binding_rejects_pid_reuse(tmp_path, monkeypatch):
+    executable = tmp_path / "geniex.exe"
+    executable.write_bytes(b"verified executable")
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    runtimes = runtime_files(tmp_path)
+    monkeypatch.setattr(smoke, "_windows_process_image", lambda pid: executable)
+    monkeypatch.setattr(smoke, "_windows_listener_pids", lambda host, port: {321})
+    monkeypatch.setattr(
+        smoke,
+        "_windows_process_argv",
+        lambda pid: [
+            str(executable),
+            "--data-dir", str(data_dir),
+            "serve",
+            "--host", "127.0.0.1:18182",
+            "--compute", "npu",
+        ],
+    )
+    times = iter((100, 100, 101))
+    monkeypatch.setattr(
+        smoke, "_windows_process_creation_time", lambda pid: next(times)
+    )
+    binding = WindowsServerBinding(
+        "127.0.0.1", 18182, 321, executable, data_dir, runtimes
+    )
+    with pytest.raises(RuntimeError, match="PID was reused"):
+        binding.verify()
 
 
 def _parse_args(tmp_path: Path, *extra: str):
@@ -271,6 +304,11 @@ def test_windows_process_image_attestation_uses_kernel_handle():
     assert os.path.normcase(str(actual)) == os.path.normcase(
         str(Path(sys.executable).resolve(strict=True))
     )
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows process timing API")
+def test_windows_process_creation_attestation_uses_kernel_handle():
+    assert smoke._windows_process_creation_time(os.getpid()) > 0
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows process command-line API")

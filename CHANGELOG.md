@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+### BrickKV can measure the attested production GenieX streaming path
+
+The new `geniex_server_replay.py` executes all six fixed cache traces through
+the actual loopback `geniex serve` endpoint. It supports reset, raw retained
+test state and transactional managed state, measures streaming TTFT and bounded
+request timing, exercises a real client disconnect, and stores only output
+digests. It exists for Windows systems where application-control policy allows
+the reviewed GenieX server but rejects the separately built unsigned C++
+diagnostic; it never disables or bypasses that policy.
+
+The server identity check now pins the Windows kernel process-creation time in
+addition to PID, listener owner, executable, command line, model tree and loaded
+runtime module hashes. Replay files explicitly say that they do not prove a
+fresh process launch and cannot authorize a performance or final-benchmark
+claim. A separate randomized fresh-process controller and the licensed Llama
+3.1 8B QAIRT artifact remain required for the final Snapdragon study.
+
 ### BrickKV replay now respects QAIRT-owned context configuration
 
 The first Snapdragon hardware load exposed that `brickkv-replay` forwarded

@@ -89,9 +89,14 @@ requests. No file-based KV checkpoint is used.
 Start the patched GenieX server and the shim in separate terminals:
 
 ```powershell
-geniex serve --compute npu --nctx 8192
+geniex --data-dir C:/models/geniex-data serve `
+  --host 127.0.0.1:18181 --compute npu
 python -m npu.ollama_shim http://127.0.0.1:18181
 ```
+
+For QAIRT model bundles, the model owns its supported context configuration.
+Do not add a guessed `--nctx` override. The server must bind to explicit IPv4
+loopback when it is used by the attested runners.
 
 The shim prints `BrickKV : managed` only when its fail-closed capability probe
 succeeds. Then opt into one run:
@@ -118,6 +123,14 @@ GenieX API does not expose a primitive that interrupts synchronous prefill.
 An HTTP cancellation observed after prefill forces a reset before any later
 reuse, but prefill interruption and bounded prefill-cancellation latency are
 not measured or claimed.
+
+[`geniex_server_replay.py`](../perf/brickkv/geniex_server_replay.py) runs the
+same trace shapes through the reviewed GenieX HTTP streaming path. It is used
+when Windows application control blocks the unsigned diagnostic binary. The
+runner keeps that policy intact, binds the loopback listener to one process
+image and kernel creation time, hashes the loaded runtime modules and model,
+and saves no prompt or generated text. A single replay is development evidence,
+not the repeated fresh-process performance matrix.
 
 ## Experiment runners
 

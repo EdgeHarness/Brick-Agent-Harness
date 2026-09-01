@@ -48,6 +48,53 @@ The selected process must have explicit `--data-dir`, `--host` and
 `<data-dir>/models/<catalogue-name>` directory, and its content must remain
 unchanged through the run. The three required runtime DLLs must be loaded in
 that same process and retain their measured hashes through publication.
+The kernel process-creation time is also pinned, so a reused Windows PID cannot
+inherit the earlier process identity.
+
+## Production-path GenieX replay
+
+`geniex_server_replay.py` runs the six BrickKV synthetic traces through the
+actual `geniex serve` streaming endpoint. This is the supported fallback when
+Windows application-control policy permits the reviewed GenieX server but
+rejects the separately built, unsigned C++ diagnostic. It does not weaken or
+bypass that policy.
+
+Run exactly one cache mode against one bound server process:
+
+```powershell
+python -m perf.brickkv.geniex_server_replay `
+  --execute `
+  --server http://127.0.0.1:18182 `
+  --server-pid $serverPid `
+  --model qualcomm/qwen3_0_6b `
+  --model-role smoke `
+  --mode managed `
+  --trace all `
+  --source-revision BRICK_COMMIT `
+  --geniex-revision GENIEX_COMMIT `
+  --runtime-version 2.45.0.260326 `
+  --hardware-label X1E-78-100 `
+  --model-artifact C:/models/geniex-data/models/qualcomm/qwen3_0_6b `
+  --geniex-cli C:/geniex/bin/geniex.exe `
+  --geniex-data-dir C:/models/geniex-data `
+  --runtime-artifact C:/geniex/lib/geniex.dll `
+  --runtime-artifact C:/geniex/lib/qairt/geniex_plugin.dll `
+  --runtime-artifact C:/geniex/lib/qairt/geniex_core.dll `
+  --output C:/evidence/brickkv-server-managed.json
+```
+
+The runner measures request wall time, streaming time to first output, stream
+duration, reported token use and process working set. It records only hashes of
+generated output. A cancelled stream has no final usage record, so the evidence
+records the observed output-chunk count and leaves its generated-token count at
+zero instead of inventing a token count.
+
+One replay file proves trace execution on one bound process. It explicitly does
+not attest that the process was freshly launched and never authorizes a
+performance or final-benchmark claim. The final matrix controller must launch
+and stop a fresh server for each randomized mode block, preserve its launch
+receipt, perform the required warm-up and measured repetitions, and compare
+reset and managed output hashes before producing statistics.
 
 ## Snapdragon GenieX matrix
 
