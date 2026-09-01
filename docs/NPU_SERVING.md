@@ -190,7 +190,7 @@ the result will look like a regression when it is a trade.
 3. Managed mode lowers append-only p95 TTFT by at least 20 percent, with the
    run-clustered 95 percent confidence interval excluding zero.
 4. No task-success or material decode-throughput regression is observed.
-4. `parse_failures` / `invalid_calls` no worse than the Ollama baseline
+5. `parse_failures` / `invalid_calls` no worse than the Ollama baseline.
 
 ## Related
 
