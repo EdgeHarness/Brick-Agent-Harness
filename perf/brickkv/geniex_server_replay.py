@@ -604,7 +604,12 @@ def run_trace(
     """Run one fixed synthetic trace from a clean server cache state."""
     if mode not in MODES or trace not in TRACE_ORDER:
         raise ValueError("unsupported replay mode or trace")
-    client.reset_model()
+    # GenieX ordinary chat now performs automatic append-only cache reuse.
+    # A reset-mode record must therefore reset the shared model immediately
+    # before every measured request; omitting headers is no longer a cold
+    # control. Retained modes still need one clean reset at trace start.
+    if mode != "reset":
+        client.reset_model()
     sessions = {
         "driver": secrets.token_hex(16),
         "verifier": secrets.token_hex(16),
@@ -623,6 +628,8 @@ def run_trace(
     }
     records = []
     for step in range(_trace_steps(trace, append_turns)):
+        if mode == "reset":
+            client.reset_model()
         role = "verifier" if trace == "verifier_detour" and step == 1 else "driver"
         messages = transcripts[role]
         if (

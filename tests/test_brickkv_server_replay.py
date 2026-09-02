@@ -390,6 +390,22 @@ def test_run_trace_forces_cold_extension_after_truncated_turn(monkeypatch):
     assert client.calls[1]["prior_reusable"] is False
 
 
+def test_reset_mode_physically_resets_before_every_request(monkeypatch):
+    client = FakeClient()
+    monkeypatch.setattr(replay, "windows_process_working_set", lambda pid: 1000)
+    records = replay.run_trace(
+        client,
+        mode="reset",
+        trace="append_only",
+        append_turns=3,
+        max_tokens=64,
+        cancel_after_chunks=2,
+    )
+    assert len(records) == 3
+    assert client.reset_count == 3
+    assert {record["cache_reason"] for record in records} == {"reset_each_call"}
+
+
 @pytest.mark.parametrize("mode,expected_resets", (("managed", 1), ("legacy-test", 2)))
 def test_run_trace_recovers_after_cancel_without_retaining_partial_text(
     monkeypatch, mode, expected_resets

@@ -68,6 +68,11 @@ Windows application-control policy permits the reviewed GenieX server but
 rejects the separately built, unsigned C++ diagnostic. It does not weaken or
 bypass that policy.
 
+Reset mode calls GenieX's model-reset endpoint immediately before every
+measured request. This is required because current GenieX ordinary chat can
+automatically reuse an append-only history even without cache headers; merely
+omitting managed headers is not a cold baseline.
+
 Run exactly one cache mode against one bound server process:
 
 ```powershell
