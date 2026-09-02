@@ -1,6 +1,101 @@
-# BrickKV Snapdragon NPU protocol-v1 record, superseded
+# BrickKV Snapdragon NPU readiness record
 
-## Result and correction
+## Current protocol-v2 outcome
+
+The corrected managed-cache path passed its development Snapdragon NPU gate on
+2026-09-02 UTC. This result uses the installed Qualcomm Qwen 3 0.6B QAIRT
+bundle as a protocol smoke model. It proves the corrected path executed safely
+and improved the fixed synthetic task outcomes; it does **not** substitute for
+the planned Llama 3.1 8B performance study.
+
+The verified source and build chain is:
+
+- GenieX code commit `6af9fee645de67dda649e487785d633b97b98ab4`;
+- QAIRT submodule commit `b3b85ab16c5106a7048ca2f24a3c9e4a8089cba7`;
+- Brick comparison commit `d06739cdc02441f4d9433630ffcb9ab13cc7744c`;
+- GenieX PR head `d9c2c2fd7772a662614c9b9ae1be6a23add8de65`,
+  whose source tree is identical to the tested integration tree plus the
+  reviewed documentation corrections.
+
+QAIRT completed a clean Windows ARM64 CMake/Ninja build of 517 out of 517
+targets and passed 223 out of 223 CTests. GenieX fork CI run
+[`33668959554`](https://github.com/samkwak188/GenieX/actions/runs/33668959554)
+completed successfully at `6af9fee6`: all 26 lint, SDK, CLI, Go, Python, Rust,
+Android, Docker, SDK integration and credential-aware device jobs passed.
+That includes Windows ARM64 Go tests and the required Linux ARM64 Go race gate.
+
+The downloaded Windows CLI artifact is retained at
+`C:\Models\BrickKV\geniex-ci-33668959554-6af9fee6`. Its measured hashes are:
+
+| Item | SHA-256 |
+| --- | --- |
+| Downloaded `artifact.zip` | `3260fc1049fcaf6eb20a6ca99c556ef134705d3e79b7269d2c7674d503633c8b` |
+| `geniex.exe` | `10ec04b3fa5ae17e30c3aaff1a73d60e1be533426a3c78505d7163d8922e1662` |
+| `geniex.dll` | `114642d37bb919e31eb1925c79b86d6399cc5ffd1d1bcc1dae4495ebb3751481` |
+| QAIRT `geniex_plugin.dll` | `91a5b9d23c2f54376509a1b30d9ff1c7472ea5b9a406d89ed4aefbdd2066dd4d` |
+| QAIRT `geniex_core.dll` | `8eeb33cf9224cfc83de912083673633371365f0c85e26ebc050f713aa5169df8` |
+| QAIRT `geniex_vlm.dll` | `049eac889119a08d6212e6a8337b51a2343f1a2bfc5d484e76ecfb79a5b10557` |
+
+The files are not Authenticode-signed. They nevertheless executed under the
+machine's active policy in this run. No matching Code Integrity event 3033,
+3077 or 3089 occurred from launch through shutdown. No policy was disabled,
+changed or bypassed.
+
+The protocol smoke produced the eight required decisions, including a
+non-reusable length stop, `previous_not_reusable` recovery and disconnect
+rollback. The strict production-path comparison then ran 31 records per mode:
+30 completed tasks and one intentional disconnect. Reset mode now calls the
+model-reset endpoint before **every** measured request because current GenieX
+can otherwise reuse append-only ordinary requests automatically.
+
+The version-2 comparison uses each fixed task's exact marker digest as a
+content-free oracle. Managed mode must preserve every reset success, may change
+a failure only into that exact expected marker, and must remain identical when
+both modes have the same task outcome. It also requires a real cache hit with
+lower prompt-token work. The measured result was:
+
+| Check | Result |
+| --- | ---: |
+| Completed records compared | 30 |
+| Intentional disconnect records excluded | 1 |
+| Managed cache hits | 18 |
+| Hits with lower prompt-token work | 18 |
+| Reset exact-task passes | 19 / 30 |
+| Managed exact-task passes | 30 / 30 |
+| Managed regressions | 0 |
+| Oracle-proven improvements | 11 |
+| Uncontrolled same-outcome differences | 0 |
+
+Exact output bytes were not equivalent. Every task-level difference was an
+oracle-proven improvement from a reset failure to the exact expected marker;
+no reset success became a managed failure. This passes the development NPU
+task non-regression gate. It is not a latency result.
+
+The secret-free evidence is retained outside Git:
+
+| Evidence | SHA-256 |
+| --- | --- |
+| `C:\Models\BrickKV\evidence\managed-smoke-43738b7-6af9fee6-20260902T191816Z.json` | `273c825fd917317fb67b10bb66ce390edc45d56e9648b7bad495139aa74c4b88` |
+| `C:\Models\BrickKV\evidence\server-reset-d06739c-6af9fee6-20260902T192901Z.json` | `0936b284475ef402d373cfbdac732c2673a71982d74654a0883d743f2e716267` |
+| `C:\Models\BrickKV\evidence\server-managed-d06739c-6af9fee6-20260902T192929Z.json` | `425e17d93e27dafb44507c8d802bcea3fbe5f5166eb6b197abbbf7c7d4761c0d` |
+| `C:\Models\BrickKV\evidence\server-nonregression-d06739c-6af9fee6-20260902T192952Z.json` | `1256c43aa43600ce4207a9a91155707152aa3b78e650c62a27fced8152427666` |
+
+The exact-range security scan of `2929a657..6af9fee6` covered all 18 inventoried
+source files with two independent read-only reviews. Its sealed contract
+validated successfully with zero reportable findings. The local report is
+`C:\Users\Lab User\AppData\Local\Temp\codex-security-scans\GenieX\6af9fee6_20260902T134500-0500\report.md`.
+
+The remaining final-study gates are external and unchanged: obtain the
+licensed Llama 3.1 8B QAIRT bundle, run randomized fresh-process repetitions,
+and obtain CHTC access plus the staged model/container inputs for the L40S and
+A100 study. This machine currently has no Qualcomm AI Hub credentials, no
+Llama 3.1 8B QAIRT artifact, no `condor_submit` client and no configured CHTC
+SSH identity. Therefore no repeated timing run or final performance claim was
+started. The upstream work remains under review in
+[GenieX PR 1414](https://github.com/qualcomm/GenieX/pull/1414) and its runtime
+dependency, [QAIRT PR 50](https://github.com/qualcomm/geniex-qairt-plugin/pull/50).
+
+## Superseded protocol-v1 result and correction
 
 The managed-cache server path completed a real Windows ARM64 QAIRT smoke run on
 2026-09-01 UTC. The run used fixed synthetic text and retained no prompt or
@@ -131,7 +226,7 @@ licensed Qualcomm AI Hub Llama 3.1 8B QAIRT artifact. The build status has since
 advanced as recorded below; the NPU correctness and licensed-model gates have
 not.
 
-## Corrected ARM64 artifact checkpoint
+## Superseded `2f3e1610` ARM64 artifact checkpoint
 
 GenieX integration commit `2f3e16109db2b4200bc0ff843107b23ec1ab7b2b`
 was built by GitHub Actions run

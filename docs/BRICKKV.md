@@ -156,7 +156,12 @@ when Windows application control blocks the unsigned diagnostic binary. The
 runner keeps that policy intact, binds the loopback listener to one process
 image and kernel creation time, hashes the loaded runtime modules and model,
 and saves no prompt or generated text. A single replay is development evidence,
-not the repeated fresh-process performance matrix.
+not the repeated fresh-process performance matrix. Reset mode explicitly calls
+the model-reset endpoint before every request because current GenieX can reuse
+append-only ordinary chat without a cache header. The paired gate grades fixed
+tasks against exact expected-marker digests: managed mode may improve a reset
+failure but may not regress a reset success or change results when both modes
+have the same task outcome.
 
 ## Experiment runners
 

@@ -2,7 +2,48 @@
 
 ## Unreleased
 
-### Corrected ARM64 runtime is built but awaits trusted execution
+### Corrected managed caching passes the Snapdragon task gate
+
+The current Qualcomm Qwen 3 0.6B smoke bundle completed the corrected
+protocol-2 run through an attested Windows ARM64 GenieX and QAIRT process. The
+paired production-path replay compared 30 completed tasks plus one intentional
+disconnect. Managed mode produced 18 real hits, reduced prompt-token work on
+all 18, passed 30 of 30 exact-marker tasks versus 19 of 30 under a physical
+reset before every request, introduced zero task regressions, and had zero
+uncontrolled differences when both modes had the same outcome.
+
+The gate now uses a secret-free exact-marker digest oracle. It permits only a
+reset failure becoming the exact requested marker; reset successes must remain
+successes, and equal outcomes must remain byte- and token-count identical. This
+matches the project's task non-regression requirement without misclassifying
+an observed managed improvement as cache corruption. The comparison schema is
+`brickkv.server-equivalence/2`.
+
+This is smoke-model correctness evidence, not a latency result. The final
+Llama 3.1 8B QAIRT artifact and CHTC credentials/model inputs remain absent, so
+no repeated performance study or final claim is authorized.
+
+### GenieX and QAIRT are reconciled with current upstream
+
+The integration now preserves Qualcomm's automatic conversation reset and VLM
+media replay while adding transactional managed lineage. An explicit
+cross-mode validity bit prevents an ordinary request from reusing state after
+managed or raw-cache traffic. The QAIRT submodule was reconciled with current
+upstream, built all 517 Windows ARM64 targets and passed all 223 CTests.
+
+GenieX CI run `33668959554` passed all 26 jobs at code commit `6af9fee6`,
+including Windows ARM64 CLI, SDK, Go and SDK integration jobs plus the Linux
+ARM64 Go race gate. The updated
+[GenieX PR 1414](https://github.com/qualcomm/GenieX/pull/1414) is mergeable and
+DCO-clean; [QAIRT PR 50](https://github.com/qualcomm/geniex-qairt-plugin/pull/50)
+remains its explicit runtime dependency. A sealed two-reviewer security scan
+reported zero findings across the exact changed source inventory.
+
+The replay's reset baseline now physically resets immediately before every
+measured request. Omitting managed headers is no longer a valid cold control
+because current GenieX automatically reuses compatible append-only histories.
+
+### Superseded ARM64 trust-boundary checkpoint
 
 GenieX integration commit `2f3e1610` produced successful Windows ARM64 CLI,
 SDK, Go, Python and SDK-CI jobs. The downloaded CLI artifact and its critical
@@ -28,13 +69,13 @@ evaluate that boundary into retained KV state. The focused runtime correction
 is submitted as `qualcomm/geniex-qairt-plugin#50` with a CPU fixture that keeps
 the terminal token out of visible output while proving it is present in KV.
 
-`server_equivalence.py` now makes the development gate executable. It accepts
-only matching, complete, secret-free reset and managed attestations; compares
-every completed output digest, finish reason and generated-token count;
-requires a real managed hit and measured prompt-token reduction; writes a
-failed report before returning nonzero; and never authorizes a performance or
-final research claim. Future server replay evidence binds the comparator into
-its revision-verified source bundle.
+At this checkpoint, the first `server_equivalence.py` gate required every
+completed output digest, finish reason and generated-token count to match. That
+exact-byte rule later exposed the cold-versus-retained graph difference and was
+superseded by the stricter task-oracle rule documented above. Both versions
+require matching secret-free attestations, real managed reuse and measured
+prompt-token reduction, and neither authorizes a performance or final research
+claim.
 
 ### BrickKV protocol 2 resets truncated model state
 
