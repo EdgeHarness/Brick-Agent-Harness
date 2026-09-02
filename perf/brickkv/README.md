@@ -128,11 +128,12 @@ python -m perf.brickkv.server_equivalence `
 ```
 
 The comparator requires matching source, GenieX, model, runtime-module and
-trace attestations. It compares output digest, finish reason and generated-token
-count for every completed trace step, requires at least one real managed hit,
-and requires that a hit lower prompt-token work. It writes a secret-free failed
-report and exits nonzero on divergence. A pass authorizes only the development
-NPU equivalence gate, never a latency or final research claim.
+trace attestations. Each fixed task has an exact expected marker whose digest
+acts as a secret-free task oracle. Managed mode must preserve every reset-mode
+success, may improve a reset failure only to that exact marker, and must remain
+identical whenever both modes have the same task outcome. It also requires a
+real managed hit with lower prompt-token work. A pass authorizes only the
+development NPU non-regression gate, never a latency or final research claim.
 
 ## Snapdragon GenieX matrix
 

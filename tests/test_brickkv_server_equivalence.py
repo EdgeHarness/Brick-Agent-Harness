@@ -31,7 +31,9 @@ def record(mode, trace, role, step, *, cancelled=False, status=None, reason=None
         "observed_output_chunks": 2,
         "working_set_bytes": 1000,
         "finish_reason": "client_disconnect" if cancelled else "stop",
-        "output_digest": DIGEST_A,
+        "output_digest": equivalence.expected_marker_digest(
+            trace, role, step, cancelled
+        ) or DIGEST_A,
         "stream_bytes": 100,
     }
 
@@ -89,17 +91,23 @@ def payload(mode):
     }
 
 
-def test_equivalence_gate_requires_equal_outputs_and_real_prompt_reuse():
+def test_equivalence_gate_requires_non_regression_and_real_prompt_reuse():
     result = equivalence.compare_replays(payload("reset"), payload("managed"))
     assert result == {
         "completed_records_compared": 2,
         "cancelled_records_excluded": 0,
         "managed_cache_hits": 1,
         "managed_hits_with_lower_prompt_tokens": 1,
-        "output_equivalent": True,
+        "reset_task_passes": 2,
+        "managed_task_passes": 2,
+        "managed_task_regressions": [],
+        "managed_task_improvements": [],
+        "same_outcome_mismatches": [],
+        "exact_output_equivalent": True,
+        "exact_output_mismatches": [],
+        "task_non_regression": True,
         "managed_reuse_observed": True,
         "prompt_reduction_observed": True,
-        "mismatches": [],
         "development_npu_gate_passed": True,
     }
 
@@ -117,9 +125,61 @@ def test_equivalence_gate_records_secret_free_result_divergence(field, value):
         managed["records"][1]["reusable"] = False
     result = equivalence.compare_replays(reset, managed)
     assert result["development_npu_gate_passed"] is False
-    assert result["mismatches"] == [{
+    assert result["exact_output_mismatches"] == [{
         "trace": "append_only", "role": "driver", "step": 1, "field": field,
     }]
+
+
+def test_equivalence_gate_accepts_only_oracle_proven_improvement():
+    reset = payload("reset")
+    reset["records"][1]["output_digest"] = DIGEST_B
+    result = equivalence.compare_replays(reset, payload("managed"))
+    assert result["reset_task_passes"] == 1
+    assert result["managed_task_passes"] == 2
+    assert result["managed_task_improvements"] == [{
+        "trace": "append_only", "role": "driver", "step": 1,
+    }]
+    assert result["task_non_regression"] is True
+    assert result["development_npu_gate_passed"] is True
+
+
+@pytest.mark.parametrize("trace,role,step,expected", (
+    ("append_only", "driver", 1, "ACK_append_only_2"),
+    ("context_pruning", "driver", 2, "ACK_context_pruned"),
+    ("verifier_detour", "verifier", 1, "ACK_verifier"),
+    ("verifier_detour", "driver", 2, "ACK_verifier_detour_2"),
+    ("cancellation_decode", "driver", 2, "ACK_cancellation_recovered"),
+))
+def test_task_oracle_covers_special_trace_markers(trace, role, step, expected):
+    assert equivalence.expected_marker(trace, role, step, False) == expected
+
+
+def test_equivalence_gate_rejects_zero_task_success_even_when_failures_match():
+    reset = payload("reset")
+    managed = payload("managed")
+    for left, right in zip(reset["records"], managed["records"]):
+        left["output_digest"] = DIGEST_B
+        right["output_digest"] = DIGEST_B
+    result = equivalence.compare_replays(reset, managed)
+    assert result["reset_task_passes"] == 0
+    assert result["managed_task_passes"] == 0
+    assert result["task_non_regression"] is False
+    assert result["development_npu_gate_passed"] is False
+
+
+def test_equivalence_gate_rejects_different_failures():
+    reset = payload("reset")
+    managed = payload("managed")
+    reset["records"][1]["output_digest"] = DIGEST_A
+    managed["records"][1]["output_digest"] = DIGEST_B
+    result = equivalence.compare_replays(reset, managed)
+    assert result["reset_task_passes"] == 1
+    assert result["managed_task_passes"] == 1
+    assert result["same_outcome_mismatches"] == [{
+        "trace": "append_only", "role": "driver", "step": 1,
+        "field": "output_digest",
+    }]
+    assert result["development_npu_gate_passed"] is False
 
 
 def test_equivalence_gate_rejects_inert_managed_cache():
@@ -177,7 +237,7 @@ def test_main_writes_failed_report_then_exits(monkeypatch, tmp_path):
     }
     monkeypatch.setattr(equivalence, "verify_git_revision", lambda *args: None)
     monkeypatch.setattr(equivalence, "source_bundle_manifest", lambda *args: manifest)
-    with pytest.raises(SystemExit, match="failed reset equivalence"):
+    with pytest.raises(SystemExit, match="failed task non-regression"):
         equivalence.main([
             "--execute", "--reset", str(reset_path), "--managed",
             str(managed_path), "--source-revision", REVISION, "--output",

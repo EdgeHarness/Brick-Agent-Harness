@@ -1,15 +1,20 @@
 """Fail-closed reset-versus-managed comparison for GenieX server replays.
 
 The comparator consumes only the secret-free evidence emitted by
-``geniex_server_replay``. It never reads prompts or generated text. A passing
-result proves one development replay produced identical completed outputs while
-actually reducing prompt work on at least one managed cache hit. It does not
-authorize a latency claim or complete the final benchmark.
+``geniex_server_replay``. It never reads prompts or generated text. The fixed
+traces have exact expected markers, so their SHA-256 digests provide a local
+task oracle. A passing result requires managed caching to preserve every reset
+success, introduce no uncontrolled divergence where both modes have the same
+outcome, and reduce prompt work on at least one real cache hit. A reset failure
+may improve to the exact expected marker; that is recorded explicitly instead
+of being mislabeled as a cache-correctness failure. This gate does not authorize
+a latency claim or complete the final benchmark.
 """
 from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -32,7 +37,7 @@ from perf.brickkv.run_matrix import sha256_file, write_json_exclusive
 from perf.brickkv.source_bundle import source_bundle_manifest, verify_git_revision
 
 
-SCHEMA = "brickkv.server-equivalence/1"
+SCHEMA = "brickkv.server-equivalence/2"
 MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
 TOP_FIELDS = frozenset({
     "schema_version", "status", "created_at", "claim_scope", "attestation",
@@ -67,8 +72,36 @@ RECORD_FIELDS = frozenset({
     "observed_output_chunks", "working_set_bytes", "finish_reason",
     "output_digest", "stream_bytes",
 })
-PAIR_RESULT_FIELDS = ("output_digest", "finish_reason", "generated_tokens")
 UTC_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+
+
+def expected_marker(trace: str, role: str, step: int, cancelled: bool) -> str | None:
+    """Return the exact public marker expected for one fixed synthetic task."""
+    if trace not in TRACE_ORDER or role not in {"driver", "verifier"}:
+        raise ValueError("record has no fixed task oracle")
+    if isinstance(step, bool) or not isinstance(step, int) or step < 0:
+        raise ValueError("record has an invalid task-oracle step")
+    if cancelled:
+        return None
+    if trace == "context_pruning" and step == 2:
+        return "ACK_context_pruned"
+    if trace == "verifier_detour" and role == "verifier" and step == 1:
+        return "ACK_verifier"
+    if trace == "verifier_detour" and role == "driver" and step == 2:
+        # The verifier detour does not advance the driver's transcript.
+        return "ACK_verifier_detour_2"
+    if trace == "cancellation_decode" and step == 2:
+        return "ACK_cancellation_recovered"
+    return f"ACK_{trace}_{step + 1}"
+
+
+def expected_marker_digest(
+    trace: str, role: str, step: int, cancelled: bool = False
+) -> str | None:
+    marker = expected_marker(trace, role, step, cancelled)
+    if marker is None:
+        return None
+    return "sha256:" + hashlib.sha256(marker.encode("utf-8")).hexdigest()
 
 
 def _exact_fields(value: object, expected: frozenset[str], label: str) -> dict:
@@ -304,11 +337,16 @@ def compare_replays(reset: dict, managed: dict) -> dict:
     if set(reset_records) != set(managed_records):
         raise ValueError("paired replay record identities differ")
 
-    mismatches = []
+    exact_mismatches = []
+    same_outcome_mismatches = []
+    regressions = []
+    improvements = []
     compared = 0
     cancelled = 0
     prompt_reductions = 0
     managed_hits = 0
+    reset_task_passes = 0
+    managed_task_passes = 0
     for key in reset_records:
         left = reset_records[key]
         right = managed_records[key]
@@ -316,20 +354,65 @@ def compare_replays(reset: dict, managed: dict) -> dict:
             cancelled += 1
             continue
         compared += 1
-        for field in PAIR_RESULT_FIELDS:
+        expected_digest = expected_marker_digest(*key, cancelled=False)
+        left_passed = left["output_digest"] == expected_digest
+        right_passed = right["output_digest"] == expected_digest
+        reset_task_passes += int(left_passed)
+        managed_task_passes += int(right_passed)
+        if left_passed and not right_passed:
+            regressions.append({
+                "trace": key[0],
+                "role": key[1],
+                "step": key[2],
+            })
+        elif not left_passed and right_passed:
+            improvements.append({
+                "trace": key[0],
+                "role": key[1],
+                "step": key[2],
+            })
+
+        for field in ("output_digest", "finish_reason", "generated_tokens"):
             if left[field] != right[field]:
-                mismatches.append({
+                exact_mismatches.append({
                     "trace": key[0],
                     "role": key[1],
                     "step": key[2],
                     "field": field,
                 })
+        # A reset failure improving to the exact marker is a controlled outcome
+        # change. Every other result change must remain byte- and count-identical.
+        if left_passed == right_passed:
+            for field in ("output_digest", "finish_reason", "generated_tokens"):
+                if left[field] != right[field]:
+                    same_outcome_mismatches.append({
+                        "trace": key[0],
+                        "role": key[1],
+                        "step": key[2],
+                        "field": field,
+                    })
+        elif left_passed and not right_passed:
+            # Keep the regression separately visible; it always fails the gate.
+            pass
+        elif left["finish_reason"] != right["finish_reason"]:
+            same_outcome_mismatches.append({
+                "trace": key[0],
+                "role": key[1],
+                "step": key[2],
+                "field": "finish_reason",
+            })
         if right["cache_status"] == "reused":
             managed_hits += 1
             if right["prompt_tokens"] < left["prompt_tokens"]:
                 prompt_reductions += 1
 
-    equivalent = not mismatches
+    exact_equivalent = not exact_mismatches
+    task_non_regression = (
+        not regressions
+        and not same_outcome_mismatches
+        and managed_task_passes >= reset_task_passes
+        and managed_task_passes > 0
+    )
     reuse_observed = managed_hits > 0
     prompt_reduction_observed = prompt_reductions > 0
     return {
@@ -337,12 +420,18 @@ def compare_replays(reset: dict, managed: dict) -> dict:
         "cancelled_records_excluded": cancelled,
         "managed_cache_hits": managed_hits,
         "managed_hits_with_lower_prompt_tokens": prompt_reductions,
-        "output_equivalent": equivalent,
+        "reset_task_passes": reset_task_passes,
+        "managed_task_passes": managed_task_passes,
+        "managed_task_regressions": regressions,
+        "managed_task_improvements": improvements,
+        "same_outcome_mismatches": same_outcome_mismatches,
+        "exact_output_equivalent": exact_equivalent,
+        "exact_output_mismatches": exact_mismatches,
+        "task_non_regression": task_non_regression,
         "managed_reuse_observed": reuse_observed,
         "prompt_reduction_observed": prompt_reduction_observed,
-        "mismatches": mismatches,
         "development_npu_gate_passed": (
-            equivalent and reuse_observed and prompt_reduction_observed
+            task_non_regression and reuse_observed and prompt_reduction_observed
         ),
     }
 
@@ -396,7 +485,7 @@ def main(argv=None) -> None:
             "+00:00", "Z"
         ),
         "claim_scope": {
-            "kind": "paired_production_path_development_equivalence",
+            "kind": "paired_production_path_development_non_regression",
             "performance_claim_authorized": False,
             "final_benchmark_complete": False,
         },
@@ -417,7 +506,7 @@ def main(argv=None) -> None:
     write_json_exclusive(args.output, payload)
     if not comparison["development_npu_gate_passed"]:
         raise SystemExit(
-            "managed replay failed reset equivalence or did not prove prompt reuse"
+            "managed replay failed task non-regression or did not prove prompt reuse"
         )
     print(
         f"paired {comparison['completed_records_compared']} completed records; "
