@@ -18,7 +18,7 @@
       "Draft mode should expose list/read/draft/modify and DROP send/reply/login."
     ],
     "command": "python3",
-    "args": ["-m", "mcp.selftest_server"],
+    "args": ["${ROOT}/mcp/selftest_server.py"],
     "cwd": "${ROOT}",
     "prefix": "mail_",
     "drop": ["login"],

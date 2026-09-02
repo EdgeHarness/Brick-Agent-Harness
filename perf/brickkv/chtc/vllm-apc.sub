@@ -1,0 +1,37 @@
+# BrickKV vLLM prefix-caching study. Submit from the Brick repository root.
+# Required command-line macros are documented in README.md. VLLM_IMAGE must
+# use an immutable @sha256 digest; the executable verifies it again.
+
+universe = container
+container_image = $(VLLM_IMAGE)
+
+executable = perf/brickkv/chtc/run_vllm_apc.sh
+arguments = "$(GPU_SHORT)" "$(GPU_DEVICE_NAME)" "$(MODEL_FILE)" "$(MODEL_ARCHIVE_DIGEST)" "$(CONTAINER_DIGEST)" "$(SOURCE_REVISION)" "$(SOURCE_BUNDLE_DIGEST)"
+
+preserve_relative_paths = True
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+transfer_input_files = perf/__init__.py,perf/brickkv/__init__.py,perf/brickkv/run_matrix.py,perf/brickkv/gpu_prefix_study.py,perf/brickkv/gpu_matrix.py,perf/brickkv/safe_extract.py,perf/brickkv/source_bundle.py,perf/brickkv/chtc/vllm-apc.sub,$(MODEL_ARCHIVE)
+transfer_output_files = results-$(GPU_SHORT)
+
+log = logs/brickkv-$(GPU_SHORT)-$(Cluster).log
+output = logs/brickkv-$(GPU_SHORT)-$(Cluster)-$(Process).out
+error = logs/brickkv-$(GPU_SHORT)-$(Cluster)-$(Process).err
+
+requirements = (HasCHTCStaging == true)
+request_gpus = 1
+require_gpus = (DeviceName == "$(GPU_DEVICE_NAME)")
+request_cpus = 8
+request_memory = 64GB
+request_disk = 100GB
+
++WantGPULab = true
++GPUJobLength = "long"
+
+# Do not set or rewrite CUDA_VISIBLE_DEVICES. HTCondor owns GPU assignment.
+environment = "PYTHONUNBUFFERED=1 VLLM_LOGGING_LEVEL=INFO BRICKKV_CONTAINER_IMAGE=$(VLLM_IMAGE)"
+
+queue GPU_SHORT, GPU_DEVICE_NAME from (
+    l40s, "NVIDIA L40S"
+    a100_80gb, "NVIDIA A100-SXM4-80GB"
+)

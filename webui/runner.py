@@ -96,6 +96,9 @@ def main(argv=None):
     parser.add_argument("--tiers", action="store_true")
     parser.add_argument("--small", default=None)
     parser.add_argument("--deep", default=None)
+    parser.add_argument(
+        "--cache-mode", default="off", choices=("off", "managed")
+    )
     parser.add_argument("--mcp", default=None)
     parser.add_argument(
         "--mcp-mode", default=None,
@@ -281,7 +284,8 @@ def main(argv=None):
     try:
         llm, router, router_fallback = build_llm(
             config_data,
-            {"tiers": args.tiers, "small": args.small, "deep": args.deep},
+            {"tiers": args.tiers, "small": args.small, "deep": args.deep,
+             "cache_mode": args.cache_mode},
             log_dir,
             stream_hook=on_stream,
         )
@@ -320,6 +324,7 @@ def main(argv=None):
         host=provenance["host"],
         backend=provenance["backend"],
         backend_warning=provenance["warning"],
+        cache_mode=args.cache_mode,
         today=run_config.today_human,
         tools=list(registry.names()),
         mcp=({"mode": args.mcp_mode or "draft", "servers": connected,
@@ -340,8 +345,7 @@ def main(argv=None):
 
     os.makedirs(log_dir, exist_ok=True)
     log_path = os.path.join(log_dir, f"run_{time.time_ns()}.json")
-    payload = redact(
-        {
+    run_record = {
             "task": args.task,
             "agent": args.agent,
             "model": config_data["model"],
@@ -358,8 +362,10 @@ def main(argv=None):
             "transcript": episode.transcript,
             "finished": episode.finished,
             "summary": episode.done_summary,
-        }
-    )
+    }
+    if episode.cache.get("mode") != "off":
+        run_record["cache"] = episode.cache
+    payload = redact(run_record)
     encoded = json.dumps(payload, indent=1, ensure_ascii=False).encode("utf-8")
     if len(encoded) > 4 * 1024 * 1024:
         payload["transcript"] = payload.get("transcript", [])[-100:]
@@ -395,6 +401,7 @@ def main(argv=None):
             if action["tool"] != "think"
         ],
         usage_by_role=router.usage_by_role() if router else None,
+        cache=episode.cache,
         log=os.path.relpath(log_path, PROJECT),
     )
 

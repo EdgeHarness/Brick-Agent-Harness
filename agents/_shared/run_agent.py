@@ -15,6 +15,11 @@ from harness.agent import run_harness  # noqa: E402
 from harness.domain import load_domain  # noqa: E402
 from harness.llm import (LLM, OLLAMA_URL, ModelNotInstalled,
                          installed_models, model_installed)  # noqa: E402
+from harness.kv_cache import (  # noqa: E402
+    CACHE_OFF,
+    PRODUCTION_CACHE_MODES,
+    validate_cache_mode,
+)
 from harness.memory import MemoryStore  # noqa: E402
 from harness import mcp_bridge, mcp_config, profiles  # noqa: E402
 from harness.model_router import (  # noqa: E402
@@ -44,6 +49,7 @@ ALLOWED_CONFIG_KEYS = frozenset(
     {
         "domain",
         "harness",
+        "cache_mode",
         "max_calls",
         "mcp",
         "model",
@@ -84,6 +90,7 @@ def parse_flags(argv):
     parser.add_argument("--tiers", action="store_true")
     parser.add_argument("--small")
     parser.add_argument("--deep")
+    parser.add_argument("--cache-mode", choices=PRODUCTION_CACHE_MODES)
     parser.add_argument("--domain", dest="domain_name")
     parser.add_argument(
         "--mcp",
@@ -117,6 +124,7 @@ def parse_flags(argv):
         "tiers": parsed.tiers or bool(parsed.small) or bool(parsed.deep),
         "small": parsed.small,
         "deep": parsed.deep,
+        "cache_mode": parsed.cache_mode,
         "domain_name": parsed.domain_name,
         "mcp": parsed.mcp,
         "mcp_mode": parsed.mcp_mode,
@@ -141,6 +149,7 @@ def validate_config(config):
             raise ValueError(
                 f"configured-agent field {required!r} must be nonempty"
             )
+    validate_cache_mode(config.get("cache_mode", CACHE_OFF))
 
 
 def build_llm(config, options, log_dir, stream_hook=None):
@@ -161,6 +170,9 @@ def build_llm(config, options, log_dir, stream_hook=None):
     facts and model facts apart, and that only works if the instrument facts
     are written down.
     """
+    cache_mode = validate_cache_mode(
+        options.get("cache_mode") or config.get("cache_mode", CACHE_OFF)
+    )
     installed = installed_models()
     if installed is not None and not model_installed(config["model"], installed):
         # Checked before anything about tiering, because falling back to a
@@ -208,6 +220,7 @@ def build_llm(config, options, log_dir, stream_hook=None):
                 num_ctx=config.get("num_ctx", 8192),
                 stream_hook=stream_hook,
                 retries=2,
+                cache_mode=cache_mode,
             ),
             None,
             fallback,
@@ -219,6 +232,7 @@ def build_llm(config, options, log_dir, stream_hook=None):
         num_ctx=config.get("num_ctx", 8192),
         log_path=log_path,
         stream_hook=stream_hook,
+        cache_mode=cache_mode,
     )
     return router, router, None
 
@@ -413,6 +427,7 @@ def main(agent_dir=None, argv=None):
         print(f"  {adapters_note()}")
     else:
         print(f"  model: {config_data['model']}")
+    print(f"  prompt cache: {llm.cache_mode}")
     print(f"  profile: {profile.label}")
     print(f"  budget: {run_config.max_calls} LLM calls")
     episode = run_harness(llm, task, attempt)
@@ -449,20 +464,18 @@ def main(agent_dir=None, argv=None):
     log_path = os.path.join(
         log_dir, f"run_{len(os.listdir(log_dir)) + 1:03d}.json"
     )
+    run_record = {
+        "task": task,
+        "domain": domain.name,
+        "domain_version": domain.version,
+        "transcript": episode.transcript,
+        "finished": episode.finished,
+        "summary": episode.done_summary,
+    }
+    if episode.cache.get("mode") != CACHE_OFF:
+        run_record["cache"] = episode.cache
     with open(log_path, "w", encoding="utf-8") as handle:
-        json.dump(
-            {
-                "task": task,
-                "domain": domain.name,
-                "domain_version": domain.version,
-                "transcript": episode.transcript,
-                "finished": episode.finished,
-                "summary": episode.done_summary,
-            },
-            handle,
-            indent=1,
-            ensure_ascii=False,
-        )
+        json.dump(run_record, handle, indent=1, ensure_ascii=False)
     print(f"transcript: {log_path}")
 
 

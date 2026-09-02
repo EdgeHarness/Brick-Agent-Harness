@@ -61,3 +61,4 @@ tests/test_next_study*.py text eol=lf
 docs/office-v2-prompt-audit*.md text eol=lf
 docs/office-v2-prompt-audit-responses.csv text eol=lf
 docs/office-v2-audit-append.py text eol=lf
+perf/brickkv/chtc/run_vllm_apc.sh text eol=lf

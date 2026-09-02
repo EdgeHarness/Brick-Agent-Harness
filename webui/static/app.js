@@ -1026,6 +1026,7 @@ function onBanner(e) {
   if (e.root) facts.push(`folder: ${e.root}`);
   if (e.yolo) facts.push('confirmations off');
   if (e.tiers) facts.push(`tiers: ${Object.values(e.tiers.roles).join(', ')}`);
+  if (e.cache_mode === 'managed') facts.push('managed prompt cache');
   n.append(el('div', 'banner-facts', facts.join('  ·  ')));
 
   if (p) {
@@ -1423,6 +1424,13 @@ function onEnd(e) {
       stats.append(stat(`${u.calls}c · ${u.output_tokens}t`, role));
     }
   }
+  if (e.cache && e.cache.mode === 'managed') {
+    const cacheEvents = e.cache.events || [];
+    const hits = cacheEvents.filter((event) => event.status === 'reused').length;
+    const resets = cacheEvents.filter((event) => event.status === 'reset').length;
+    stats.append(stat(hits, plural(hits, 'cache hit')),
+                 stat(resets, plural(resets, 'cache reset')));
+  }
   if (e.tool_errors) {
     stats.append(stat(e.tool_errors, plural(e.tool_errors, 'tool error'), true));
   }
@@ -1534,6 +1542,7 @@ async function startRun() {
     domain: S.domain,
     keep_office_tools: $('opt-keep-office').checked,
     tiers: $('opt-tiers').checked,
+    cache_mode: $('opt-cache-mode').value,
     max_calls: parseInt($('opt-calls').value, 10) || null,
     model: $('model').value || null,
     mcp: mcpSelected(),
@@ -1937,6 +1946,7 @@ function paintOptDots() {
      so it stays visible on the bar next to the run options. */
   const calls = $('opt-calls').value.trim();
   if (calls) on.push(`${calls} calls`);
+  if ($('opt-cache-mode').value === 'managed') on.push('managed cache');
   if (S.domain && S.domain !== 'office_demo') on.unshift(S.domain);
   /* Real accounts lead the summary. Everything else here changes how the agent
      works; this is the only one that decides whether it can touch live mail. */
@@ -2056,7 +2066,10 @@ stepsToggle.onchange = () => {
 /* --------------------------------------------------------------- boot --- */
 
 $('run').onclick = startRun;
-$('stop').onclick = () => post('/api/stop').catch(() => {});
+$('stop').onclick = () => {
+  if (!S.run) return;
+  post('/api/stop', { run_id: S.run }).catch(() => {});
+};
 $('viewer-close').onclick = closeViewer;
 $('viewer').onclick = (e) => { if (e.target === $('viewer')) closeViewer(); };
 document.addEventListener('keydown', (e) => {

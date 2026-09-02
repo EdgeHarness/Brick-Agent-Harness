@@ -125,6 +125,14 @@ def test_registry_path_is_this_repo_not_the_upstream_one():
     assert "final-agent-8b" not in mcp_config.REGISTRY_PATH
 
 
+def test_selftest_uses_a_direct_script_not_an_importable_mcp_package():
+    server = mcp_config.names_to_servers(["selftest"])[0]
+    assert len(server["args"]) == 1
+    script = Path(server["args"][0])
+    assert script == Path(mcp_config.ROOT) / "mcp" / "selftest_server.py"
+    assert script.is_file()
+
+
 # --- schema rendering, kept in step with the upstream bridge -----------------
 
 _MS365_ISH = {

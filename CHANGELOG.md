@@ -2,6 +2,221 @@
 
 ## Unreleased
 
+### Corrected managed caching passes the Snapdragon task gate
+
+The current Qualcomm Qwen 3 0.6B smoke bundle completed the corrected
+protocol-2 run through an attested Windows ARM64 GenieX and QAIRT process. The
+paired production-path replay compared 30 completed tasks plus one intentional
+disconnect. Managed mode produced 18 real hits, reduced prompt-token work on
+all 18, passed 30 of 30 exact-marker tasks versus 19 of 30 under a physical
+reset before every request, introduced zero task regressions, and had zero
+uncontrolled differences when both modes had the same outcome.
+
+The gate now uses a secret-free exact-marker digest oracle. It permits only a
+reset failure becoming the exact requested marker; reset successes must remain
+successes, and equal outcomes must remain byte- and token-count identical. This
+matches the project's task non-regression requirement without misclassifying
+an observed managed improvement as cache corruption. The comparison schema is
+`brickkv.server-equivalence/2`.
+
+This is smoke-model correctness evidence, not a latency result. The final
+Llama 3.1 8B QAIRT artifact and CHTC credentials/model inputs remain absent, so
+no repeated performance study or final claim is authorized.
+
+### GenieX and QAIRT are reconciled with current upstream
+
+The integration now preserves Qualcomm's automatic conversation reset and VLM
+media replay while adding transactional managed lineage. An explicit
+cross-mode validity bit prevents an ordinary request from reusing state after
+managed or raw-cache traffic. The QAIRT submodule was reconciled with current
+upstream, built all 517 Windows ARM64 targets and passed all 223 CTests.
+
+GenieX CI run `33668959554` passed all 26 jobs at code commit `6af9fee6`,
+including Windows ARM64 CLI, SDK, Go and SDK integration jobs plus the Linux
+ARM64 Go race gate. The updated
+[GenieX PR 1414](https://github.com/qualcomm/GenieX/pull/1414) is mergeable and
+DCO-clean; [QAIRT PR 50](https://github.com/qualcomm/geniex-qairt-plugin/pull/50)
+remains its explicit runtime dependency. A sealed two-reviewer security scan
+reported zero findings across the exact changed source inventory.
+
+The replay's reset baseline now physically resets immediately before every
+measured request. Omitting managed headers is no longer a valid cold control
+because current GenieX automatically reuses compatible append-only histories.
+
+### Superseded ARM64 trust-boundary checkpoint
+
+GenieX integration commit `2f3e1610` produced successful Windows ARM64 CLI,
+SDK, Go, Python and SDK-CI jobs. The downloaded CLI artifact and its critical
+runtime modules are now SHA-256 attested in `docs/BRICKKV_NPU_READINESS.md`.
+The three failed device-cloud jobs lacked `QDC_API_KEY`; they did not fail a
+source test. Follow-up GenieX commit `5c963e87` skips QDC only when that secret
+is unavailable and preserves normal device execution when it is present.
+
+Local Windows Application Control rejected both the fresh CLI and, when tested
+inside the previously approved protocol-v2 shell, the corrected QAIRT core.
+Code Integrity events 3033 and 3077 explain the observed first-request HTTP
+500. No bypass was attempted, no NPU correctness result was produced, and no
+performance claim is authorized. Hardware validation now waits on a trusted
+signed build or an administrator-approved rule for the exact recorded hashes.
+
+### BrickKV now rejects semantically divergent QAIRT cache hits
+
+A 31-request protocol-v2 NPU replay found that correct lineage decisions were
+not sufficient for output correctness. Two reset runs were identical, while
+managed mode differed from reset on 11 of 30 completed records. Source tracing
+showed that QAIRT sampled an assistant end-of-generation token but did not
+evaluate that boundary into retained KV state. The focused runtime correction
+is submitted as `qualcomm/geniex-qairt-plugin#50` with a CPU fixture that keeps
+the terminal token out of visible output while proving it is present in KV.
+
+At this checkpoint, the first `server_equivalence.py` gate required every
+completed output digest, finish reason and generated-token count to match. That
+exact-byte rule later exposed the cold-versus-retained graph difference and was
+superseded by the stricter task-oracle rule documented above. Both versions
+require matching secret-free attestations, real managed reuse and measured
+prompt-token reduction, and neither authorizes a performance or final research
+claim.
+
+### BrickKV protocol 2 resets truncated model state
+
+The first broad QAIRT server replay found a correctness flaw that the earlier
+six-decision smoke did not exercise: a response stopped by the token limit was
+committed as reusable even though its retained KV state lacked the same turn
+termination produced by cold full-history templating. The following exact
+extension could therefore diverge from reset mode. The old smoke and replay
+are retained as superseded failure-finding evidence and authorize no
+performance claim.
+
+Managed responses now prove `GenieX-Cache-Protocol: 2` and include an exact
+boolean `reusable` field. Only an EOS-complete generation is reusable. Length,
+stop-sequence, callback and unknown stops preserve the logical transcript
+revision but reset physical model state; the next exact extension reports
+`reset / previous_not_reusable`. Brick, its NPU shim, the attested smoke and
+the production-path replay all fail closed on older servers or inconsistent
+metadata. A non-reusable completion is reset once, not again on the following
+cold extension. The NPU shim also accepts cache metadata only on one terminal
+streaming chunk and preserves the provider's actual finish reason. The evidence
+schemas are versioned accordingly.
+
+The native replay evidence is now revision-bound rather than accepting a Git
+label at face value. CMake embeds the full source revision and deterministic
+native-source bundle digest. At run time, the executable independently hashes
+its own image, verifies that every declared runtime module is loaded from the
+attested regular file, and rechecks those bytes after the traces. Replay schema
+4 and matrix schema 2 retain the source, executable, and runtime manifests.
+The matrix now carries a fail-closed claim gate for the predeclared append-only
+latency threshold and explicitly never authorizes the broader research claim.
+
+A disposable Snapdragon preflight also showed that the smoke runner's old
+eight-token default could force an otherwise correct short QAIRT response to
+stop at the length limit before EOS. Normal managed smoke requests now allow
+64 tokens, matching the production-path replay default. The dedicated
+one-token truncation case is unchanged, so non-reusable-state recovery remains
+an explicit acceptance gate.
+
+### BrickKV can measure the attested production GenieX streaming path
+
+The new `geniex_server_replay.py` executes all six fixed cache traces through
+the actual loopback `geniex serve` endpoint. It supports reset, raw retained
+test state and transactional managed state, measures streaming TTFT and bounded
+request timing, exercises a real client disconnect, and stores only output
+digests. It exists for Windows systems where application-control policy allows
+the reviewed GenieX server but rejects the separately built unsigned C++
+diagnostic; it never disables or bypasses that policy.
+
+The server identity check now pins the Windows kernel process-creation time in
+addition to PID, listener owner, executable, command line, model tree and loaded
+runtime module hashes. Replay files explicitly say that they do not prove a
+fresh process launch and cannot authorize a performance or final-benchmark
+claim. A separate randomized fresh-process controller and the licensed Llama
+3.1 8B QAIRT artifact remain required for the final Snapdragon study.
+
+### BrickKV replay now respects QAIRT-owned context configuration
+
+The first Snapdragon hardware load exposed that `brickkv-replay` forwarded
+`n_ctx` to every GenieX plugin. QAIRT model bundles own this value and reject a
+non-zero override, so QAIRT runs now send GenieX's documented `0` (from-model)
+value while llama.cpp runs continue to receive the requested context. Replay
+evidence schema version 2 records both the study context and the exact
+`runtime_n_ctx` parameter, and validation rejects plugin-incompatible values.
+This fixes the hardware boundary; it is not a performance result.
+
+The companion managed-server smoke runner now exercises the same cache
+decision vocabulary on an explicit loopback GenieX server, including a raw
+client disconnect during a long synthetic request. Its evidence contains only
+cache metadata, token counts and output hashes and always denies performance
+and final-benchmark claims. It hashes the actual CLI and model artifact, binds
+every request to the expected Windows listener PID and process image, and
+verifies the executed runner bytes against the claimed Git HEAD before making
+a pass record. The same process must explicitly use the selected GenieX data
+directory, loopback address and NPU compute mode; the requested catalogue name
+is bound to the hashed model directory inside that data root. Runtime and
+hardware labels remain explicitly identified as operator assertions. The
+runner also verifies that the attested GenieX API, QAIRT plugin and QAIRT core
+DLLs are loaded in that same process and unchanged before publication.
+
+### BrickKV evidence gates now fail closed on inert caches and partial runs
+
+The native lineage test now executes 1,000 deterministic randomized branch
+mutations and separate 1, 2, 4 and 8-session canary campaigns. Snapdragon raw
+evidence must contain the exact trace steps, roles, cancellation outcome and
+per-trace cache-decision sequence, in canonical order, with successful native
+result codes and usable timing, token and memory measurements. The diagnostic
+and validator now share the exact `none|present` device-warning enum, so real
+producer output can pass without weakening NPU attestation. Source preflight
+compares every submitted
+file directly with its blob in the claimed commit, so Git index hints cannot
+hide a changed runner.
+
+The CHTC runner now refuses APC-on evidence without real query activity and an
+append-only hit, and refuses APC-off evidence containing any hit. Each study
+owns one Linux session and process group beneath a child subreaper. Timeout or
+a worker that changes sessions is adopted, signalled through stable pidfds,
+removed and causes the run to be rejected. Group and descendant cleanup run
+independently, and any signalling failure rejects the evidence. The final report
+retains a revision-bound per-file source manifest and the complete immutable,
+credential-free OCI reference in addition to aggregate digests. These are
+evidence-quality controls, not hardware performance results.
+
+### MCP selftest no longer collides with the official SDK package
+
+The registry launches its bundled stdio selftest by direct script path instead
+of importing `mcp.selftest_server`. This keeps the full offline suite valid even
+when the official third-party `mcp` package is installed in the same test
+environment.
+
+### GPU evidence transport no longer trusts loopback TCP
+
+The CHTC vLLM study now uses a Unix-domain socket inside a fresh owner-only
+directory instead of a bind-close TCP port. Its stdlib client accepts only four
+reviewed relative endpoints, follows no redirects or proxies, retains the
+per-process `/v1` API key, and checks process liveness plus socket ownership
+before evidence-bearing requests. There is no TCP fallback. The evidence
+schema records the new endpoint boundary, and focused tests reject the old
+network shapes. The pinned vLLM container must support `vllm serve --uds`.
+
+### BrickKV adds transactional prompt-cache reuse for patched GenieX
+
+Brick can now opt into a managed GenieX cache protocol without changing the
+model-facing message or tool contract. Each attempt creates independent random
+lineages for the driver, router and verifier. A parent revision advances only
+after the final response proves that generation committed. Missing metadata,
+an unpatched server, a rewritten transcript, a session switch, cancellation or
+generation failure fails closed instead of falling back to raw cache reuse.
+
+`off` remains the default. `managed` is the only cache mode exposed by the CLI
+and Agent Lab. The unsafe raw `GenieX-KeepCache` path is named `legacy-test` and
+is available only to the synthetic performance runner behind an explicit
+environment gate. Agent Lab rejects it.
+
+The change includes an Ollama-to-GenieX transport extension, a C++20
+`brickkv-replay` diagnostic built against the GenieX C API, randomized lineage
+tests, process-level Snapdragon experiment orchestration, and an independent
+vLLM automatic-prefix-cache study for CHTC L40S and A100 blocks. These runners
+do not establish a performance result by themselves. Snapdragon and CHTC
+claims remain prohibited until the recorded hardware gates in
+`docs/BRICKKV.md` pass.
+
 ### Correction: the stuck brake counted two of four failure shapes
 
 An adversarial review of the day's diff found the brake did not do what its
